@@ -464,6 +464,126 @@
     }
     .weight-total.invalid { color: var(--danger); }
 
+    /* Compact weight variant — used inside Step 2 criteria panel */
+    .weight-config.compact { margin: 0; }
+    .weight-row.compact { gap: 10px; margin-bottom: 8px; }
+    .weight-row.compact label { width: 80px; font-size: 12px; }
+    .weight-row.compact input[type="range"] { height: 4px; }
+    .weight-row.compact .weight-val { width: 40px; font-size: 13px; }
+    .weight-config.compact .weight-total {
+      font-size: 12px; padding-top: 6px; margin-top: 6px;
+      border-top: 1px solid var(--gray-200);
+    }
+    .weight-config.compact .weight-total.invalid::before { content: "\26A0 "; font-weight: 700; }
+
+    /* ===== Step 2: Criteria page ===== */
+    .criteria-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
+      gap: 16px;
+      margin-bottom: 16px;
+    }
+    .criteria-col { display: flex; flex-direction: column; gap: 14px; }
+    .criteria-section {
+      background: white;
+      border: 1px solid var(--gray-200);
+      border-radius: var(--radius);
+      padding: 16px 18px;
+    }
+    .criteria-section-header { margin-bottom: 12px; }
+    .criteria-section-header h4 {
+      font-size: 14px; font-weight: 700; color: var(--gray-800); margin-bottom: 2px;
+    }
+    .criteria-section-hint {
+      display: block; font-size: 12px; color: var(--gray-500); line-height: 1.4;
+    }
+
+    /* Source tiles (inside Step 2) */
+    #criteria-tabs {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+    #criteria-tabs .source-tab {
+      padding: 12px 6px;
+      border: 1px solid var(--gray-200);
+      border-radius: var(--radius);
+      background: white;
+      cursor: pointer;
+      display: flex; flex-direction: column; align-items: center; gap: 4px;
+      font-size: 12px; font-weight: 600; color: var(--gray-600);
+      transition: all 0.15s;
+    }
+    #criteria-tabs .source-tab .tile-ico { font-size: 18px; }
+    #criteria-tabs .source-tab:hover { border-color: var(--gray-300); background: var(--gray-50); }
+    #criteria-tabs .source-tab.active {
+      border-color: var(--primary); background: #eff6ff; color: var(--primary);
+    }
+    .criteria-source-panel { margin-top: 4px; }
+    .criteria-source-panel label {
+      font-size: 12px; font-weight: 600; color: var(--gray-600);
+      display: block; margin-bottom: 6px;
+    }
+    .criteria-source-panel label .optional { color: var(--gray-400); font-weight: 400; }
+    .criteria-source-panel textarea {
+      min-height: 70px; font-size: 13px; line-height: 1.5; width: 100%;
+    }
+    .criteria-source-panel input[type="file"] {
+      padding: 10px; border: 1px dashed var(--gray-300);
+      border-radius: var(--radius); width: 100%; font-size: 13px;
+    }
+    .criteria-source-panel .source-hint {
+      font-size: 12px; color: var(--gray-500); font-style: italic; padding: 4px 0 0;
+    }
+
+    /* Generate block — subtle gradient to signal "AI action" */
+    .criteria-section.generate-block {
+      background: linear-gradient(90deg, #eff6ff 0%, #faf5ff 100%);
+      border-color: #dbeafe;
+    }
+    .ai-gen-status {
+      font-size: 12px; color: var(--gray-600); margin-top: 8px; line-height: 1.4;
+    }
+
+    /* The Draft textarea — primary element of the right column */
+    .criteria-draft {
+      min-height: 280px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 13px; line-height: 1.5;
+      width: 100%;
+    }
+
+    /* Unsaved criteria warning */
+    .unsaved-warning-card {
+      margin-top: 12px; padding: 10px 14px;
+      background: #fffbeb; border: 1px solid #fde68a;
+      border-radius: var(--radius);
+      display: flex; gap: 10px; align-items: flex-start;
+      font-size: 12px; color: var(--gray-700);
+    }
+    .unsaved-warning-card .warn-ico {
+      font-size: 16px; color: var(--warning); flex-shrink: 0; line-height: 1;
+    }
+    .unsaved-warning-card strong {
+      display: block; color: var(--gray-800); font-size: 13px; margin-bottom: 2px;
+    }
+    .unsaved-warning-card p { font-size: 12px; margin: 0; line-height: 1.4; }
+
+    /* Save row */
+    .save-criteria-row {
+      margin-top: 12px; padding-top: 12px;
+      border-top: 1px solid var(--gray-200);
+    }
+    .save-criteria-label {
+      display: flex; align-items: center; gap: 8px;
+      cursor: pointer; font-size: 13px; color: var(--gray-700); font-weight: 500;
+    }
+    .save-criteria-row input[type="text"] {
+      margin-top: 8px; padding: 7px 10px; font-size: 13px;
+      width: 100%; max-width: 300px;
+    }
+
     /* LinkedIn button */
     .btn-linkedin { background: #0077B5; color: white; }
     .btn-linkedin:hover { background: #005f8d; }
@@ -540,6 +660,9 @@
       .wizard-connector { width: 30px; }
       .job-card-grid { grid-template-columns: 1fr; }
       .weight-row label { width: 80px; }
+      .criteria-grid { grid-template-columns: 1fr; }
+      .criteria-draft { min-height: 200px; }
+      #criteria-tabs { grid-template-columns: 1fr; }
     }
   </style>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
@@ -635,93 +758,126 @@
 
     <!-- STEP 2: Set Criteria -->
     <div class="wizard-panel" id="eval-step-2">
-      <h3 id="step2-heading" style="font-size:16px;font-weight:700;margin-bottom:4px;">Define Evaluation Criteria</h3>
-      <p id="step2-subheading" style="font-size:13px;color:var(--gray-500);margin-bottom:16px;">Create a custom criteria set or select saved criteria for this evaluation.</p>
+      <div style="margin-bottom:16px;">
+        <h3 id="step2-heading" style="font-size:18px;font-weight:700;color:var(--gray-900);">Define Evaluation Criteria</h3>
+        <p id="step2-subheading" style="font-size:13px;color:var(--gray-500);margin-top:4px;">Tell the AI what matters for this role. Pick a source, set your scoring priorities, then review &amp; edit the draft before continuing.</p>
+      </div>
 
       <!-- Contextual banner — shows whether this is a fresh setup or editing existing criteria -->
       <div id="step2-context-banner" style="display:none;margin-bottom:16px;padding:12px 14px;border-radius:var(--radius);font-size:13px;line-height:1.5;"></div>
 
-      <div class="form-group">
-        <label>Saved Criteria Sets</label>
-        <div style="display:flex;gap:8px;">
-          <select id="criteria-set-select" onchange="applyCriteriaSet()" style="flex:1;">
-            <option value="">-- Use custom criteria --</option>
-          </select>
-          <button class="btn btn-secondary btn-sm" onclick="loadCriteriaSets()">&#8635;</button>
-        </div>
-      </div>
+      <div class="criteria-grid">
+        <!-- LEFT COLUMN: Source + Weights + Generate -->
+        <div class="criteria-col">
 
-      <div class="source-tabs" id="criteria-tabs" style="border:none;gap:16px;margin-bottom:16px;">
-        <button class="source-tab" onclick="switchCriteriaSource('ai')" style="flex:1;padding:16px 12px;border:1px solid var(--gray-200);border-radius:var(--radius);display:flex;flex-direction:column;align-items:center;gap:4px;">
-          <span style="font-size:18px;">&#x2728;</span><span style="font-size:12px;">AI Generate</span>
-        </button>
-        <button class="source-tab" onclick="switchCriteriaSource('upload')" style="flex:1;padding:16px 12px;border:1px solid var(--gray-200);border-radius:var(--radius);display:flex;flex-direction:column;align-items:center;gap:4px;">
-          <span style="font-size:18px;">&#x1F4C4;</span><span style="font-size:12px;">Upload Document</span>
-        </button>
-        <button class="source-tab active" onclick="switchCriteriaSource('manual')" style="flex:1;padding:16px 12px;border:1px solid var(--gray-200);border-radius:var(--radius);display:flex;flex-direction:column;align-items:center;gap:4px;">
-          <span style="font-size:18px;">&#x270F;</span><span style="font-size:12px;">Manual Write</span>
-        </button>
-      </div>
+          <!-- A. Criteria Source -->
+          <div class="criteria-section">
+            <div class="criteria-section-header">
+              <h4>Criteria Source</h4>
+              <span class="criteria-section-hint">Choose a source to start.</span>
+            </div>
 
-      <div id="criteria-panel-manual">
-        <div class="form-group">
-          <label>Job Description / Context for AI</label>
-          <textarea id="criteria-text" oninput="refreshAIGenBtnState()" style="min-height:140px;" placeholder="Enter the job description or evaluation criteria..."></textarea>
-        </div>
-      </div>
-      <div id="criteria-panel-ai" style="display:none;">
-        <div style="background:var(--gray-50);padding:12px 16px;border-radius:var(--radius);color:var(--gray-600);font-size:13px;line-height:1.5;margin-bottom:12px;">
-          <strong>&#x2728; AI-Powered Criteria</strong> &mdash; Provide optional context, adjust the weights below, then click <em>Generate Criteria</em>. Nothing is generated until you click.
-        </div>
-        <div class="form-group">
-          <label>Additional Context / Requirements <span style="color:var(--gray-400);font-weight:400;">(Optional)</span></label>
-          <textarea id="ai-extra-context" oninput="refreshAIGenBtnState()" style="min-height:80px;" placeholder="Must-have skills, constraints, culture fit notes... The selected job's description is already used automatically."></textarea>
-        </div>
-        <div class="form-group">
-          <label>Generated Criteria (editable)</label>
-          <textarea id="criteria-text-ai" oninput="syncAICriteriaText()" style="min-height:200px;font-family:var(--font-mono,monospace);font-size:13px;" placeholder="Generated criteria will appear here after you click Generate. You can edit before continuing."></textarea>
-        </div>
-      </div>
-      <div id="criteria-panel-upload" style="display:none;">
-        <div class="form-group">
-          <label>Upload criteria document (PDF, TXT)</label>
-          <input type="file" id="criteria-file" accept=".pdf,.txt" onchange="handleCriteriaFile(this)"
-            style="padding:8px;border:1px dashed var(--gray-300);border-radius:var(--radius);width:100%;">
-        </div>
-      </div>
+            <div class="form-group" style="margin-bottom:12px;">
+              <label style="font-size:12px;font-weight:600;color:var(--gray-600);">Saved Criteria Sets</label>
+              <div style="display:flex;gap:8px;">
+                <select id="criteria-set-select" onchange="applyCriteriaSet()" style="flex:1;">
+                  <option value="">&mdash; Use custom criteria &mdash;</option>
+                </select>
+                <button class="btn btn-secondary btn-sm" onclick="loadCriteriaSets()" title="Refresh list">&#8635;</button>
+              </div>
+            </div>
 
-      <div class="weight-config">
-        <h4 style="font-size:14px;font-weight:700;color:var(--gray-800);margin-bottom:12px;">Scoring Weights</h4>
-        <div class="weight-row">
-          <label>Skills Match</label>
-          <input type="range" id="w-skills" min="0" max="100" value="40" oninput="updateWeights()">
-          <span class="weight-val" id="w-skills-val">40%</span>
-        </div>
-        <div class="weight-row">
-          <label>Experience</label>
-          <input type="range" id="w-experience" min="0" max="100" value="35" oninput="updateWeights()">
-          <span class="weight-val" id="w-experience-val">35%</span>
-        </div>
-        <div class="weight-row">
-          <label>Education</label>
-          <input type="range" id="w-education" min="0" max="100" value="25" oninput="updateWeights()">
-          <span class="weight-val" id="w-education-val">25%</span>
-        </div>
-        <div class="weight-total" id="weight-total">Total: 100%</div>
-      </div>
+            <div id="criteria-tabs">
+              <button class="source-tab active" onclick="switchCriteriaSource('manual')">
+                <span class="tile-ico">&#x270F;</span><span>Write / Paste</span>
+              </button>
+              <button class="source-tab" onclick="switchCriteriaSource('ai')">
+                <span class="tile-ico">&#x2728;</span><span>AI Generate</span>
+              </button>
+              <button class="source-tab" onclick="switchCriteriaSource('upload')">
+                <span class="tile-ico">&#x1F4C4;</span><span>Upload File</span>
+              </button>
+            </div>
 
-      <!-- AI generate block: visible only when source === 'ai'. Button reads the weights above. -->
-      <div id="ai-generate-block" style="display:none;margin-top:16px;padding:14px 16px;background:var(--gray-50);border:1px solid var(--gray-200);border-radius:var(--radius);">
-        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
-          <button class="btn btn-primary" id="ai-gen-btn" onclick="generateAICriteria()" disabled>&#x2728; Generate Criteria</button>
-          <span id="ai-gen-status" style="font-size:13px;color:var(--gray-600);">Select a job to enable generation.</span>
-        </div>
-      </div>
+            <!-- Source-specific inputs inline -->
+            <div id="criteria-panel-manual" class="criteria-source-panel">
+              <p class="source-hint">Type or paste your criteria in the editor on the right &rarr;</p>
+            </div>
+            <div id="criteria-panel-ai" class="criteria-source-panel" style="display:none;">
+              <label>Additional Context / Requirements <span class="optional">(Optional)</span></label>
+              <textarea id="ai-extra-context" oninput="refreshAIGenBtnState()" placeholder="Must-have skills, constraints, culture fit notes&hellip; The selected job's description is already included."></textarea>
+            </div>
+            <div id="criteria-panel-upload" class="criteria-source-panel" style="display:none;">
+              <label>Upload a PDF or TXT file</label>
+              <input type="file" id="criteria-file" accept=".pdf,.txt" onchange="handleCriteriaFile(this)">
+              <p class="source-hint">The extracted text will appear in the editor on the right.</p>
+            </div>
+          </div>
 
-      <div style="margin-top:16px;display:flex;align-items:center;gap:8px;">
-        <input type="checkbox" id="save-criteria-check" onchange="document.getElementById('save-criteria-name').style.display=this.checked?'':'none'">
-        <label for="save-criteria-check" style="font-size:13px;color:var(--gray-600);cursor:pointer;">Save this criteria set for future evaluations</label>
-        <input type="text" id="save-criteria-name" placeholder="Criteria set name..." style="display:none;padding:6px 10px;font-size:13px;width:200px;">
+          <!-- B. Scoring Preferences -->
+          <div class="criteria-section">
+            <div class="criteria-section-header">
+              <h4>Scoring Preferences</h4>
+              <span class="criteria-section-hint">Adjust scoring importance. Weights must total 100%.</span>
+            </div>
+            <div class="weight-config compact">
+              <div class="weight-row compact">
+                <label>Skills</label>
+                <input type="range" id="w-skills" min="0" max="100" value="40" oninput="updateWeights()">
+                <span class="weight-val" id="w-skills-val">40%</span>
+              </div>
+              <div class="weight-row compact">
+                <label>Experience</label>
+                <input type="range" id="w-experience" min="0" max="100" value="35" oninput="updateWeights()">
+                <span class="weight-val" id="w-experience-val">35%</span>
+              </div>
+              <div class="weight-row compact">
+                <label>Education</label>
+                <input type="range" id="w-education" min="0" max="100" value="25" oninput="updateWeights()">
+                <span class="weight-val" id="w-education-val">25%</span>
+              </div>
+              <div class="weight-total" id="weight-total">Total: 100%</div>
+            </div>
+          </div>
+
+          <!-- Generate block: visible only when AI source is active -->
+          <div id="ai-generate-block" class="criteria-section generate-block" style="display:none;">
+            <div class="criteria-section-header">
+              <h4>&#x2728; Generate with AI</h4>
+              <span class="criteria-section-hint">Uses the job description and the weights above.</span>
+            </div>
+            <button class="btn btn-primary" id="ai-gen-btn" onclick="generateAICriteria()" disabled>&#x2728; Generate Criteria</button>
+            <div id="ai-gen-status" class="ai-gen-status">Select a job to enable generation.</div>
+          </div>
+        </div>
+
+        <!-- RIGHT COLUMN: Criteria Draft + Save -->
+        <div class="criteria-col">
+          <div class="criteria-section">
+            <div class="criteria-section-header">
+              <h4>Criteria Draft</h4>
+              <span class="criteria-section-hint">Generate or write criteria, then edit before saving. This is what the AI will use to score CVs.</span>
+            </div>
+            <textarea id="criteria-text" class="criteria-draft" oninput="onCriteriaDraftInput()"
+              placeholder="Your criteria will appear here. You can always edit before continuing."></textarea>
+
+            <div id="unsaved-warning" class="unsaved-warning-card" style="display:none;">
+              <span class="warn-ico">&#x26A0;</span>
+              <div>
+                <strong>Unsaved criteria</strong>
+                <p>These criteria will be used for this evaluation but won't be reusable later. Check the box below to save as a reusable set.</p>
+              </div>
+            </div>
+
+            <div class="save-criteria-row">
+              <label class="save-criteria-label" for="save-criteria-check">
+                <input type="checkbox" id="save-criteria-check" onchange="onSaveCriteriaToggle()">
+                <span>Save this criteria set for future evaluations</span>
+              </label>
+              <input type="text" id="save-criteria-name" placeholder="Criteria set name (e.g. &ldquo;Senior Backend 2026&rdquo;)" style="display:none;">
+            </div>
+          </div>
+        </div>
       </div>
 
       <div class="wizard-footer">
@@ -1499,13 +1655,8 @@ function evalGoStep(step) {
   // Validate before advancing
   if (step === 2 && !evalSelectedJob) { toast('Select a job first', 'error'); return; }
   if (step === 3) {
-    // Read from the active panel's textarea (AI uses its own output textarea)
-    const activeSource = evalCriteria.source || 'manual';
-    const aiText = document.getElementById('criteria-text-ai').value.trim();
-    const manualText = document.getElementById('criteria-text').value.trim();
-    evalCriteria.text = activeSource === 'ai' && aiText ? aiText : manualText;
-    // Keep canonical textarea in sync
-    document.getElementById('criteria-text').value = evalCriteria.text;
+    // Draft is the single source of truth — AI / Upload / Saved-set all populate it.
+    evalCriteria.text = document.getElementById('criteria-text').value.trim();
     evalCriteria.weights.skills = parseInt(document.getElementById('w-skills').value);
     evalCriteria.weights.experience = parseInt(document.getElementById('w-experience').value);
     evalCriteria.weights.education = parseInt(document.getElementById('w-education').value);
@@ -1525,6 +1676,8 @@ function evalGoStep(step) {
       document.getElementById('criteria-text').value = evalSelectedJob.job_description || '';
     }
     loadCriteriaSets().then(() => updateStep2Context());
+    updateUnsavedWarning();
+    refreshAIGenBtnState();
   }
 
   evalWizardStep = step;
@@ -1909,47 +2062,45 @@ function switchCriteriaSource(source) {
   refreshAIGenBtnState();
 }
 
-// Enable the Generate button only when we have a job + some context (description or criteria text).
-// Called when source changes, when a job is selected, and when criteria text changes.
+// Enable the Generate button only when we have a job + some context (description,
+// extra context, or existing draft text). Called when source changes, when a job
+// is selected, and when draft / context text changes.
 function refreshAIGenBtnState() {
   const btn = document.getElementById('ai-gen-btn');
   const status = document.getElementById('ai-gen-status');
   if (!btn) return;
   const hasJob = !!evalSelectedJob;
-  const ctx = (evalSelectedJob && evalSelectedJob.job_description) || document.getElementById('criteria-text').value.trim();
-  const hasContext = !!ctx;
+  const jobDesc = (evalSelectedJob && evalSelectedJob.job_description) || '';
+  const draft = (document.getElementById('criteria-text').value || '').trim();
+  const extraCtxEl = document.getElementById('ai-extra-context');
+  const extraCtx = extraCtxEl ? (extraCtxEl.value || '').trim() : '';
+  const hasContext = !!(jobDesc || draft || extraCtx);
   // Don't clobber an in-flight "Generating…" state
   if (btn.dataset.busy === '1') return;
   btn.disabled = !(hasJob && hasContext);
-  if (!hasJob) status.textContent = 'Select a job to enable generation.';
-  else if (!hasContext) status.textContent = 'Add job description or context first.';
-  else status.textContent = 'Ready — generation respects the weights above.';
-  status.style.color = 'var(--gray-600)';
-}
-
-// Keep the canonical criteria-text in sync when user edits the AI output directly.
-function syncAICriteriaText() {
-  document.getElementById('criteria-text').value = document.getElementById('criteria-text-ai').value;
+  if (!hasJob) { status.textContent = 'Select a job to enable generation.'; status.style.color = 'var(--gray-500)'; }
+  else if (!hasContext) { status.textContent = 'Add a job description or context first.'; status.style.color = 'var(--gray-500)'; }
+  else { status.textContent = 'Ready &mdash; generation respects the weights above.'; status.style.color = 'var(--gray-600)'; }
 }
 
 async function generateAICriteria() {
   if (!evalSelectedJob) { toast('Select a job first', 'error'); return; }
   const btn = document.getElementById('ai-gen-btn');
   const status = document.getElementById('ai-gen-status');
-  const out = document.getElementById('criteria-text-ai');
+  const draft = document.getElementById('criteria-text');
   const extraCtx = (document.getElementById('ai-extra-context').value || '').trim();
   if (btn.dataset.busy === '1') return; // double-click guard
 
-  // Warn before overwriting existing generated criteria
-  if (out.value.trim()) {
-    if (!confirm('This will replace the current generated criteria. Continue?')) return;
+  // Warn before overwriting existing draft content
+  if (draft.value.trim()) {
+    if (!confirm('This will replace the current draft. Continue?')) return;
   }
 
   btn.dataset.busy = '1';
   btn.disabled = true;
   const originalText = btn.innerHTML;
   btn.innerHTML = '<span class="spinner" style="width:14px;height:14px;border-width:2px;display:inline-block;vertical-align:middle;margin-right:6px;"></span>Generating&hellip;';
-  status.textContent = 'Calling Ollama (qwen3:4b)... 30-90 seconds';
+  status.textContent = 'Calling Ollama (qwen3:4b)\u2026 30-90 seconds';
   status.style.color = 'var(--gray-600)';
   // Read current weights so the model produces criteria aligned with them
   const w = {
@@ -1957,7 +2108,7 @@ async function generateAICriteria() {
     experience: parseInt(document.getElementById('w-experience').value),
     education: parseInt(document.getElementById('w-education').value),
   };
-  const previous = out.value; // preserve on failure
+  const previous = draft.value; // preserve on failure
   // Combine job description with optional user-provided context
   const combinedDescription = [
     evalSelectedJob.job_description || '',
@@ -1981,21 +2132,20 @@ async function generateAICriteria() {
     });
     const data = await res.json();
     if (data.success && data.criteria_text) {
-      out.value = data.criteria_text;
-      // Mirror into canonical textarea so evalGoStep(3) and runEvaluation() pick it up
-      document.getElementById('criteria-text').value = data.criteria_text;
+      draft.value = data.criteria_text;
       status.textContent = `Generated (aligned to ${w.skills}/${w.experience}/${w.education} weights). Edit if needed.`;
       status.style.color = 'var(--success, #10b981)';
       toast('Criteria generated', 'success');
+      updateUnsavedWarning();
     } else {
       const msg = data.error || 'Generation failed';
-      out.value = previous; // don't clobber prior output on error
+      draft.value = previous; // don't clobber prior output on error
       status.textContent = msg;
       status.style.color = 'var(--danger, #ef4444)';
       toast(msg, 'error');
     }
   } catch (err) {
-    out.value = previous;
+    draft.value = previous;
     status.textContent = 'Network error: ' + err.message;
     status.style.color = 'var(--danger, #ef4444)';
     toast('Network error: ' + err.message, 'error');
@@ -2016,8 +2166,38 @@ function updateWeights() {
   document.getElementById('w-education-val').textContent = ed + '%';
   const total = s + e + ed;
   const totalEl = document.getElementById('weight-total');
-  totalEl.textContent = `Total: ${total}%`;
+  totalEl.textContent = total === 100 ? `Total: ${total}%` : `Total: ${total}% (must equal 100%)`;
   totalEl.className = 'weight-total' + (total !== 100 ? ' invalid' : '');
+}
+
+// Called on every keystroke in the Criteria Draft textarea.
+// Also triggers the AI-gen button to recheck its enablement
+// and toggles the "unsaved criteria" warning card.
+function onCriteriaDraftInput() {
+  refreshAIGenBtnState();
+  updateUnsavedWarning();
+}
+
+// Called when the "Save this criteria set" checkbox toggles.
+// Shows/hides the name input and re-evaluates the unsaved warning.
+function onSaveCriteriaToggle() {
+  const checked = document.getElementById('save-criteria-check').checked;
+  document.getElementById('save-criteria-name').style.display = checked ? '' : 'none';
+  updateUnsavedWarning();
+}
+
+// Show the amber warning card iff there's draft text but the user hasn't
+// opted to save it. Hiding it while the user types is distracting, so we
+// only re-evaluate on input + checkbox change (both call this).
+function updateUnsavedWarning() {
+  const warn = document.getElementById('unsaved-warning');
+  if (!warn) return;
+  const draft = document.getElementById('criteria-text');
+  const check = document.getElementById('save-criteria-check');
+  if (!draft || !check) return;
+  const hasText = !!draft.value.trim();
+  const willSave = check.checked;
+  warn.style.display = (hasText && !willSave) ? 'flex' : 'none';
 }
 
 function updateCriteriaBar() {
@@ -2036,6 +2216,8 @@ async function handleCriteriaFile(input) {
     const text = await extractTextFromFile(file);
     document.getElementById('criteria-text').value = text;
     toast('Criteria text extracted from file', 'success');
+    updateUnsavedWarning();
+    refreshAIGenBtnState();
   } catch (err) { toast('Failed to read file: ' + err.message, 'error'); }
 }
 
@@ -3009,6 +3191,11 @@ function applyCriteriaSet() {
   document.getElementById('w-experience').value = opt.dataset.ex || 35;
   document.getElementById('w-education').value = opt.dataset.ed || 25;
   updateWeights();
+  // A saved set is by definition already saved — hide the warning
+  const check = document.getElementById('save-criteria-check');
+  if (check && check.checked) { check.checked = false; onSaveCriteriaToggle(); }
+  updateUnsavedWarning();
+  refreshAIGenBtnState();
 }
 
 async function saveCriteriaSet(name) {

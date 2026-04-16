@@ -91,6 +91,26 @@ Rendered by `renderEvalResults(candidates, results)` (table) and `viewEvalDetail
 
 The same pattern should be used whenever a dataset has both a quick-scan summary and detailed per-row dimensions: keep the table minimal, put decomposition in a modal.
 
+**Set Criteria page layout (Phase 3 Step 2).**
+The Set Criteria step is a three-section, two-column page with a single source of truth for the criteria text.
+
+| Column | Section | Contents |
+|--------|---------|----------|
+| Left | **A. Criteria Source** | Saved criteria sets dropdown (with refresh); three source tiles (Write / Paste · AI Generate · Upload File); source-specific inputs inline (Additional Context textarea for AI; file input for Upload; a hint for Manual) |
+| Left | **B. Scoring Preferences** | Compact weight sliders (Skills, Experience, Education) with a running **Total:** line that turns red + shows a ⚠ prefix when the total ≠ 100% |
+| Left | **C. Generate with AI** (conditional) | A subtle-gradient card with the **Generate Criteria** button and a status line. Visible only when the AI source tile is active, so the button physically sits *below* the weights it reads |
+| Right | **Criteria Draft** | One editable `<textarea id="criteria-text" class="criteria-draft">`. Every source writes here — AI generation, file upload, saved-set load, and manual typing all populate this single field. Below it: an amber **"Unsaved criteria"** warning card (shown when the draft has text and the save checkbox is unchecked) and the "Save this criteria set" checkbox + name input |
+
+Helpers that keep state coherent:
+- `onCriteriaDraftInput()` — fires on every keystroke in the draft; calls `refreshAIGenBtnState()` and `updateUnsavedWarning()`.
+- `onSaveCriteriaToggle()` — toggles the save-name input and hides the warning if the user opts to save.
+- `updateUnsavedWarning()` — shows the amber card iff `hasText && !willSave`.
+- `refreshAIGenBtnState()` — enables the Generate button only when a job is selected AND there's context (job description, current draft, or AI extra-context).
+
+**Invariant:** there is exactly one criteria textarea (`#criteria-text`). Earlier iterations had a second `#criteria-text-ai` textarea inside the AI source panel to show generated output separately — that fought the "editable draft" invariant and has been removed along with its `syncAICriteriaText()` helper. Do not reintroduce a second textarea; if generation output needs a preview, show a diff or confirm-before-replace prompt instead.
+
+Responsive: the `.criteria-grid` collapses to a single column below 900px, and the draft textarea shrinks from 280px to 200px minimum height.
+
 **Shared email composer.**
 Every candidate-facing email flow (Reject, Shortlist notification, Interview invitation, Job offer, plus any future status-change email) opens the **same** `#email-modal` via a single helper `openEmailComposer(cfg)`. Subject is a real `<input>`, body is a real `<textarea>` — both pre-filled with a flow-specific template and fully editable. The caller supplies:
 
