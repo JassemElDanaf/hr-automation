@@ -1,0 +1,1463 @@
+{
+  "id": "2",
+  "name": "Phase 3 - CV Evaluation",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "cv-submit",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "wh-submit-cv",
+      "name": "Submit - Webhook - Submit CV",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        250,
+        300
+      ],
+      "webhookId": "submit-cv"
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $input.first().json.body || $input.first().json || {};\nconst errors = [];\nif (!body.job_opening_id || isNaN(parseInt(body.job_opening_id))) errors.push('job_opening_id (number) is required');\nif (!body.candidate_name || !body.candidate_name.trim()) errors.push('candidate_name is required');\nif (!body.cv_text || !body.cv_text.trim()) errors.push('cv_text is required');\nelse if (body.cv_text.trim().length < 20) errors.push('cv_text must be at least 20 characters');\n\nif (errors.length > 0) {\n  return [{ json: { error: true, message: 'Validation failed: ' + errors.join(', '), status: 400 } }];\n}\n\nconst jobId = parseInt(body.job_opening_id);\nreturn [{ json: {\n  error: false,\n  sql: 'INSERT INTO candidates (job_opening_id, candidate_name, email, cv_text, cv_file_name) SELECT $1, $2, $3, $4, $5 WHERE EXISTS (SELECT 1 FROM job_openings WHERE id = $1 AND is_active = true) RETURNING *',\n  params: [jobId, body.candidate_name.trim(), (body.email || '').trim() || null, body.cv_text.trim(), (body.cv_file_name || '').trim() || null]\n} }];"
+      },
+      "id": "validate-cv-input",
+      "name": "Submit - Validate Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        480,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.error }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "cv-input-valid",
+      "name": "Submit - Input Valid?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        700,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ success: false, error: $json.message }) }}",
+        "options": {
+          "responseCode": "={{ $json.status || 400 }}"
+        }
+      },
+      "id": "cv-val-error",
+      "name": "Submit - Validation Error",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        920,
+        180
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "={{ $json.sql }}",
+        "options": {
+          "queryReplacement": "={{ $json.params }}"
+        }
+      },
+      "id": "insert-candidate",
+      "name": "Submit - Insert Candidate",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        920,
+        420
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "postgres": {
+          "id": "1",
+          "name": "HR PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\nconst first = items[0]?.json || {};\nif (!first.id) {\n  return [{ json: { saved: false } }];\n}\nreturn [{ json: { saved: true, data: first } }];"
+      },
+      "id": "check-cv-saved",
+      "name": "Submit - Check Saved",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1140,
+        420
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.saved }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "cv-saved-check",
+      "name": "Submit - Saved?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1360,
+        420
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ success: false, error: 'Job opening not found or inactive' }) }}",
+        "options": {
+          "responseCode": 404
+        }
+      },
+      "id": "cv-not-found",
+      "name": "Submit - Job Not Found",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1580,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ success: true, message: 'CV submitted successfully', data: $json.data }) }}",
+        "options": {
+          "responseCode": 201
+        }
+      },
+      "id": "cv-success",
+      "name": "Submit - CV Submitted",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1580,
+        540
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "cv-evaluate",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "wh-evaluate",
+      "name": "Eval - Webhook - Evaluate",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        250,
+        800
+      ],
+      "webhookId": "cv-evaluate"
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $input.first().json.body || $input.first().json || {};\nconst jobId = parseInt(body.job_opening_id);\nif (!jobId || isNaN(jobId) || jobId < 1) {\n  return [{ json: { error: true, message: 'Valid job_opening_id is required', status: 400 } }];\n}\nlet sql = 'SELECT j.id as job_id, j.job_title, j.job_description, j.department, j.seniority_level, c.id as candidate_id, c.candidate_name, c.email, c.cv_text FROM job_openings j INNER JOIN candidates c ON c.job_opening_id = j.id LEFT JOIN evaluations e ON e.candidate_id = c.id AND e.job_opening_id = j.id WHERE j.id = $1 AND j.is_active = true AND e.id IS NULL';\nlet params = [jobId];\nconst candId = parseInt(body.candidate_id);\nif (candId && !isNaN(candId) && candId > 0) {\n  sql += ' AND c.id = $2';\n  params.push(candId);\n}\nconst sk = parseFloat(body.skills_weight) || 40;\nconst ex = parseFloat(body.experience_weight) || 35;\nconst ed = parseFloat(body.education_weight) || 25;\nconst criteriaText = (body.criteria_text || '').trim();\nreturn [{ json: { error: false, jobId: jobId, sql: sql, params: params, skills_weight: sk / 100, experience_weight: ex / 100, education_weight: ed / 100, criteria_text: criteriaText } }];"
+      },
+      "id": "validate-eval-input",
+      "name": "Eval - Validate Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        480,
+        800
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.error }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "eval-input-check",
+      "name": "Eval - Input Valid?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        700,
+        800
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ success: false, error: $json.message }) }}",
+        "options": {
+          "responseCode": "={{ $json.status || 400 }}"
+        }
+      },
+      "id": "eval-val-error",
+      "name": "Eval - Validation Error",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        920,
+        680
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "={{ $json.sql }}",
+        "options": {
+          "queryReplacement": "={{ $json.params }}"
+        }
+      },
+      "id": "fetch-job-candidates",
+      "name": "Eval - Fetch Job & Candidates",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        920,
+        920
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "postgres": {
+          "id": "1",
+          "name": "HR PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\nconst first = items[0]?.json || {};\nif (!first.job_id) {\n  return [{ json: { error: true, message: 'Job not found, inactive, or no unevaluated candidates' } }];\n}\nconst valNode = $('Eval - Validate Input').first().json;\nconst wSkills = Math.round((valNode.skills_weight || 0.4) * 100);\nconst wExp = Math.round((valNode.experience_weight || 0.35) * 100);\nconst wEdu = Math.round((valNode.education_weight || 0.25) * 100);\nconst criteriaText = valNode.criteria_text || '';\nconst jobDesc = criteriaText || first.job_description || '';\nconst results = [];\nfor (const item of items) {\n  const cvText = (item.json.cv_text || '').substring(0, 3000);\n  const prompt = `You are a professional HR evaluator. Analyze the following CV against the job requirements and provide a detailed evaluation.\n\nJOB TITLE: ${first.job_title}\nDEPARTMENT: ${first.department || 'N/A'}\nSENIORITY: ${first.seniority_level || 'N/A'}\nJOB DESCRIPTION / CRITERIA:\n${jobDesc.substring(0, 1500)}\n\nSCORING WEIGHTS: Skills ${wSkills}%, Experience ${wExp}%, Education ${wEdu}%\n\nCANDIDATE CV:\n${cvText}\n\nEvaluate this candidate thoroughly. Consider their skills match, years and relevance of experience, education credentials, and overall fit.\n\nYou MUST respond with ONLY a valid JSON object in this exact format (no other text before or after):\n{\"skills_score\": <number 0-10>, \"experience_score\": <number 0-10>, \"education_score\": <number 0-10>, \"strengths\": [\"strength1\", \"strength2\", \"strength3\"], \"weaknesses\": [\"weakness1\", \"weakness2\"], \"reasoning\": \"Brief explanation of your evaluation\"}`;\n  results.push({ json: {\n    error: false,\n    candidate_id: item.json.candidate_id,\n    candidate_name: item.json.candidate_name,\n    job_opening_id: item.json.job_id,\n    prompt: prompt,\n    requestBody: JSON.stringify({model: 'qwen3:4b', prompt: prompt, stream: false, options: {num_predict: 8000, num_ctx: 4096, temperature: 0.4}}),\n    wSkills: wSkills / 100,\n    wExp: wExp / 100,\n    wEdu: wEdu / 100\n  }});\n}\nreturn results;"
+      },
+      "id": "prepare-prompts",
+      "name": "Eval - Prepare Prompts",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1140,
+        920
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://127.0.0.1:11434/api/generate",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.requestBody }}",
+        "options": {
+          "timeout": 300000
+        }
+      },
+      "id": "call-ollama",
+      "name": "Eval - Call Ollama",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1360,
+        920
+      ],
+      "onError": "continueRegularOutput",
+      "retryOnFail": false
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\nconst promptItems = $('Eval - Prepare Prompts').all();\nconst results = [];\nfor (let i = 0; i < items.length; i++) {\n  const raw = items[i].json;\n  const meta = promptItems[i]?.json || {};\n  const wSkills = meta.wSkills || 0.4;\n  const wExp = meta.wExp || 0.35;\n  const wEdu = meta.wEdu || 0.25;\n  let aiText = (raw.response || '').trim();\n  // If response is empty, check thinking field for content\n  if (!aiText && raw.thinking) {\n    // Try to extract JSON from thinking\n    const thinkMatch = raw.thinking.match(/\\{[\\s\\S]*?\"skills_score\"[\\s\\S]*?\\}/);\n    if (thinkMatch) aiText = thinkMatch[0];\n  }\n  // Extract JSON from the response\n  let parsed = null;\n  try {\n    // Try direct parse\n    parsed = JSON.parse(aiText);\n  } catch(e) {\n    // Try to find JSON in the text\n    const jsonMatch = aiText.match(/\\{[\\s\\S]*?\"skills_score\"[\\s\\S]*?\\}/);\n    if (jsonMatch) {\n      try { parsed = JSON.parse(jsonMatch[0]); } catch(e2) {}\n    }\n  }\n  let skillsScore, expScore, eduScore, strengths, weaknesses, reasoning;\n  if (parsed && typeof parsed.skills_score === 'number') {\n    skillsScore = Math.min(10, Math.max(0, Math.round(parsed.skills_score * 10) / 10));\n    expScore = Math.min(10, Math.max(0, Math.round(parsed.experience_score * 10) / 10));\n    eduScore = Math.min(10, Math.max(0, Math.round(parsed.education_score * 10) / 10));\n    strengths = Array.isArray(parsed.strengths) ? parsed.strengths.join('; ') : (parsed.strengths || '');\n    weaknesses = Array.isArray(parsed.weaknesses) ? parsed.weaknesses.join('; ') : (parsed.weaknesses || '');\n    reasoning = parsed.reasoning || 'AI evaluation by Qwen3';\n  } else {\n    // Fallback: basic keyword scoring\n    skillsScore = 5; expScore = 5; eduScore = 5;\n    strengths = 'AI evaluation could not be fully parsed';\n    weaknesses = 'Re-evaluate recommended';\n    reasoning = 'AI evaluation could not produce structured scores. Please re-evaluate.';\n  }\n  const overall = Math.round((skillsScore * wSkills + expScore * wExp + eduScore * wEdu) * 10) / 10;\n  results.push({ json: {\n    error: false,\n    candidate_id: meta.candidate_id,\n    candidate_name: meta.candidate_name,\n    job_opening_id: meta.job_opening_id,\n    overall_score: overall,\n    skills_score: skillsScore,\n    experience_score: expScore,\n    education_score: eduScore,\n    reasoning: reasoning,\n    strengths: strengths,\n    weaknesses: weaknesses,\n    sql: 'INSERT INTO evaluations (candidate_id, job_opening_id, overall_score, skills_score, experience_score, education_score, reasoning, strengths, weaknesses) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *',\n    params: [meta.candidate_id, meta.job_opening_id, overall, skillsScore, expScore, eduScore, reasoning, strengths, weaknesses]\n  }});\n}\nreturn results;"
+      },
+      "id": "parse-ai-response",
+      "name": "Eval - Score Candidates",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1580,
+        920
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.error }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "has-candidates-check",
+      "name": "Eval - Has Candidates?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1800,
+        920
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ success: false, error: $json.message || 'No unevaluated candidates found' }) }}",
+        "options": {
+          "responseCode": 404
+        }
+      },
+      "id": "no-candidates-resp",
+      "name": "Eval - No Candidates",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1580,
+        800
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "={{ $json.sql }}",
+        "options": {
+          "queryReplacement": "={{ $json.params }}"
+        }
+      },
+      "id": "save-evaluations",
+      "name": "Eval - Save Evaluations",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1580,
+        1040
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "1",
+          "name": "HR PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const scores = $('Eval - Score Candidates').all();\nconst candidates = scores.map(s => ({\n  candidate_id: s.json.candidate_id,\n  candidate_name: s.json.candidate_name,\n  overall_score: s.json.overall_score,\n  skills_score: s.json.skills_score,\n  experience_score: s.json.experience_score,\n  education_score: s.json.education_score,\n  reasoning: s.json.reasoning,\n  strengths: s.json.strengths,\n  weaknesses: s.json.weaknesses\n}));\ncandidates.sort((a, b) => b.overall_score - a.overall_score);\nreturn [{ json: { evaluated: candidates.length, results: candidates } }];"
+      },
+      "id": "build-summary",
+      "name": "Eval - Build Summary",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1800,
+        1040
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ success: true, message: $json.evaluated + ' candidates evaluated', data: $json.results }) }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "eval-success-resp",
+      "name": "Eval - Evaluation Complete",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        2020,
+        1040
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "evaluations",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "wh-get-evals",
+      "name": "GetEval - Webhook - Get Evaluations",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        250,
+        1300
+      ],
+      "webhookId": "get-evaluations"
+    },
+    {
+      "parameters": {
+        "jsCode": "const query = $input.first().json.query || {};\nconst jobId = parseInt(query.job_id);\nif (!jobId || isNaN(jobId) || jobId < 1) {\n  return [{ json: { error: true, message: 'Valid job_id query parameter is required', status: 400 } }];\n}\nreturn [{ json: { error: false, sql: 'SELECT e.id, e.candidate_id, e.job_opening_id, e.overall_score, e.skills_score, e.experience_score, e.education_score, e.reasoning, e.strengths, e.weaknesses, e.evaluated_at, c.candidate_name, c.email FROM evaluations e INNER JOIN candidates c ON c.id = e.candidate_id WHERE e.job_opening_id = ' + jobId + ' ORDER BY e.overall_score DESC' } }];"
+      },
+      "id": "validate-eval-id",
+      "name": "GetEval - Validate Job ID",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        480,
+        1300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.error }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "eval-id-check",
+      "name": "GetEval - ID Valid?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        700,
+        1300
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ success: false, error: $json.message }) }}",
+        "options": {
+          "responseCode": "={{ $json.status || 400 }}"
+        }
+      },
+      "id": "eval-error-resp",
+      "name": "GetEval - Error Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        920,
+        1180
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "={{ $json.sql }}",
+        "options": {}
+      },
+      "id": "fetch-evals",
+      "name": "GetEval - Fetch Evaluations",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        920,
+        1420
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "postgres": {
+          "id": "1",
+          "name": "HR PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ success: true, data: $input.all().map(i => i.json).filter(i => i.id), count: $input.all().map(i => i.json).filter(i => i.id).length }) }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "eval-list-resp",
+      "name": "GetEval - Evaluations Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1140,
+        1420
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "candidates",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "wh-list-candidates",
+      "name": "ListCand - Webhook - List Candidates",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        250,
+        1800
+      ],
+      "webhookId": "list-candidates"
+    },
+    {
+      "parameters": {
+        "jsCode": "const query = $input.first().json.query || {};\nconst jobId = parseInt(query.job_id);\nif (!jobId || isNaN(jobId) || jobId < 1) {\n  return [{ json: { error: true, message: 'Valid job_id query parameter is required', status: 400 } }];\n}\nreturn [{ json: { error: false, sql: 'SELECT c.id, c.job_opening_id, c.candidate_name, c.email, c.cv_text, c.cv_file_name, c.submitted_at, e.overall_score, e.skills_score, e.experience_score, e.education_score, e.reasoning, e.strengths, e.weaknesses, e.evaluated_at FROM candidates c LEFT JOIN evaluations e ON e.candidate_id = c.id AND e.job_opening_id = c.job_opening_id WHERE c.job_opening_id = ' + jobId + ' ORDER BY e.overall_score DESC NULLS LAST, c.submitted_at DESC' } }];"
+      },
+      "id": "validate-cand-id",
+      "name": "ListCand - Validate Job ID",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        480,
+        1800
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.error }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "cand-id-check",
+      "name": "ListCand - ID Valid?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        700,
+        1800
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ success: false, error: $json.message }) }}",
+        "options": {
+          "responseCode": "={{ $json.status || 400 }}"
+        }
+      },
+      "id": "cand-error-resp",
+      "name": "ListCand - Error Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        920,
+        1680
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "={{ $json.sql }}",
+        "options": {}
+      },
+      "id": "fetch-candidates",
+      "name": "ListCand - Fetch Candidates",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        920,
+        1920
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "postgres": {
+          "id": "1",
+          "name": "HR PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ success: true, data: $input.all().map(i => i.json).filter(i => i.id), count: $input.all().map(i => i.json).filter(i => i.id).length }) }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "cand-list-resp",
+      "name": "ListCand - Candidates Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1140,
+        1920
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "criteria-sets",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "wh-list-criteria",
+      "name": "Criteria - Webhook - List Criteria",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        250,
+        2300
+      ],
+      "webhookId": "criteria-sets-list"
+    },
+    {
+      "parameters": {
+        "jsCode": "const query = $input.first().json.query || {};\nconst jobId = parseInt(query.job_id);\nlet sql = 'SELECT * FROM criteria_sets';\nif (jobId && !isNaN(jobId) && jobId > 0) {\n  sql += ' WHERE job_opening_id = ' + jobId + ' OR job_opening_id IS NULL';\n}\nsql += ' ORDER BY created_at DESC';\nreturn [{ json: { sql: sql } }];"
+      },
+      "id": "build-list-query",
+      "name": "Criteria - Build Query",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        480,
+        2300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "={{ $json.sql }}",
+        "options": {}
+      },
+      "id": "fetch-criteria",
+      "name": "Criteria - Fetch Criteria",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        700,
+        2300
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "postgres": {
+          "id": "1",
+          "name": "HR PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ success: true, data: $input.all().map(i => i.json).filter(i => i.id), count: $input.all().filter(i => i.json.id).length }) }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "criteria-list-resp",
+      "name": "Criteria - List Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        920,
+        2300
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "criteria-sets",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "wh-save-criteria",
+      "name": "Criteria - Webhook - Save Criteria",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        250,
+        2560
+      ],
+      "webhookId": "criteria-sets-save"
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $input.first().json.body || $input.first().json || {};\nconst name = (body.name || '').trim();\nconst text = (body.criteria_text || '').trim();\nif (!name || !text) {\n  return [{ json: { error: true, message: 'Name and criteria_text are required', status: 400 } }];\n}\nconst sk = parseInt(body.skills_weight) || 40;\nconst ex = parseInt(body.experience_weight) || 35;\nconst ed = parseInt(body.education_weight) || 25;\nconst jobId = parseInt(body.job_opening_id) || null;\nreturn [{ json: { error: false, sql: 'INSERT INTO criteria_sets (name, job_opening_id, criteria_text, skills_weight, experience_weight, education_weight) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *', params: [name, jobId, text, sk, ex, ed] } }];"
+      },
+      "id": "validate-criteria",
+      "name": "Criteria - Validate Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        480,
+        2560
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.error }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "criteria-valid-check",
+      "name": "Criteria - Valid?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        700,
+        2560
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ success: false, error: $json.message }) }}",
+        "options": {
+          "responseCode": "={{ $json.status || 400 }}"
+        }
+      },
+      "id": "criteria-error-resp",
+      "name": "Criteria - Error Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        920,
+        2440
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "={{ $json.sql }}",
+        "options": {
+          "queryReplacement": "={{ $json.params }}"
+        }
+      },
+      "id": "save-criteria",
+      "name": "Criteria - Save Criteria",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        920,
+        2680
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "1",
+          "name": "HR PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ success: true, data: $json }) }}",
+        "options": {
+          "responseCode": 201
+        }
+      },
+      "id": "criteria-save-resp",
+      "name": "Criteria - Save Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1140,
+        2680
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "generate-criteria",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "wh-gen-criteria",
+      "name": "GenCrit - Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [250, 2900],
+      "webhookId": "generate-criteria"
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $input.first().json.body || $input.first().json || {};\nconst jobTitle = (body.job_title || '').trim();\nconst department = (body.department || '').trim();\nconst seniority = (body.seniority_level || '').trim();\nconst employment = (body.employment_type || '').trim();\nconst jobDescription = (body.job_description || '').trim();\nif (!jobTitle) {\n  return [{ json: { error: true, message: 'job_title required', status: 400 } }];\n}\nconst prompt = `You are an HR expert. Based on the job details below, generate a structured list of evaluation criteria for screening CVs. Output 5-8 specific, measurable criteria grouped under three categories: SKILLS, EXPERIENCE, and EDUCATION. Be concise and specific to the role.\n\nJob Title: ${jobTitle}\n${department ? 'Department: ' + department : ''}\n${seniority ? 'Seniority: ' + seniority : ''}\n${employment ? 'Employment Type: ' + employment : ''}\n${jobDescription ? '\\nJob Description:\\n' + jobDescription.substring(0, 2000) : ''}\n\nOutput format (plain text, no markdown):\n\nSKILLS:\n- criterion 1\n- criterion 2\n...\n\nEXPERIENCE:\n- criterion 1\n- criterion 2\n...\n\nEDUCATION:\n- criterion 1\n- criterion 2\n...\n\nGenerate the criteria now:`;\nreturn [{ json: { error: false, prompt: prompt, requestBody: JSON.stringify({ model: 'qwen3:4b', prompt: prompt, stream: false, options: { num_predict: 4000, num_ctx: 4096, temperature: 0.4 } }) } }];"
+      },
+      "id": "gen-crit-build",
+      "name": "GenCrit - Build Prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [480, 2900]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.error }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "gen-crit-valid",
+      "name": "GenCrit - Valid?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [700, 2900]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ success: false, error: $json.message }) }}",
+        "options": {
+          "responseCode": "={{ $json.status || 400 }}"
+        }
+      },
+      "id": "gen-crit-err",
+      "name": "GenCrit - Error Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [920, 2780]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://127.0.0.1:11434/api/generate",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.requestBody }}",
+        "options": {
+          "timeout": 180000
+        }
+      },
+      "id": "gen-crit-ollama",
+      "name": "GenCrit - Call Ollama",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [920, 3020],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $input.first().json;\nlet text = (raw.response || raw.text || '').trim();\nif (!text && raw.thinking) {\n  // Some qwen builds split reasoning vs final output; fall back to thinking.\n  text = raw.thinking.trim();\n}\nif (!text) {\n  return [{ json: { success: false, error: 'Ollama returned an empty response' } }];\n}\n// Strip any <think> tags some models emit\ntext = text.replace(/<think>[\\s\\S]*?<\\/think>/gi, '').trim();\nreturn [{ json: { success: true, criteria_text: text } }];"
+      },
+      "id": "gen-crit-parse",
+      "name": "GenCrit - Parse Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1140, 3020]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ success: false, error: 'Ollama unreachable — is it running on http://127.0.0.1:11434?' }) }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "gen-crit-ollama-err",
+      "name": "GenCrit - Ollama Down",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1140, 3160]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "gen-crit-resp",
+      "name": "GenCrit - Success Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1360, 3020]
+    }
+  ],
+  "connections": {
+    "Submit - Webhook - Submit CV": {
+      "main": [
+        [
+          {
+            "node": "Submit - Validate Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Submit - Validate Input": {
+      "main": [
+        [
+          {
+            "node": "Submit - Input Valid?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Submit - Input Valid?": {
+      "main": [
+        [
+          {
+            "node": "Submit - Validation Error",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Submit - Insert Candidate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Submit - Insert Candidate": {
+      "main": [
+        [
+          {
+            "node": "Submit - Check Saved",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Submit - Check Saved": {
+      "main": [
+        [
+          {
+            "node": "Submit - Saved?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Submit - Saved?": {
+      "main": [
+        [
+          {
+            "node": "Submit - CV Submitted",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Submit - Job Not Found",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Eval - Webhook - Evaluate": {
+      "main": [
+        [
+          {
+            "node": "Eval - Validate Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Eval - Validate Input": {
+      "main": [
+        [
+          {
+            "node": "Eval - Input Valid?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Eval - Input Valid?": {
+      "main": [
+        [
+          {
+            "node": "Eval - Validation Error",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Eval - Fetch Job & Candidates",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Eval - Fetch Job & Candidates": {
+      "main": [
+        [
+          {
+            "node": "Eval - Prepare Prompts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Eval - Prepare Prompts": {
+      "main": [
+        [
+          {
+            "node": "Eval - Call Ollama",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Eval - Call Ollama": {
+      "main": [
+        [
+          {
+            "node": "Eval - Score Candidates",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Eval - Score Candidates": {
+      "main": [
+        [
+          {
+            "node": "Eval - Has Candidates?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Eval - Has Candidates?": {
+      "main": [
+        [
+          {
+            "node": "Eval - No Candidates",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Eval - Save Evaluations",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Eval - Save Evaluations": {
+      "main": [
+        [
+          {
+            "node": "Eval - Build Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Eval - Build Summary": {
+      "main": [
+        [
+          {
+            "node": "Eval - Evaluation Complete",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GetEval - Webhook - Get Evaluations": {
+      "main": [
+        [
+          {
+            "node": "GetEval - Validate Job ID",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GetEval - Validate Job ID": {
+      "main": [
+        [
+          {
+            "node": "GetEval - ID Valid?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GetEval - ID Valid?": {
+      "main": [
+        [
+          {
+            "node": "GetEval - Error Response",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "GetEval - Fetch Evaluations",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GetEval - Fetch Evaluations": {
+      "main": [
+        [
+          {
+            "node": "GetEval - Evaluations Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ListCand - Webhook - List Candidates": {
+      "main": [
+        [
+          {
+            "node": "ListCand - Validate Job ID",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ListCand - Validate Job ID": {
+      "main": [
+        [
+          {
+            "node": "ListCand - ID Valid?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ListCand - ID Valid?": {
+      "main": [
+        [
+          {
+            "node": "ListCand - Error Response",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "ListCand - Fetch Candidates",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ListCand - Fetch Candidates": {
+      "main": [
+        [
+          {
+            "node": "ListCand - Candidates Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Criteria - Webhook - List Criteria": {
+      "main": [
+        [
+          {
+            "node": "Criteria - Build Query",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Criteria - Build Query": {
+      "main": [
+        [
+          {
+            "node": "Criteria - Fetch Criteria",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Criteria - Fetch Criteria": {
+      "main": [
+        [
+          {
+            "node": "Criteria - List Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Criteria - Webhook - Save Criteria": {
+      "main": [
+        [
+          {
+            "node": "Criteria - Validate Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Criteria - Validate Input": {
+      "main": [
+        [
+          {
+            "node": "Criteria - Valid?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Criteria - Valid?": {
+      "main": [
+        [
+          {
+            "node": "Criteria - Error Response",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Criteria - Save Criteria",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Criteria - Save Criteria": {
+      "main": [
+        [
+          {
+            "node": "Criteria - Save Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GenCrit - Webhook": {
+      "main": [
+        [
+          {
+            "node": "GenCrit - Build Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GenCrit - Build Prompt": {
+      "main": [
+        [
+          {
+            "node": "GenCrit - Valid?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GenCrit - Valid?": {
+      "main": [
+        [
+          {
+            "node": "GenCrit - Error Response",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "GenCrit - Call Ollama",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GenCrit - Call Ollama": {
+      "main": [
+        [
+          {
+            "node": "GenCrit - Parse Response",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "GenCrit - Ollama Down",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GenCrit - Parse Response": {
+      "main": [
+        [
+          {
+            "node": "GenCrit - Success Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "name": "Phase 3"
+    },
+    {
+      "name": "CV Evaluation"
+    }
+  ],
+  "triggerCount": 6
+}

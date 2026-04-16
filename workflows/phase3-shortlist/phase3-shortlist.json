@@ -1,0 +1,531 @@
+{
+  "id": "3",
+  "name": "Phase 4 - Shortlist",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "shortlist",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "wh-list-shortlist",
+      "name": "ListSL - Webhook - List Shortlist",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        250,
+        300
+      ],
+      "webhookId": "list-shortlist"
+    },
+    {
+      "parameters": {
+        "jsCode": "const query = $input.first().json.query || {};\nconst jobId = parseInt(query.job_id);\nif (!jobId || isNaN(jobId) || jobId < 1) {\n  return [{ json: { error: true, message: 'Valid job_id query parameter is required', status: 400 } }];\n}\nreturn [{ json: { error: false, sql: 'SELECT s.id, s.candidate_id, s.job_opening_id, s.status, s.notes, s.shortlisted_at, s.updated_at, c.candidate_name, c.email, e.overall_score, e.skills_score, e.experience_score, e.education_score, e.reasoning, e.strengths, e.weaknesses FROM shortlist s INNER JOIN candidates c ON c.id = s.candidate_id LEFT JOIN evaluations e ON e.candidate_id = s.candidate_id AND e.job_opening_id = s.job_opening_id WHERE s.job_opening_id = ' + jobId + ' ORDER BY CASE s.status WHEN \\'shortlisted\\' THEN 1 WHEN \\'interviewed\\' THEN 2 WHEN \\'hired\\' THEN 3 WHEN \\'rejected\\' THEN 4 END, e.overall_score DESC' } }];"
+      },
+      "id": "build-shortlist-query",
+      "name": "ListSL - Build Query",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        480,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.error }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "shortlist-valid-check",
+      "name": "ListSL - Valid?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        700,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ success: false, error: $json.message }) }}",
+        "options": {
+          "responseCode": "={{ $json.status || 400 }}"
+        }
+      },
+      "id": "shortlist-error-resp",
+      "name": "ListSL - Error Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        920,
+        180
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "={{ $json.sql }}",
+        "options": {}
+      },
+      "id": "fetch-shortlist",
+      "name": "ListSL - Fetch Shortlist",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        920,
+        420
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "postgres": {
+          "id": "1",
+          "name": "HR PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ success: true, data: $input.all().map(i => i.json).filter(i => i.id), count: $input.all().filter(i => i.json.id).length }) }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "shortlist-list-resp",
+      "name": "ListSL - Shortlist Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1140,
+        420
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "add-to-shortlist",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "wh-add-shortlist",
+      "name": "AddSL - Webhook - Add Shortlist",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        250,
+        800
+      ],
+      "webhookId": "add-to-shortlist"
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $input.first().json.body || $input.first().json || {};\nconst candidateId = parseInt(body.candidate_id);\nconst jobId = parseInt(body.job_opening_id);\nif (!candidateId || isNaN(candidateId) || !jobId || isNaN(jobId)) {\n  return [{ json: { error: true, message: 'Valid candidate_id and job_opening_id required', status: 400 } }];\n}\nconst notes = (body.notes || '').trim();\nreturn [{ json: { error: false, sql: 'INSERT INTO shortlist (candidate_id, job_opening_id, notes) VALUES ($1, $2, $3) ON CONFLICT (candidate_id, job_opening_id) DO UPDATE SET status = \\'shortlisted\\', notes = EXCLUDED.notes, updated_at = NOW() RETURNING *', params: [candidateId, jobId, notes] } }];"
+      },
+      "id": "validate-add-shortlist",
+      "name": "AddSL - Validate Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        480,
+        800
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.error }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "add-shortlist-check",
+      "name": "AddSL - Valid?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        700,
+        800
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ success: false, error: $json.message }) }}",
+        "options": {
+          "responseCode": "={{ $json.status || 400 }}"
+        }
+      },
+      "id": "add-shortlist-error",
+      "name": "AddSL - Error Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        920,
+        680
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "={{ $json.sql }}",
+        "options": {
+          "queryReplacement": "={{ $json.params }}"
+        }
+      },
+      "id": "insert-shortlist",
+      "name": "AddSL - Insert Shortlist",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        920,
+        920
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "1",
+          "name": "HR PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ success: true, data: $json }) }}",
+        "options": {
+          "responseCode": 201
+        }
+      },
+      "id": "add-shortlist-resp",
+      "name": "AddSL - Success Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1140,
+        920
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "update-shortlist-status",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "wh-update-status",
+      "name": "UpdateSL - Webhook - Update Status",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        250,
+        1300
+      ],
+      "webhookId": "update-shortlist-status"
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $input.first().json.body || $input.first().json || {};\nconst id = parseInt(body.id);\nconst status = (body.status || '').trim().toLowerCase();\nconst validStatuses = ['shortlisted','interviewed','hired','rejected'];\nif (!id || isNaN(id)) {\n  return [{ json: { error: true, message: 'Valid shortlist id required', status: 400 } }];\n}\nif (!validStatuses.includes(status)) {\n  return [{ json: { error: true, message: 'Status must be: ' + validStatuses.join(', '), status: 400 } }];\n}\nconst notes = body.notes !== undefined ? body.notes : null;\nlet sql = 'UPDATE shortlist SET status = $1, updated_at = NOW()';\nlet params = [status];\nif (notes !== null) {\n  sql += ', notes = $3';\n  params.push(id);\n  params.push(notes);\n  sql += ' WHERE id = $2 RETURNING *';\n} else {\n  params.push(id);\n  sql += ' WHERE id = $2 RETURNING *';\n}\nreturn [{ json: { error: false, sql: sql, params: params } }];"
+      },
+      "id": "validate-update-status",
+      "name": "UpdateSL - Validate Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        480,
+        1300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.error }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "update-status-check",
+      "name": "UpdateSL - Valid?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        700,
+        1300
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ success: false, error: $json.message }) }}",
+        "options": {
+          "responseCode": "={{ $json.status || 400 }}"
+        }
+      },
+      "id": "update-status-error",
+      "name": "UpdateSL - Error Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        920,
+        1180
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "={{ $json.sql }}",
+        "options": {
+          "queryReplacement": "={{ $json.params }}"
+        }
+      },
+      "id": "update-shortlist",
+      "name": "UpdateSL - Update Shortlist",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        920,
+        1420
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "1",
+          "name": "HR PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ success: true, data: $json }) }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "update-status-resp",
+      "name": "UpdateSL - Success Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1140,
+        1420
+      ]
+    }
+  ],
+  "connections": {
+    "ListSL - Webhook - List Shortlist": {
+      "main": [
+        [
+          {
+            "node": "ListSL - Build Query",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ListSL - Build Query": {
+      "main": [
+        [
+          {
+            "node": "ListSL - Valid?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ListSL - Valid?": {
+      "main": [
+        [
+          {
+            "node": "ListSL - Error Response",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "ListSL - Fetch Shortlist",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ListSL - Fetch Shortlist": {
+      "main": [
+        [
+          {
+            "node": "ListSL - Shortlist Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AddSL - Webhook - Add Shortlist": {
+      "main": [
+        [
+          {
+            "node": "AddSL - Validate Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AddSL - Validate Input": {
+      "main": [
+        [
+          {
+            "node": "AddSL - Valid?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AddSL - Valid?": {
+      "main": [
+        [
+          {
+            "node": "AddSL - Error Response",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "AddSL - Insert Shortlist",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AddSL - Insert Shortlist": {
+      "main": [
+        [
+          {
+            "node": "AddSL - Success Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "UpdateSL - Webhook - Update Status": {
+      "main": [
+        [
+          {
+            "node": "UpdateSL - Validate Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "UpdateSL - Validate Input": {
+      "main": [
+        [
+          {
+            "node": "UpdateSL - Valid?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "UpdateSL - Valid?": {
+      "main": [
+        [
+          {
+            "node": "UpdateSL - Error Response",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "UpdateSL - Update Shortlist",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "UpdateSL - Update Shortlist": {
+      "main": [
+        [
+          {
+            "node": "UpdateSL - Success Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "name": "Phase 4"
+    },
+    {
+      "name": "Shortlist"
+    }
+  ],
+  "triggerCount": 3
+}

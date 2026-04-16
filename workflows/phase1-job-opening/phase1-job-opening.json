@@ -1,0 +1,1118 @@
+{
+  "id": "1",
+  "name": "Phase 2 - Job Openings",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "job-openings",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-create",
+      "name": "Create - Webhook - Create Job",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        250,
+        300
+      ],
+      "webhookId": "create-job-opening"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Validate required input fields\nconst body = $input.first().json.body || $input.first().json;\n\nconst required = ['job_title', 'department', 'employment_type', 'seniority_level', 'location_type', 'description_source'];\nconst missing = required.filter(f => !body[f] || String(body[f]).trim() === '');\n\nif (missing.length > 0) {\n  return [{ json: { error: true, message: `Missing required fields: ${missing.join(', ')}`, status: 400 } }];\n}\n\nconst validEmploymentTypes = ['Full-time', 'Part-time', 'Contract', 'Internship', 'Temporary'];\nif (!validEmploymentTypes.includes(body.employment_type)) {\n  return [{ json: { error: true, message: `Invalid employment_type. Must be one of: ${validEmploymentTypes.join(', ')}`, status: 400 } }];\n}\n\nconst validSeniority = ['Junior', 'Mid-level', 'Senior', 'Lead', 'Manager', 'Director', 'VP', 'C-level'];\nif (!validSeniority.includes(body.seniority_level)) {\n  return [{ json: { error: true, message: `Invalid seniority_level. Must be one of: ${validSeniority.join(', ')}`, status: 400 } }];\n}\n\nconst validLocation = ['On-site', 'Remote', 'Hybrid'];\nif (!validLocation.includes(body.location_type)) {\n  return [{ json: { error: true, message: `Invalid location_type. Must be one of: ${validLocation.join(', ')}`, status: 400 } }];\n}\n\nconst validSources = ['ai_generate', 'manual', 'file_upload'];\nif (!validSources.includes(body.description_source)) {\n  return [{ json: { error: true, message: `Invalid description_source. Must be one of: ${validSources.join(', ')}`, status: 400 } }];\n}\n\n// For manual: require job_description\nif (body.description_source === 'manual' && (!body.job_description || String(body.job_description).trim().length < 20)) {\n  return [{ json: { error: true, message: 'Manual description must be at least 20 characters', status: 400 } }];\n}\n\nreturn [{ json: { ...body, error: false } }];"
+      },
+      "id": "validate-input",
+      "name": "Create - Validate Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        480,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "check-error",
+              "leftValue": "={{ $json.error }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "check-validation",
+      "name": "Create - Validation OK?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        700,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ success: false, error: $json.message }) }}",
+        "options": {
+          "responseCode": "={{ $json.status || 400 }}"
+        }
+      },
+      "id": "error-response",
+      "name": "Create - Error Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        920,
+        180
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.description_source }}",
+                    "rightValue": "ai_generate",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": "AI Generate"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.description_source }}",
+                    "rightValue": "manual",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": "Manual"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.description_source }}",
+                    "rightValue": "file_upload",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": "File Upload"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "switch-source",
+      "name": "Create - Route by Source",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        920,
+        420
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://127.0.0.1:11434/api/generate",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: 'qwen3:4b', prompt: `Generate a professional, detailed job description for the following position. Include sections: About the Role, Key Responsibilities (5-7 bullet points), Requirements (5-7 bullet points), Nice to Have (3-4 bullet points), and What We Offer (3-4 bullet points).\\n\\nJob Title: ${$json.job_title}\\nDepartment: ${$json.department}\\nEmployment Type: ${$json.employment_type}\\nSeniority Level: ${$json.seniority_level}\\nLocation: ${$json.location_type}${$json.reporting_to ? '\\nReporting To: ' + $json.reporting_to : ''}\\n\\nWrite the job description now:`, stream: false, options: { num_predict: 8000, num_ctx: 4096, temperature: 0.5 } }) }}",
+        "options": {
+          "timeout": 300000
+        }
+      },
+      "id": "ollama-generate",
+      "name": "Create - Ollama - Generate JD",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1160,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extract AI-generated description from Ollama response\nconst input = $('Create - Route by Source').first().json;\nconst ollamaResponse = $input.first().json;\n\nconst jobDescription = ollamaResponse.response || ollamaResponse.text || '';\n\nif (!jobDescription || jobDescription.trim().length < 50) {\n  // Fallback: generate a template-based description\n  const fallbackJD = `## ${input.job_title}\\n\\n**Department:** ${input.department}\\n**Type:** ${input.employment_type}\\n**Level:** ${input.seniority_level}\\n**Location:** ${input.location_type}\\n${input.reporting_to ? '**Reports to:** ' + input.reporting_to : ''}\\n\\n### About the Role\\nWe are looking for a ${input.seniority_level} ${input.job_title} to join our ${input.department} team.\\n\\n### Key Responsibilities\\n- Define and execute responsibilities aligned with the ${input.job_title} role\\n- Collaborate with cross-functional teams\\n- Drive initiatives within ${input.department}\\n- Contribute to team goals and objectives\\n- Report on progress and outcomes\\n\\n### Requirements\\n- Relevant experience for a ${input.seniority_level} position\\n- Strong communication and collaboration skills\\n- Domain expertise in ${input.department}\\n\\n### Nice to Have\\n- Previous experience in a similar role\\n- Knowledge of industry best practices\\n\\n---\\n*Note: This description was auto-generated as a template. AI generation was unavailable. Please review and customize.*`;\n  \n  return [{ json: { ...input, job_description: fallbackJD, description_source_type: 'ai_generated', ai_fallback: true } }];\n}\n\nreturn [{ json: { ...input, job_description: jobDescription.trim(), description_source_type: 'ai_generated', ai_fallback: false } }];"
+      },
+      "id": "process-ai-response",
+      "name": "Create - Process AI Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1400,
+        300
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Manual paste path — pass through with validation\nconst input = $('Create - Route by Source').first().json;\nconst description = input.job_description || '';\n\nif (!description || description.trim().length < 20) {\n  return [{ json: { error: true, message: 'Job description must be at least 20 characters', status: 400 } }];\n}\n\nreturn [{ json: { ...input, job_description: description.trim(), description_source_type: 'manual' } }];"
+      },
+      "id": "manual-paste",
+      "name": "Create - Manual Paste",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1160,
+        480
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// File upload path — extract text from uploaded content\nconst input = $('Create - Route by Source').first().json;\n\nconst fileContent = input.file_content || input.job_description || '';\nconst fileName = input.file_name || 'unknown';\n\n// Validate file extension\nconst ext = fileName.toLowerCase().split('.').pop();\nconst validExtensions = ['pdf', 'docx', 'txt'];\n\nif (!validExtensions.includes(ext)) {\n  return [{ json: { error: true, message: `Invalid file type '.${ext}'. Accepted: PDF, DOCX, TXT`, status: 400 } }];\n}\n\nif (!fileContent || fileContent.trim().length < 20) {\n  return [{ json: { error: true, message: 'File content is empty or too short. Could not extract text from the uploaded file.', status: 400 } }];\n}\n\nreturn [{ json: { ...input, job_description: fileContent.trim(), description_source_type: 'file_upload', uploaded_file_name: fileName } }];"
+      },
+      "id": "file-upload",
+      "name": "Create - File Upload Extract",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1160,
+        640
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Merge point — check for errors from any path, then prepare DB insert\nconst item = $input.first().json;\n\nif (item.error) {\n  return [{ json: item }];\n}\n\n// Final validation before DB write\nif (!item.job_description || item.job_description.trim().length < 10) {\n  return [{ json: { error: true, message: 'Job description is empty after processing', status: 400 } }];\n}\n\nreturn [{ json: {\n  error: false,\n  job_title: item.job_title,\n  department: item.department,\n  employment_type: item.employment_type,\n  seniority_level: item.seniority_level,\n  location_type: item.location_type,\n  reporting_to: item.reporting_to || null,\n  description_source_type: item.description_source_type,\n  job_description: item.job_description,\n  uploaded_file_name: item.uploaded_file_name || null,\n  status: item.status || 'draft',\n  is_active: item.is_active !== undefined ? item.is_active : true,\n  ai_fallback: item.ai_fallback || false\n} }];"
+      },
+      "id": "prepare-insert",
+      "name": "Create - Prepare DB Insert",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1640,
+        480
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "check-merge-error",
+              "leftValue": "={{ $json.error }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "check-merge-error",
+      "name": "Create - Any Errors?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1860,
+        480
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ success: false, error: $json.message }) }}",
+        "options": {
+          "responseCode": "={{ $json.status || 400 }}"
+        }
+      },
+      "id": "merge-error-response",
+      "name": "Create - Error Response 2",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        2080,
+        360
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO job_openings (job_title, department, employment_type, seniority_level, location_type, reporting_to, description_source_type, job_description, uploaded_file_name, status, is_active) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING *;",
+        "options": {
+          "queryReplacement": "={{ [$json.job_title, $json.department, $json.employment_type, $json.seniority_level, $json.location_type, $json.reporting_to, $json.description_source_type, $json.job_description, $json.uploaded_file_name, $json.status, $json.is_active] }}"
+        }
+      },
+      "id": "postgres-insert",
+      "name": "Create - Insert into DB",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        2080,
+        540
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "1",
+          "name": "HR PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ success: true, message: 'Job opening created successfully', data: $json, ai_fallback: $('Create - Prepare DB Insert').first().json.ai_fallback || false }) }}",
+        "options": {
+          "responseCode": 201
+        }
+      },
+      "id": "success-response",
+      "name": "Create - Success Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        2300,
+        540
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "job-openings",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-list",
+      "name": "List - Webhook - List Jobs",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        250,
+        800
+      ],
+      "webhookId": "list-job-openings"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse optional query parameters for filtering\nconst query = $input.first().json.query || {};\n\nlet whereClauses = [];\nlet params = [];\nlet paramIndex = 1;\n\nif (query.is_active !== undefined) {\n  whereClauses.push(`is_active = $${paramIndex}`);\n  params.push(query.is_active === 'true');\n  paramIndex++;\n}\n\nif (query.status) {\n  whereClauses.push(`status = $${paramIndex}`);\n  params.push(query.status);\n  paramIndex++;\n}\n\nif (query.department) {\n  whereClauses.push(`department ILIKE $${paramIndex}`);\n  params.push(`%${query.department}%`);\n  paramIndex++;\n}\n\nconst whereSQL = whereClauses.length > 0 ? 'WHERE ' + whereClauses.join(' AND ') : '';\nconst limit = Math.min(parseInt(query.limit) || 50, 100);\nconst offset = Math.max(parseInt(query.offset) || 0, 0);\n\nreturn [{ json: {\n  query: `SELECT id, job_title, department, employment_type, seniority_level, location_type, reporting_to, description_source_type, status, is_active, created_at, updated_at FROM job_openings ${whereSQL} ORDER BY created_at DESC LIMIT ${limit} OFFSET ${offset}`,\n  countQuery: `SELECT COUNT(*) as total FROM job_openings ${whereSQL}`,\n  params: params\n} }];"
+      },
+      "id": "build-query",
+      "name": "List - Build Query",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        480,
+        800
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "={{ $json.query }}",
+        "options": {
+          "queryReplacement": "={{ $json.params }}"
+        }
+      },
+      "id": "postgres-list",
+      "name": "List - Fetch Jobs",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        700,
+        800
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "postgres": {
+          "id": "1",
+          "name": "HR PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ success: true, data: $input.all().map(i => i.json).filter(i => i.id), count: $input.all().filter(i => i.json.id).length }) }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "list-response",
+      "name": "List - List Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        920,
+        800
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "job-opening",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-get",
+      "name": "Get - Webhook - Get Job",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        250,
+        1300
+      ],
+      "webhookId": "get-job-opening"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extract and validate the ID from query parameter\nconst query = $input.first().json.query || {};\nconst id = parseInt(query.id);\n\nif (!id || isNaN(id) || id < 1) {\n  return [{ json: { error: true, message: 'Invalid or missing job opening ID. Use ?id=1', status: 400 } }];\n}\n\nreturn [{ json: { id: id, error: false, sql: 'SELECT * FROM job_openings WHERE id = ' + id } }];"
+      },
+      "id": "validate-id",
+      "name": "Get - Validate ID",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        480,
+        1300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.error }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "check-id-error",
+      "name": "Get - ID Valid?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        700,
+        1300
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ success: false, error: $json.message }) }}",
+        "options": {
+          "responseCode": "={{ $json.status || 400 }}"
+        }
+      },
+      "id": "id-error-response",
+      "name": "Get - Error Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        920,
+        1180
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "={{ $json.sql }}",
+        "options": {}
+      },
+      "id": "postgres-get",
+      "name": "Get - Fetch Job",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        920,
+        1420
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "postgres": {
+          "id": "1",
+          "name": "HR PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const allItems = $input.all();\nconst results = allItems.map(i => i.json);\nconst firstItem = results[0] || {};\n\nif (!firstItem.id) {\n  return [{ json: { found: false } }];\n}\n\nreturn [{ json: { found: true, data: firstItem } }];"
+      },
+      "id": "check-found",
+      "name": "Get - Check Found",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1140,
+        1420
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.found }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "found-check",
+      "name": "Get - Found?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1360,
+        1420
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ success: false, error: 'Job opening not found' }) }}",
+        "options": {
+          "responseCode": 404
+        }
+      },
+      "id": "not-found-response",
+      "name": "Get - Not Found",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1580,
+        1300
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ success: true, data: $json.data }) }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "found-response",
+      "name": "Get - Found Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1580,
+        1540
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "job-opening-toggle",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-toggle",
+      "name": "Toggle - Webhook - Toggle Status",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        250,
+        1800
+      ],
+      "webhookId": "toggle-job-status"
+    },
+    {
+      "parameters": {
+        "jsCode": "const query = $input.first().json.query || {};\nconst body = $input.first().json.body || $input.first().json;\nconst id = parseInt(query.id || body.id);\n\nif (!id || isNaN(id) || id < 1) {\n  return [{ json: { error: true, message: 'Invalid or missing job opening ID. Use ?id=1', status: 400 } }];\n}\n\nreturn [{ json: { id: id, error: false, sql: 'UPDATE job_openings SET is_active = NOT is_active WHERE id = ' + id + ' RETURNING *' } }];"
+      },
+      "id": "validate-toggle-id",
+      "name": "Toggle - Validate ID",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        480,
+        1800
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.error }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "check-toggle-error",
+      "name": "Toggle - ID Valid?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        700,
+        1800
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ success: false, error: $json.message }) }}",
+        "options": {
+          "responseCode": "={{ $json.status || 400 }}"
+        }
+      },
+      "id": "toggle-error-response",
+      "name": "Toggle - Error Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        920,
+        1680
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "={{ $json.sql }}",
+        "options": {}
+      },
+      "id": "postgres-toggle",
+      "name": "Toggle - Toggle in DB",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        920,
+        1920
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "postgres": {
+          "id": "1",
+          "name": "HR PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const results = $input.all().map(i => i.json);\n\nif (!results || results.length === 0 || !results[0].id) {\n  return [{ json: { found: false } }];\n}\n\nreturn [{ json: { found: true, data: results[0] } }];"
+      },
+      "id": "check-toggle-result",
+      "name": "Toggle - Check Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1140,
+        1920
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.found }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "toggle-found-check",
+      "name": "Toggle - Found?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1360,
+        1920
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ success: false, error: 'Job opening not found' }) }}",
+        "options": {
+          "responseCode": 404
+        }
+      },
+      "id": "toggle-not-found",
+      "name": "Toggle - Not Found",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1580,
+        1800
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ success: true, message: `Job opening is now ${$json.data.is_active ? 'active' : 'inactive'}`, data: $json.data }) }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "toggle-success",
+      "name": "Toggle - Toggle Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1580,
+        2040
+      ]
+    }
+  ],
+  "connections": {
+    "Create - Webhook - Create Job": {
+      "main": [
+        [
+          {
+            "node": "Create - Validate Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create - Validate Input": {
+      "main": [
+        [
+          {
+            "node": "Create - Validation OK?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create - Validation OK?": {
+      "main": [
+        [
+          {
+            "node": "Create - Error Response",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Create - Route by Source",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create - Route by Source": {
+      "main": [
+        [
+          {
+            "node": "Create - Ollama - Generate JD",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Create - Manual Paste",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Create - File Upload Extract",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create - Ollama - Generate JD": {
+      "main": [
+        [
+          {
+            "node": "Create - Process AI Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create - Process AI Response": {
+      "main": [
+        [
+          {
+            "node": "Create - Prepare DB Insert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create - Manual Paste": {
+      "main": [
+        [
+          {
+            "node": "Create - Prepare DB Insert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create - File Upload Extract": {
+      "main": [
+        [
+          {
+            "node": "Create - Prepare DB Insert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create - Prepare DB Insert": {
+      "main": [
+        [
+          {
+            "node": "Create - Any Errors?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create - Any Errors?": {
+      "main": [
+        [
+          {
+            "node": "Create - Error Response 2",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Create - Insert into DB",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create - Insert into DB": {
+      "main": [
+        [
+          {
+            "node": "Create - Success Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "List - Webhook - List Jobs": {
+      "main": [
+        [
+          {
+            "node": "List - Build Query",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "List - Build Query": {
+      "main": [
+        [
+          {
+            "node": "List - Fetch Jobs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "List - Fetch Jobs": {
+      "main": [
+        [
+          {
+            "node": "List - List Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get - Webhook - Get Job": {
+      "main": [
+        [
+          {
+            "node": "Get - Validate ID",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get - Validate ID": {
+      "main": [
+        [
+          {
+            "node": "Get - ID Valid?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get - ID Valid?": {
+      "main": [
+        [
+          {
+            "node": "Get - Error Response",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Get - Fetch Job",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get - Fetch Job": {
+      "main": [
+        [
+          {
+            "node": "Get - Check Found",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get - Check Found": {
+      "main": [
+        [
+          {
+            "node": "Get - Found?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get - Found?": {
+      "main": [
+        [
+          {
+            "node": "Get - Found Response",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Get - Not Found",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Toggle - Webhook - Toggle Status": {
+      "main": [
+        [
+          {
+            "node": "Toggle - Validate ID",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Toggle - Validate ID": {
+      "main": [
+        [
+          {
+            "node": "Toggle - ID Valid?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Toggle - ID Valid?": {
+      "main": [
+        [
+          {
+            "node": "Toggle - Error Response",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Toggle - Toggle in DB",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Toggle - Toggle in DB": {
+      "main": [
+        [
+          {
+            "node": "Toggle - Check Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Toggle - Check Result": {
+      "main": [
+        [
+          {
+            "node": "Toggle - Found?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Toggle - Found?": {
+      "main": [
+        [
+          {
+            "node": "Toggle - Toggle Response",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Toggle - Not Found",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "name": "Phase 2"
+    },
+    {
+      "name": "Job Openings"
+    }
+  ],
+  "triggerCount": 4
+}

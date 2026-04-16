@@ -1,0 +1,124 @@
+{
+  "id": "5",
+  "name": "Phase 1 - Dashboard",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "dashboard-candidates",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "wh-dash-cand",
+      "name": "DashCand - Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [250, 300],
+      "webhookId": "dashboard-candidates"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT c.id, c.job_opening_id, c.candidate_name, c.email, c.submitted_at, e.overall_score, e.skills_score, e.experience_score, e.education_score FROM candidates c LEFT JOIN evaluations e ON e.candidate_id = c.id AND e.job_opening_id = c.job_opening_id ORDER BY c.submitted_at DESC",
+        "options": {}
+      },
+      "id": "fetch-dash-cand",
+      "name": "DashCand - Fetch",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [480, 300],
+      "alwaysOutputData": true,
+      "credentials": {
+        "postgres": {
+          "id": "1",
+          "name": "HR PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ success: true, data: $input.all().map(i => i.json).filter(i => i.id), count: $input.all().map(i => i.json).filter(i => i.id).length }) }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "resp-dash-cand",
+      "name": "DashCand - Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [700, 300]
+    },
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "dashboard-shortlist",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "wh-dash-sl",
+      "name": "DashSl - Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [250, 500],
+      "webhookId": "dashboard-shortlist"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT s.id, s.candidate_id, s.job_opening_id, s.status, s.shortlisted_at, s.updated_at, s.notes, c.candidate_name, c.email FROM shortlist s INNER JOIN candidates c ON c.id = s.candidate_id ORDER BY s.updated_at DESC",
+        "options": {}
+      },
+      "id": "fetch-dash-sl",
+      "name": "DashSl - Fetch",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [480, 500],
+      "alwaysOutputData": true,
+      "credentials": {
+        "postgres": {
+          "id": "1",
+          "name": "HR PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ success: true, data: $input.all().map(i => i.json).filter(i => i.id), count: $input.all().map(i => i.json).filter(i => i.id).length }) }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "resp-dash-sl",
+      "name": "DashSl - Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [700, 500]
+    }
+  ],
+  "connections": {
+    "DashCand - Webhook": {
+      "main": [[{ "node": "DashCand - Fetch", "type": "main", "index": 0 }]]
+    },
+    "DashCand - Fetch": {
+      "main": [[{ "node": "DashCand - Response", "type": "main", "index": 0 }]]
+    },
+    "DashSl - Webhook": {
+      "main": [[{ "node": "DashSl - Fetch", "type": "main", "index": 0 }]]
+    },
+    "DashSl - Fetch": {
+      "main": [[{ "node": "DashSl - Response", "type": "main", "index": 0 }]]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    { "name": "Phase 1" },
+    { "name": "Dashboard" }
+  ],
+  "triggerCount": 2
+}

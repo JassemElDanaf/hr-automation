@@ -1,0 +1,3133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Diyar HR Automation</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    :root {
+      --primary: #2563eb;
+      --primary-dark: #1d4ed8;
+      --success: #16a34a;
+      --danger: #dc2626;
+      --warning: #f59e0b;
+      --purple: #7c3aed;
+      --gray-50: #f9fafb;
+      --gray-100: #f3f4f6;
+      --gray-200: #e5e7eb;
+      --gray-300: #d1d5db;
+      --gray-400: #9ca3af;
+      --gray-500: #6b7280;
+      --gray-600: #4b5563;
+      --gray-700: #374151;
+      --gray-800: #1f2937;
+      --gray-900: #111827;
+      --radius: 8px;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: var(--gray-50);
+      color: var(--gray-800);
+      line-height: 1.6;
+    }
+
+    /* Header */
+    .header {
+      background: white;
+      border-bottom: 1px solid var(--gray-200);
+      padding: 16px 32px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .header h1 { font-size: 22px; font-weight: 700; color: var(--gray-900); }
+    .header h1 span { color: var(--primary); }
+
+    /* Nav tabs */
+    .nav-tabs {
+      display: flex;
+      background: white;
+      border-bottom: 1px solid var(--gray-200);
+      padding: 0 32px;
+    }
+    .nav-tab {
+      padding: 14px 24px;
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--gray-500);
+      cursor: pointer;
+      border: none;
+      background: none;
+      border-bottom: 2px solid transparent;
+      transition: all 0.15s;
+    }
+    .nav-tab:hover { color: var(--gray-700); }
+    .nav-tab.active { color: var(--primary); border-bottom-color: var(--primary); }
+
+    /* Layout */
+    .container { max-width: 1200px; margin: 0 auto; padding: 16px 32px; }
+    .page { display: none; }
+    .page.active { display: block; }
+
+    /* Buttons */
+    .btn {
+      padding: 10px 20px; border: none; border-radius: var(--radius);
+      font-size: 14px; font-weight: 600; cursor: pointer;
+      transition: all 0.15s; display: inline-flex; align-items: center; gap: 6px;
+    }
+    .btn-primary { background: var(--primary); color: white; }
+    .btn-primary:hover { background: var(--primary-dark); }
+    .btn-secondary { background: white; color: var(--gray-700); border: 1px solid var(--gray-300); }
+    .btn-secondary:hover { background: var(--gray-50); }
+    .btn-success { background: var(--success); color: white; }
+    .btn-danger { background: var(--danger); color: white; }
+    .btn-purple { background: var(--purple); color: white; }
+    .btn-purple:hover { background: #6d28d9; }
+    .btn-sm { padding: 6px 12px; font-size: 13px; }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    /* Stats bar */
+    .stats { display: flex; gap: 16px; margin-bottom: 24px; }
+    .stat-card {
+      background: white; border: 1px solid var(--gray-200);
+      border-radius: var(--radius); padding: 16px 24px; flex: 1;
+    }
+    .stat-card .label { font-size: 13px; color: var(--gray-500); font-weight: 500; }
+    .stat-card .value { font-size: 28px; font-weight: 700; color: var(--gray-900); }
+
+    /* Table */
+    .table-wrap {
+      background: white; border: 1px solid var(--gray-200);
+      border-radius: var(--radius);
+      /* header rounds the top; allow horizontal scroll on small screens so buttons never clip */
+      overflow: hidden;
+    }
+    /* Inner scroller wraps the <table> so overflow-x works while the rounded corners stay intact */
+    .table-scroll { overflow-x: auto; }
+    .table-header {
+      padding: 16px 24px; border-bottom: 1px solid var(--gray-200);
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .table-header h2 { font-size: 16px; font-weight: 600; }
+    table { width: 100%; border-collapse: collapse; }
+    th {
+      text-align: left; padding: 12px 24px; font-size: 12px; font-weight: 600;
+      color: var(--gray-500); text-transform: uppercase; letter-spacing: 0.05em;
+      background: var(--gray-50); border-bottom: 1px solid var(--gray-200);
+    }
+    td { padding: 14px 24px; font-size: 14px; border-bottom: 1px solid var(--gray-100); }
+    tr:hover td { background: var(--gray-50); }
+    tr:last-child td { border-bottom: none; }
+    /* Actions column: must always show all buttons. Never clip.
+       nowrap keeps them on one line; if the table overflows horizontally,
+       the .table-scroll wrapper kicks in instead of hiding the button. */
+    td.actions-cell { min-width: 260px; white-space: nowrap; }
+    .actions-container {
+      display: inline-flex; gap: 6px; flex-wrap: nowrap;
+      align-items: center; justify-content: flex-start;
+    }
+    /* On narrow screens, allow wrap instead of horizontal scroll for a cleaner look */
+    @media (max-width: 900px) {
+      .actions-container { flex-wrap: wrap; }
+      td.actions-cell { min-width: 0; white-space: normal; }
+    }
+
+    /* Badges */
+    .badge {
+      display: inline-block; padding: 3px 10px; border-radius: 20px;
+      font-size: 12px; font-weight: 600;
+    }
+    .badge-open { background: #dcfce7; color: #166534; }
+    .badge-draft { background: #fef9c3; color: #854d0e; }
+    .badge-closed { background: #fecaca; color: #991b1b; }
+    .badge-on_hold { background: #e0e7ff; color: #3730a3; }
+    .badge-active { background: #dcfce7; color: #166534; }
+    .badge-inactive { background: var(--gray-100); color: var(--gray-500); }
+    .badge-shortlisted { background: #dbeafe; color: #1e40af; }
+    .badge-interviewed { background: #fef9c3; color: #854d0e; }
+    .badge-hired { background: #dcfce7; color: #166534; }
+    .badge-rejected { background: #fecaca; color: #991b1b; }
+
+    /* Score badge */
+    .score-badge {
+      display: inline-block; padding: 4px 12px; border-radius: 20px;
+      font-size: 13px; font-weight: 700; min-width: 48px; text-align: center;
+    }
+    .score-high { background: #dcfce7; color: #166534; }
+    .score-mid { background: #fef9c3; color: #854d0e; }
+    .score-low { background: #fecaca; color: #991b1b; }
+
+    /* Modal */
+    .modal-overlay {
+      display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5);
+      z-index: 100; justify-content: center; align-items: flex-start;
+      padding-top: 60px; overflow-y: auto;
+    }
+    .modal-overlay.active { display: flex; }
+    .modal {
+      background: white; border-radius: 12px; width: 640px; max-width: 95vw;
+      margin-bottom: 40px; box-shadow: 0 20px 60px rgba(0,0,0,0.15);
+    }
+    .modal.wide { width: 800px; }
+    .modal-header {
+      padding: 20px 24px; border-bottom: 1px solid var(--gray-200);
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .modal-header h2 { font-size: 18px; font-weight: 600; }
+    .modal-close {
+      background: none; border: none; cursor: pointer;
+      font-size: 24px; color: var(--gray-400); padding: 4px;
+    }
+    .modal-close:hover { color: var(--gray-700); }
+    .modal-body { padding: 24px; }
+    .modal-footer {
+      padding: 16px 24px; border-top: 1px solid var(--gray-200);
+      display: flex; justify-content: flex-end; gap: 12px;
+    }
+
+    /* Forms */
+    .form-group { margin-bottom: 16px; }
+    .form-group label {
+      display: block; font-size: 13px; font-weight: 600;
+      color: var(--gray-700); margin-bottom: 6px;
+    }
+    .form-group label .required { color: var(--danger); }
+    .form-row { display: flex; gap: 16px; }
+    .form-row .form-group { flex: 1; }
+    input[type="text"], select, textarea {
+      width: 100%; padding: 10px 14px; border: 1px solid var(--gray-300);
+      border-radius: var(--radius); font-size: 14px; font-family: inherit;
+      transition: border-color 0.15s;
+    }
+    input:focus, select:focus, textarea:focus {
+      outline: none; border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(37,99,235,0.1);
+    }
+    textarea { resize: vertical; min-height: 120px; }
+
+    /* Description source tabs */
+    .source-tabs {
+      display: flex; gap: 0; margin-bottom: 16px;
+      border: 1px solid var(--gray-300); border-radius: var(--radius); overflow: hidden;
+    }
+    .source-tab {
+      flex: 1; padding: 10px; text-align: center; font-size: 13px; font-weight: 600;
+      cursor: pointer; background: white; border: none; color: var(--gray-600);
+      border-right: 1px solid var(--gray-300); transition: all 0.15s;
+    }
+    .source-tab:last-child { border-right: none; }
+    .source-tab.active { background: var(--primary); color: white; }
+    .source-tab:hover:not(.active) { background: var(--gray-50); }
+    .source-panel { display: none; }
+    .source-panel.active { display: block; }
+
+    /* Detail view */
+    .detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .detail-item .label {
+      font-size: 12px; font-weight: 600; color: var(--gray-500);
+      text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px;
+    }
+    .detail-item .value { font-size: 15px; color: var(--gray-800); }
+    .detail-desc {
+      grid-column: 1 / -1; margin-top: 8px; padding-top: 16px;
+      border-top: 1px solid var(--gray-200);
+    }
+    .detail-desc .value {
+      white-space: pre-wrap; background: var(--gray-50); padding: 16px;
+      border-radius: var(--radius); font-size: 14px; line-height: 1.7;
+      max-height: 400px; overflow-y: auto;
+    }
+
+    /* Score breakdown */
+    .score-breakdown {
+      display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin: 16px 0;
+    }
+    .score-item {
+      text-align: center; padding: 12px; background: var(--gray-50);
+      border-radius: var(--radius);
+    }
+    .score-item .score-label { font-size: 11px; font-weight: 600; color: var(--gray-500); text-transform: uppercase; }
+    .score-item .score-val { font-size: 24px; font-weight: 700; margin-top: 4px; }
+
+    /* Progress bar */
+    .progress-wrap { margin: 16px 0; }
+    .progress-bar {
+      height: 8px; background: var(--gray-200); border-radius: 4px; overflow: hidden;
+    }
+    .progress-fill {
+      height: 100%; border-radius: 4px; transition: width 0.3s;
+    }
+
+    /* Toast */
+    .toast {
+      position: fixed; bottom: 24px; right: 24px; padding: 14px 20px;
+      border-radius: var(--radius); color: white; font-size: 14px; font-weight: 500;
+      z-index: 200; transform: translateY(100px); opacity: 0; transition: all 0.3s;
+    }
+    .toast.show { transform: translateY(0); opacity: 1; }
+    .toast-success { background: var(--success); }
+    .toast-error { background: var(--danger); }
+
+    /* Loading */
+    .loading { text-align: center; padding: 60px; color: var(--gray-400); font-size: 15px; }
+    .spinner {
+      display: inline-block; width: 24px; height: 24px;
+      border: 3px solid var(--gray-200); border-top-color: var(--primary);
+      border-radius: 50%; animation: spin 0.6s linear infinite; margin-bottom: 12px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .empty-state { text-align: center; padding: 60px; color: var(--gray-400); }
+    .empty-state svg { margin-bottom: 16px; }
+    .clickable { cursor: pointer; }
+
+    /* CV Evaluation specific */
+    .eval-header {
+      display: flex; align-items: center; gap: 16px; margin-bottom: 24px;
+    }
+    .eval-header select { max-width: 350px; }
+
+    .candidate-card {
+      background: white; border: 1px solid var(--gray-200); border-radius: var(--radius);
+      padding: 20px; margin-bottom: 12px;
+    }
+    .candidate-card-header {
+      display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;
+    }
+    .candidate-card-header h3 { font-size: 16px; font-weight: 600; }
+    .candidate-meta { font-size: 13px; color: var(--gray-500); }
+
+    .eval-detail-section { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--gray-100); }
+    .eval-detail-section h4 { font-size: 13px; font-weight: 600; color: var(--gray-600); margin-bottom: 4px; }
+    .eval-detail-section p { font-size: 14px; color: var(--gray-700); }
+
+    /* Wizard */
+    .wizard-steps {
+      display: flex; align-items: center; justify-content: center;
+      gap: 0; margin-bottom: 16px; padding: 12px 0 0;
+    }
+    .wizard-step {
+      display: flex; align-items: center; gap: 10px; font-size: 14px; font-weight: 600;
+      color: var(--gray-400); cursor: pointer; position: relative;
+      user-select: none; transition: opacity 0.15s;
+    }
+    .wizard-step:hover .step-num { transform: scale(1.08); }
+    .wizard-step .step-num {
+      width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center;
+      justify-content: center; font-size: 13px; font-weight: 700;
+      background: var(--gray-100); color: var(--gray-400); border: 2px solid var(--gray-200);
+      transition: all 0.2s;
+    }
+    .wizard-step.active .step-num { background: var(--primary); color: white; border-color: var(--primary); }
+    .wizard-step.active { color: var(--gray-800); }
+    .wizard-step.completed .step-num { background: var(--success); color: white; border-color: var(--success); }
+    .wizard-step.completed { color: var(--success); }
+    /* Job status panel (shown on Step 1 after a job is selected) */
+    .job-status-panel {
+      margin-top: 16px; padding: 14px 16px; background: var(--gray-50);
+      border: 1px solid var(--gray-200); border-radius: var(--radius);
+      display: flex; flex-wrap: wrap; align-items: center; gap: 12px;
+    }
+    .job-status-panel .label { font-size: 13px; color: var(--gray-600); font-weight: 600; }
+    .status-pill {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 4px 10px; border-radius: 999px; font-size: 12px; font-weight: 600;
+      background: var(--gray-100); color: var(--gray-600);
+    }
+    .status-pill.done { background: #dcfce7; color: #166534; }
+    .status-pill.empty { background: var(--gray-100); color: var(--gray-400); }
+    .status-pill.warn { background: #fef3c7; color: #92400e; cursor: help; }
+    /* Small state badges overlaid on job cards */
+    .job-card-state {
+      display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px;
+    }
+    .job-card-state .mini-pill {
+      font-size: 11px; padding: 2px 8px; border-radius: 999px;
+      background: #dcfce7; color: #166534; font-weight: 600;
+    }
+    .wizard-connector {
+      width: 60px; height: 2px; background: var(--gray-200); margin: 0 12px;
+    }
+    .wizard-connector.completed { background: var(--success); }
+    .wizard-panel { display: none; }
+    .wizard-panel.active { display: block; }
+    .wizard-footer {
+      display: flex; justify-content: space-between; align-items: center;
+      padding-top: 16px; margin-top: 16px; border-top: 1px solid var(--gray-200);
+    }
+    .wizard-footer .step-info { font-size: 13px; color: var(--gray-400); }
+
+    /* Job Cards */
+    .job-card-grid {
+      display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+      gap: 12px; margin-top: 10px;
+    }
+    .job-card {
+      background: white; border: 2px solid var(--gray-200); border-radius: var(--radius);
+      padding: 20px; cursor: pointer; transition: all 0.15s;
+    }
+    .job-card:hover { border-color: var(--gray-300); box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
+    .job-card.selected { border-color: var(--primary); background: #eff6ff; }
+    .job-card-title { font-size: 16px; font-weight: 700; color: var(--gray-900); margin-bottom: 8px; }
+    .job-card-meta { font-size: 13px; color: var(--gray-500); display: flex; flex-wrap: wrap; gap: 6px; }
+    .job-card-meta .dot::before { content: '\00b7'; margin-right: 6px; }
+    .job-card-stats { display: flex; gap: 16px; margin-top: 12px; font-size: 12px; color: var(--gray-400); }
+    .job-card-stats span { display: flex; align-items: center; gap: 4px; }
+
+    /* Search bar */
+    .search-bar {
+      width: 100%; padding: 10px 14px; border: 1px solid var(--gray-200);
+      border-radius: var(--radius); font-size: 14px; background: white;
+    }
+    .search-bar:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px rgba(37,99,235,0.1); }
+
+    /* Filter tabs */
+    .filter-tabs { display: flex; gap: 8px; }
+    .filter-tab {
+      padding: 6px 16px; border-radius: 20px; font-size: 13px; font-weight: 600;
+      cursor: pointer; border: 1px solid var(--gray-200); background: white;
+      color: var(--gray-500); transition: all 0.15s;
+    }
+    .filter-tab:hover { background: var(--gray-50); }
+    .filter-tab.active { background: var(--primary); color: white; border-color: var(--primary); }
+
+    /* Toggle switch */
+    .toggle-switch {
+      position: relative; width: 44px; height: 24px; display: inline-block;
+    }
+    .toggle-switch input { opacity: 0; width: 0; height: 0; }
+    .toggle-slider {
+      position: absolute; inset: 0; background: var(--gray-300); border-radius: 24px;
+      cursor: pointer; transition: 0.2s;
+    }
+    .toggle-slider::before {
+      content: ''; position: absolute; height: 18px; width: 18px; left: 3px; bottom: 3px;
+      background: white; border-radius: 50%; transition: 0.2s;
+    }
+    .toggle-switch input:checked + .toggle-slider { background: var(--success); }
+    .toggle-switch input:checked + .toggle-slider::before { transform: translateX(20px); }
+
+    /* Dropzone */
+    .dropzone {
+      border: 2px dashed var(--gray-300); border-radius: 12px; padding: 48px 24px;
+      text-align: center; cursor: pointer; transition: all 0.2s; background: var(--gray-50);
+    }
+    .dropzone:hover { border-color: var(--gray-400); }
+    .dropzone.dragover { border-color: var(--primary); background: #eff6ff; }
+    .dropzone-icon { font-size: 48px; margin-bottom: 12px; }
+    .dropzone-text { font-size: 15px; font-weight: 600; color: var(--gray-600); }
+    .dropzone-sub { font-size: 13px; color: var(--gray-400); margin-top: 4px; }
+
+    /* Weight sliders */
+    .weight-config { margin: 20px 0; }
+    .weight-row {
+      display: flex; align-items: center; gap: 12px; margin-bottom: 12px;
+    }
+    .weight-row label { width: 120px; font-size: 13px; font-weight: 600; color: var(--gray-700); }
+    .weight-row input[type="range"] {
+      flex: 1; accent-color: var(--primary); height: 6px; cursor: pointer;
+    }
+    .weight-row .weight-val {
+      width: 48px; text-align: right; font-size: 14px; font-weight: 700; color: var(--primary);
+    }
+    .weight-total {
+      text-align: right; font-size: 13px; font-weight: 600; padding-top: 8px;
+      border-top: 1px solid var(--gray-200);
+    }
+    .weight-total.invalid { color: var(--danger); }
+
+    /* LinkedIn button */
+    .btn-linkedin { background: #0077B5; color: white; }
+    .btn-linkedin:hover { background: #005f8d; }
+
+    /* Action result badges (reject/shortlist animations) */
+    .action-badge {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 7px 16px; border-radius: 20px; font-size: 13px; font-weight: 700;
+      letter-spacing: 0.3px;
+      animation: badgePop 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+      box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+      white-space: nowrap;
+    }
+    .action-badge-reject {
+      background: linear-gradient(135deg, #fee2e2, #fecaca); color: #b91c1c;
+      border: 1px solid #fca5a5;
+    }
+    .action-badge-reject::before { content: '\2718  '; font-size: 11px; }
+    .action-badge-shortlist {
+      background: linear-gradient(135deg, #dcfce7, #bbf7d0); color: #15803d;
+      border: 1px solid #86efac;
+    }
+    .action-badge-shortlist::before { content: '\2714  '; font-size: 11px; }
+    @keyframes badgePop {
+      0% { transform: scale(0.3); opacity: 0; }
+      50% { transform: scale(1.2); opacity: 1; }
+      70% { transform: scale(0.95); }
+      100% { transform: scale(1); }
+    }
+    /* Row flash on action */
+    .row-flash-reject { animation: rowFlashRed 1.2s ease; }
+    .row-flash-shortlist { animation: rowFlashGreen 1.2s ease; }
+    @keyframes rowFlashRed {
+      0% { background: white; } 20% { background: #fee2e2; } 100% { background: #fff5f5; }
+    }
+    @keyframes rowFlashGreen {
+      0% { background: white; } 20% { background: #dcfce7; } 100% { background: #f0fdf4; }
+    }
+
+    /* Criteria info bar */
+    .criteria-bar {
+      background: var(--gray-50); border: 1px solid var(--gray-200); border-radius: var(--radius);
+      padding: 12px 16px; margin-bottom: 20px; display: flex; align-items: center;
+      justify-content: space-between; font-size: 13px; color: var(--gray-600);
+    }
+    .criteria-bar strong { color: var(--gray-800); }
+
+    /* File list */
+    .file-list { margin-top: 16px; }
+    .file-item {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 10px 14px; background: white; border: 1px solid var(--gray-200);
+      border-radius: var(--radius); margin-bottom: 8px; font-size: 13px;
+    }
+    .file-item .file-info { display: flex; align-items: center; gap: 12px; flex: 1; }
+    .file-item .file-name { font-weight: 600; color: var(--gray-800); }
+    .file-item .file-meta { color: var(--gray-400); }
+    .file-remove {
+      background: none; border: none; color: var(--gray-400); cursor: pointer;
+      font-size: 18px; padding: 0 4px;
+    }
+    .file-remove:hover { color: var(--danger); }
+
+    @media (max-width: 768px) {
+      .header { padding: 12px 16px; }
+      .nav-tabs { padding: 0 16px; }
+      .container { padding: 16px; }
+      .stats { flex-direction: column; }
+      .form-row { flex-direction: column; }
+      .detail-grid { grid-template-columns: 1fr; }
+      .score-breakdown { grid-template-columns: 1fr 1fr; }
+      .modal { width: 100%; margin: 0 8px 40px; }
+      .wizard-steps { flex-wrap: wrap; gap: 8px; }
+      .wizard-connector { width: 30px; }
+      .job-card-grid { grid-template-columns: 1fr; }
+      .weight-row label { width: 80px; }
+    }
+  </style>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+</head>
+<body>
+
+<div class="header">
+  <h1><span>Diyar</span> HR Automation</h1>
+</div>
+
+<div class="nav-tabs">
+  <button class="nav-tab active" onclick="switchPage('dashboard')">Dashboard</button>
+  <button class="nav-tab" onclick="switchPage('jobs')">Job Openings</button>
+  <button class="nav-tab" onclick="switchPage('cv-eval')">CV Evaluation</button>
+  <button class="nav-tab" onclick="switchPage('shortlist')">Shortlist</button>
+  <button class="nav-tab" onclick="switchPage('emails')">Emails</button>
+</div>
+
+<!-- ==================== PHASE 2: JOB OPENINGS ==================== -->
+<div class="page" id="page-jobs">
+  <div class="container">
+    <div class="table-wrap">
+      <div class="table-header">
+        <div style="display:flex;align-items:center;gap:12px;">
+          <svg width="24" height="24" fill="none" stroke="var(--gray-500)" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>
+          <div>
+            <h2 style="font-size:18px;font-weight:700;">Job Openings</h2>
+            <span style="font-size:13px;color:var(--gray-400);" id="job-count">0 of 0 jobs</span>
+          </div>
+        </div>
+        <button class="btn btn-primary btn-sm" onclick="openCreateModal()">+ New Job</button>
+      </div>
+      <div style="padding:12px 24px;border-bottom:1px solid var(--gray-200);display:flex;align-items:center;gap:16px;">
+        <input type="text" id="job-search" class="search-bar" placeholder="Search by title, department..." oninput="filterJobs()" style="max-width:400px;">
+        <div class="filter-tabs">
+          <button class="filter-tab active" onclick="setJobFilter('all')">All</button>
+          <button class="filter-tab" onclick="setJobFilter('active')">Active</button>
+          <button class="filter-tab" onclick="setJobFilter('inactive')">Inactive</button>
+        </div>
+      </div>
+      <div id="jobs-table">
+        <div class="loading"><div class="spinner"></div><br>Loading jobs...</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== PHASE 3: CV EVALUATION (4-Step Wizard) ==================== -->
+<div class="page" id="page-cv-eval">
+  <div class="container">
+    <div style="text-align:center;margin-bottom:0;">
+      <span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;color:var(--primary);">CV Evaluator Agent</span>
+      <h2 style="font-size:18px;font-weight:700;margin-top:2px;">AI-Powered CV Evaluation</h2>
+      <p style="font-size:13px;color:var(--gray-500);margin-top:2px;">Select a job, define criteria, upload CVs, and get an instant AI evaluation report.</p>
+    </div>
+
+    <!-- Wizard step indicator (clickable: navigate backward to any already-visited step) -->
+    <div class="wizard-steps">
+      <div class="wizard-step active" id="eval-ws-1" onclick="evalStepClick(1)" title="Go to Select Job"><span class="step-num">1</span> Select Job</div>
+      <div class="wizard-connector" id="eval-wc-1"></div>
+      <div class="wizard-step" id="eval-ws-2" onclick="evalStepClick(2)" title="Go to Set Criteria"><span class="step-num">2</span> Set Criteria</div>
+      <div class="wizard-connector" id="eval-wc-2"></div>
+      <div class="wizard-step" id="eval-ws-3" onclick="evalStepClick(3)" title="Go to Upload CVs"><span class="step-num">3</span> Upload CVs</div>
+      <div class="wizard-connector" id="eval-wc-3"></div>
+      <div class="wizard-step" id="eval-ws-4" onclick="evalStepClick(4)" title="Go to Results"><span class="step-num">4</span> Results</div>
+    </div>
+
+    <!-- STEP 1: Select Job -->
+    <div class="wizard-panel active" id="eval-step-1">
+      <h3 style="font-size:16px;font-weight:700;margin-bottom:2px;">Select a Job Opening</h3>
+      <p style="font-size:13px;color:var(--gray-500);margin-bottom:10px;">Choose the role you want to evaluate candidates for.</p>
+      <div style="display:flex;gap:12px;align-items:center;">
+        <input type="text" id="eval-job-search" class="search-bar" placeholder="Search jobs..." oninput="filterEvalJobs()" style="flex:1;">
+        <button class="btn btn-secondary btn-sm" onclick="loadJobsForEval()">Refresh</button>
+      </div>
+      <div id="eval-job-cards" class="job-card-grid">
+        <div class="loading"><div class="spinner"></div><br>Loading jobs...</div>
+      </div>
+      <div id="job-status-panel" class="job-status-panel" style="display:none;">
+        <span class="label" id="job-status-label">Selected job:</span>
+        <span id="job-status-pills" style="display:flex;flex-wrap:wrap;gap:6px;"></span>
+        <div id="job-status-shortcuts" style="margin-left:auto;display:flex;gap:6px;flex-wrap:wrap;"></div>
+      </div>
+      <div class="wizard-footer">
+        <div class="step-info">Step 1 of 4</div>
+        <button class="btn btn-primary" id="eval-next-1" onclick="evalAdvanceFromStep1()" disabled>Continue &#8594;</button>
+      </div>
+    </div>
+
+    <!-- STEP 2: Set Criteria -->
+    <div class="wizard-panel" id="eval-step-2">
+      <h3 id="step2-heading" style="font-size:16px;font-weight:700;margin-bottom:4px;">Define Evaluation Criteria</h3>
+      <p id="step2-subheading" style="font-size:13px;color:var(--gray-500);margin-bottom:16px;">Create a custom criteria set or select saved criteria for this evaluation.</p>
+
+      <!-- Contextual banner — shows whether this is a fresh setup or editing existing criteria -->
+      <div id="step2-context-banner" style="display:none;margin-bottom:16px;padding:12px 14px;border-radius:var(--radius);font-size:13px;line-height:1.5;"></div>
+
+      <div class="form-group">
+        <label>Saved Criteria Sets</label>
+        <div style="display:flex;gap:8px;">
+          <select id="criteria-set-select" onchange="applyCriteriaSet()" style="flex:1;">
+            <option value="">-- Use custom criteria --</option>
+          </select>
+          <button class="btn btn-secondary btn-sm" onclick="loadCriteriaSets()">&#8635;</button>
+        </div>
+      </div>
+
+      <div class="source-tabs" id="criteria-tabs" style="border:none;gap:16px;margin-bottom:16px;">
+        <button class="source-tab" onclick="switchCriteriaSource('ai')" style="flex:1;padding:16px 12px;border:1px solid var(--gray-200);border-radius:var(--radius);display:flex;flex-direction:column;align-items:center;gap:4px;">
+          <span style="font-size:18px;">&#x2728;</span><span style="font-size:12px;">AI Generate</span>
+        </button>
+        <button class="source-tab" onclick="switchCriteriaSource('upload')" style="flex:1;padding:16px 12px;border:1px solid var(--gray-200);border-radius:var(--radius);display:flex;flex-direction:column;align-items:center;gap:4px;">
+          <span style="font-size:18px;">&#x1F4C4;</span><span style="font-size:12px;">Upload Document</span>
+        </button>
+        <button class="source-tab active" onclick="switchCriteriaSource('manual')" style="flex:1;padding:16px 12px;border:1px solid var(--gray-200);border-radius:var(--radius);display:flex;flex-direction:column;align-items:center;gap:4px;">
+          <span style="font-size:18px;">&#x270F;</span><span style="font-size:12px;">Manual Write</span>
+        </button>
+      </div>
+
+      <div id="criteria-panel-manual">
+        <div class="form-group">
+          <label>Job Description / Context for AI</label>
+          <textarea id="criteria-text" oninput="refreshAIGenBtnState()" style="min-height:140px;" placeholder="Enter the job description or evaluation criteria..."></textarea>
+        </div>
+      </div>
+      <div id="criteria-panel-ai" style="display:none;">
+        <div style="background:var(--gray-50);padding:12px 16px;border-radius:var(--radius);color:var(--gray-600);font-size:13px;line-height:1.5;margin-bottom:12px;">
+          <strong>&#x2728; AI-Powered Criteria</strong> &mdash; Provide optional context, adjust the weights below, then click <em>Generate Criteria</em>. Nothing is generated until you click.
+        </div>
+        <div class="form-group">
+          <label>Additional Context / Requirements <span style="color:var(--gray-400);font-weight:400;">(Optional)</span></label>
+          <textarea id="ai-extra-context" oninput="refreshAIGenBtnState()" style="min-height:80px;" placeholder="Must-have skills, constraints, culture fit notes... The selected job's description is already used automatically."></textarea>
+        </div>
+        <div class="form-group">
+          <label>Generated Criteria (editable)</label>
+          <textarea id="criteria-text-ai" oninput="syncAICriteriaText()" style="min-height:200px;font-family:var(--font-mono,monospace);font-size:13px;" placeholder="Generated criteria will appear here after you click Generate. You can edit before continuing."></textarea>
+        </div>
+      </div>
+      <div id="criteria-panel-upload" style="display:none;">
+        <div class="form-group">
+          <label>Upload criteria document (PDF, TXT)</label>
+          <input type="file" id="criteria-file" accept=".pdf,.txt" onchange="handleCriteriaFile(this)"
+            style="padding:8px;border:1px dashed var(--gray-300);border-radius:var(--radius);width:100%;">
+        </div>
+      </div>
+
+      <div class="weight-config">
+        <h4 style="font-size:14px;font-weight:700;color:var(--gray-800);margin-bottom:12px;">Scoring Weights</h4>
+        <div class="weight-row">
+          <label>Skills Match</label>
+          <input type="range" id="w-skills" min="0" max="100" value="40" oninput="updateWeights()">
+          <span class="weight-val" id="w-skills-val">40%</span>
+        </div>
+        <div class="weight-row">
+          <label>Experience</label>
+          <input type="range" id="w-experience" min="0" max="100" value="35" oninput="updateWeights()">
+          <span class="weight-val" id="w-experience-val">35%</span>
+        </div>
+        <div class="weight-row">
+          <label>Education</label>
+          <input type="range" id="w-education" min="0" max="100" value="25" oninput="updateWeights()">
+          <span class="weight-val" id="w-education-val">25%</span>
+        </div>
+        <div class="weight-total" id="weight-total">Total: 100%</div>
+      </div>
+
+      <!-- AI generate block: visible only when source === 'ai'. Button reads the weights above. -->
+      <div id="ai-generate-block" style="display:none;margin-top:16px;padding:14px 16px;background:var(--gray-50);border:1px solid var(--gray-200);border-radius:var(--radius);">
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+          <button class="btn btn-primary" id="ai-gen-btn" onclick="generateAICriteria()" disabled>&#x2728; Generate Criteria</button>
+          <span id="ai-gen-status" style="font-size:13px;color:var(--gray-600);">Select a job to enable generation.</span>
+        </div>
+      </div>
+
+      <div style="margin-top:16px;display:flex;align-items:center;gap:8px;">
+        <input type="checkbox" id="save-criteria-check" onchange="document.getElementById('save-criteria-name').style.display=this.checked?'':'none'">
+        <label for="save-criteria-check" style="font-size:13px;color:var(--gray-600);cursor:pointer;">Save this criteria set for future evaluations</label>
+        <input type="text" id="save-criteria-name" placeholder="Criteria set name..." style="display:none;padding:6px 10px;font-size:13px;width:200px;">
+      </div>
+
+      <div class="wizard-footer">
+        <button class="btn btn-secondary" onclick="evalGoStep(1)">&#8592; Back</button>
+        <div style="display:flex;align-items:center;gap:12px;">
+          <span class="step-info">Step 2 of 4</span>
+          <button class="btn btn-primary" id="step2-continue-btn" onclick="evalGoStep(3)">Continue &#8594;</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- STEP 3: Upload CVs -->
+    <div class="wizard-panel" id="eval-step-3">
+      <h3 style="font-size:16px;font-weight:700;margin-bottom:4px;">Upload Candidate CVs</h3>
+      <p style="font-size:13px;color:var(--gray-500);margin-bottom:16px;">Upload one or more PDF CVs. Duplicates are automatically detected.</p>
+
+      <div class="criteria-bar" id="step3-criteria-bar"></div>
+
+      <div class="dropzone" id="cv-dropzone" onclick="document.getElementById('cv-drop-input').click()">
+        <div class="dropzone-icon">&#x1F4E5;</div>
+        <div class="dropzone-text">Drop CVs here</div>
+        <div class="dropzone-sub">PDF, Word, TXT/CSV allowed</div>
+        <input type="file" id="cv-drop-input" accept=".pdf,.txt" multiple onchange="processDroppedFiles(this.files)" style="display:none;">
+      </div>
+
+      <div id="cv-file-list" class="file-list"></div>
+      <div id="cv-upload-status" style="font-size:13px;color:var(--gray-500);margin-top:8px;display:none;"></div>
+
+      <div class="wizard-footer">
+        <button class="btn btn-secondary" onclick="evalGoStep(2)">&#8592; Back</button>
+        <div style="display:flex;align-items:center;gap:12px;">
+          <span class="step-info">Step 3 of 4</span>
+          <button class="btn btn-primary" id="btn-upload-cvs" onclick="submitCVs()" disabled>Upload CVs &#8594;</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- STEP 4: Results -->
+    <div class="wizard-panel" id="eval-step-4">
+      <!-- Job switcher: lets user view results for any job without redoing the wizard -->
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;padding:12px 16px;background:var(--gray-50);border:1px solid var(--gray-200);border-radius:var(--radius);flex-wrap:wrap;">
+        <label style="font-weight:600;font-size:13px;color:var(--gray-700);white-space:nowrap;">Viewing results for:</label>
+        <select id="eval-results-job-switch" onchange="switchEvalResultsJob(this.value)" style="flex:1;min-width:220px;max-width:400px;">
+          <option value="">-- Select a job --</option>
+        </select>
+        <button class="btn btn-secondary btn-sm" onclick="loadEvalResults()">Refresh</button>
+      </div>
+
+      <div class="stats">
+        <div class="stat-card"><div class="label">Candidates</div><div class="value" id="stat-candidates">-</div></div>
+        <div class="stat-card"><div class="label">Evaluated</div><div class="value" id="stat-evaluated">-</div></div>
+        <div class="stat-card"><div class="label">Avg Score</div><div class="value" id="stat-avg-score">-</div></div>
+        <div class="stat-card"><div class="label">Top Score</div><div class="value" id="stat-top-score">-</div></div>
+      </div>
+
+      <div class="table-wrap">
+        <div class="table-header" style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
+          <h2>Evaluation Results</h2>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <span id="run-eval-status" style="font-size:13px;color:var(--gray-500);"></span>
+            <button class="btn btn-primary" id="btn-run-eval" onclick="runEvaluation()">&#x2728; Run Evaluation</button>
+          </div>
+        </div>
+        <div id="eval-results">
+          <div class="empty-state"><p>Click <strong>Run Evaluation</strong> to score all uploaded candidates with AI.</p></div>
+        </div>
+      </div>
+
+      <div class="wizard-footer">
+        <button class="btn btn-secondary" onclick="resetEvalWizard()">&#8592; Start New Evaluation</button>
+        <span class="step-info">Step 4 of 4</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== CREATE JOB MODAL (2-Step Wizard) ==================== -->
+<div class="modal-overlay" id="create-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <h2>New Job Opening</h2>
+      <button class="modal-close" onclick="closeModal('create-modal')">&times;</button>
+    </div>
+    <div class="modal-body">
+      <!-- Step indicator -->
+      <div class="wizard-steps" style="padding-top:0;margin-bottom:24px;">
+        <div class="wizard-step active" id="create-ws-1"><span class="step-num">1</span> Job Information</div>
+        <div class="wizard-connector" id="create-wc-1"></div>
+        <div class="wizard-step" id="create-ws-2"><span class="step-num">2</span> Job Description</div>
+      </div>
+
+      <!-- Step 1: Job Information -->
+      <div class="wizard-panel active" id="create-step-1">
+        <h3 style="font-size:16px;font-weight:700;margin-bottom:4px;">Job Information</h3>
+        <p style="font-size:13px;color:var(--gray-500);margin-bottom:20px;">Fill in the core details for this role.</p>
+        <div class="form-group">
+          <label>Job Title <span class="required">*</span></label>
+          <input type="text" id="f-title" placeholder="e.g. Senior Software Engineer">
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Department</label>
+            <select id="f-department-select" onchange="document.getElementById('f-department').style.display=this.value==='Other'?'':'none'">
+              <option value="">Select department</option>
+              <option>Engineering</option><option>IT</option><option>Marketing</option>
+              <option>Sales</option><option>HR</option><option>Finance</option>
+              <option>Operations</option><option>Design</option><option>Product</option>
+              <option>Legal</option><option>Other</option>
+            </select>
+            <input type="text" id="f-department" placeholder="Type department name..." style="display:none;margin-top:8px;">
+          </div>
+          <div class="form-group">
+            <label>Employment Type</label>
+            <select id="f-employment">
+              <option value="">Select...</option>
+              <option selected>Full-time</option><option>Part-time</option><option>Contract</option>
+              <option>Internship</option><option>Temporary</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Seniority Level</label>
+            <select id="f-seniority">
+              <option value="">Select...</option>
+              <option>Junior</option><option selected>Mid-level</option><option>Senior</option>
+              <option>Lead</option><option>Manager</option><option>Director</option>
+              <option>VP</option><option>C-level</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Location Type</label>
+            <select id="f-location">
+              <option value="">Select...</option>
+              <option selected>On-site</option><option>Remote</option><option>Hybrid</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Reporting To <span style="color:var(--gray-400);font-weight:400;">(Optional)</span></label>
+          <input type="text" id="f-reporting" placeholder="e.g. Engineering Manager">
+        </div>
+      </div>
+
+      <!-- Step 2: Job Description -->
+      <div class="wizard-panel" id="create-step-2">
+        <h3 style="font-size:16px;font-weight:700;margin-bottom:4px;">Job Description</h3>
+        <p style="font-size:13px;color:var(--gray-500);margin-bottom:20px;">Choose how you'd like to provide the Job Description for this role.</p>
+
+        <div class="source-tabs" id="create-source-tabs" style="border:none;gap:16px;margin-bottom:20px;">
+          <button class="source-tab" onclick="switchSource('ai_generate')" style="flex:1;padding:20px 12px;border:1px solid var(--gray-200);border-radius:var(--radius);display:flex;flex-direction:column;align-items:center;gap:6px;">
+            <span style="font-size:20px;">&#x2728;</span> Generate with AI
+          </button>
+          <button class="source-tab active" onclick="switchSource('manual')" style="flex:1;padding:20px 12px;border:1px solid var(--gray-200);border-radius:var(--radius);display:flex;flex-direction:column;align-items:center;gap:6px;">
+            <span style="font-size:20px;">&#x270F;</span> Write / Paste
+          </button>
+          <button class="source-tab" onclick="switchSource('file_upload')" style="flex:1;padding:20px 12px;border:1px solid var(--gray-200);border-radius:var(--radius);display:flex;flex-direction:column;align-items:center;gap:6px;">
+            <span style="font-size:20px;">&#x1F4C4;</span> Upload File
+          </button>
+        </div>
+
+        <div class="source-panel active" id="panel-manual">
+          <div class="form-group">
+            <label>Job Description</label>
+            <textarea id="f-description" style="min-height:160px;" placeholder="Paste or type the full job description here..."></textarea>
+          </div>
+        </div>
+        <div class="source-panel" id="panel-ai_generate">
+          <div style="background:var(--gray-50);padding:16px;border-radius:var(--radius);color:var(--gray-600);font-size:14px;">
+            <strong>&#x2728; AI-Powered Generation</strong><br><br>
+            The job description will be automatically generated based on the job details from Step 1.
+            <br><br><em>Requires Ollama running locally. Falls back to a template if unavailable.</em>
+          </div>
+        </div>
+        <div class="source-panel" id="panel-file_upload">
+          <div class="form-group">
+            <label>Upload File (PDF, DOCX, TXT)</label>
+            <input type="file" id="f-file" accept=".pdf,.docx,.txt"
+              style="padding:8px;border:1px dashed var(--gray-300);border-radius:var(--radius);width:100%;">
+          </div>
+        </div>
+
+        <div id="create-step2-status" style="font-size:13px;color:var(--gray-400);margin-top:8px;">
+          Choose an option above to add the Job Description.
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer" id="create-footer">
+      <div class="step-info" id="create-step-info">Step 1 of 2</div>
+      <div style="display:flex;gap:12px;">
+        <button class="btn btn-secondary" id="create-back-btn" onclick="setCreateStep(1)" style="display:none;">&#8592; Back</button>
+        <button class="btn btn-primary" id="create-next-btn" onclick="nextCreateStep()">Continue &#8594;</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== JOB DETAIL MODAL ==================== -->
+<div class="modal-overlay" id="detail-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <h2 id="detail-title">Job Details</h2>
+      <button class="modal-close" onclick="closeModal('detail-modal')">&times;</button>
+    </div>
+    <div class="modal-body" id="detail-body"></div>
+    <div class="modal-footer" id="detail-footer"></div>
+  </div>
+</div>
+
+<!-- ==================== PHASE 1: DASHBOARD ==================== -->
+<div class="page active" id="page-dashboard">
+  <div class="container">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:20px;flex-wrap:wrap;">
+      <div>
+        <h2 style="font-size:22px;font-weight:700;">Hiring Dashboard</h2>
+        <p style="font-size:13px;color:var(--gray-500);">Overview of your recruiting pipeline.</p>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <label style="font-weight:600;font-size:13px;white-space:nowrap;color:var(--gray-600);">View:</label>
+        <select id="dash-job-filter" onchange="loadDashboard()" style="min-width:240px;">
+          <option value="">All Jobs</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- Top metrics -->
+    <div class="stats" style="margin-bottom:16px;">
+      <div class="stat-card"><div class="label">Active Jobs</div><div class="value" id="dash-active-jobs">-</div></div>
+      <div class="stat-card"><div class="label">Total Candidates</div><div class="value" id="dash-candidates">-</div></div>
+      <div class="stat-card"><div class="label">Avg Score</div><div class="value" id="dash-avg-score">-</div></div>
+      <div class="stat-card"><div class="label">Hired</div><div class="value" id="dash-hired">-</div></div>
+    </div>
+
+    <!-- Funnel + Charts row -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;">
+      <div class="table-wrap" style="padding:20px;">
+        <h3 style="font-size:14px;font-weight:700;margin-bottom:12px;">Hiring Funnel</h3>
+        <div id="dash-funnel"></div>
+      </div>
+      <div class="table-wrap" style="padding:20px;">
+        <h3 style="font-size:14px;font-weight:700;margin-bottom:12px;">Candidates by Status</h3>
+        <canvas id="dash-status-chart" style="max-height:240px;"></canvas>
+      </div>
+    </div>
+
+    <!-- Jobs table + recent activity -->
+    <div style="display:grid;grid-template-columns:2fr 1fr;gap:16px;">
+      <div class="table-wrap">
+        <div class="table-header">
+          <h2 style="font-size:15px;">Top Jobs by Candidate Count</h2>
+          <button class="btn btn-secondary btn-sm" onclick="loadDashboard()">Refresh</button>
+        </div>
+        <div id="dash-jobs-table">
+          <div class="loading"><div class="spinner"></div></div>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <div class="table-header"><h2 style="font-size:15px;">Recent Activity</h2></div>
+        <div id="dash-activity" style="padding:12px 16px;"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== PHASE 4: SHORTLIST ==================== -->
+<div class="page" id="page-shortlist">
+  <div class="container">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+      <div>
+        <h2 style="font-size:18px;font-weight:700;">Shortlist & Interview Tracking</h2>
+        <p style="font-size:13px;color:var(--gray-500);">Manage shortlisted candidates through the hiring pipeline.</p>
+      </div>
+    </div>
+
+    <div style="display:flex;gap:12px;align-items:center;margin-bottom:16px;">
+      <label style="font-weight:600;font-size:14px;white-space:nowrap;">Select Job:</label>
+      <select id="shortlist-job-select" onchange="loadShortlist()" style="max-width:350px;">
+        <option value="">-- Select a job opening --</option>
+      </select>
+      <button class="btn btn-secondary btn-sm" onclick="loadShortlist()">Refresh</button>
+    </div>
+
+    <div class="stats" id="shortlist-stats">
+      <div class="stat-card"><div class="label">Shortlisted</div><div class="value" id="stat-shortlisted">-</div></div>
+      <div class="stat-card"><div class="label">Interviewed</div><div class="value" id="stat-interviewed">-</div></div>
+      <div class="stat-card"><div class="label">Hired</div><div class="value" id="stat-hired">-</div></div>
+      <div class="stat-card"><div class="label">Rejected</div><div class="value" id="stat-rejected">-</div></div>
+    </div>
+
+    <div id="shortlist-content">
+      <div class="empty-state"><p>Select a job opening to view shortlisted candidates.</p></div>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== EVALUATION DETAIL MODAL ==================== -->
+<div class="modal-overlay" id="eval-detail-modal">
+  <div class="modal wide">
+    <div class="modal-header">
+      <h2 id="eval-detail-title">Evaluation Details</h2>
+      <button class="modal-close" onclick="closeModal('eval-detail-modal')">&times;</button>
+    </div>
+    <div class="modal-body" id="eval-detail-body"></div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('eval-detail-modal')">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- Reject / Email Confirmation Modal -->
+<div class="modal-overlay" id="email-modal">
+  <div class="modal" style="max-width:520px;">
+    <div class="modal-header">
+      <h3 id="email-modal-title">Reject Candidate</h3>
+      <button class="modal-close" onclick="closeModal('email-modal')">&times;</button>
+    </div>
+    <div class="modal-body" style="padding:20px;">
+      <p style="margin-bottom:12px;color:var(--gray-600);" id="email-modal-desc">Are you sure you want to reject this candidate?</p>
+      <div style="background:var(--gray-50);border:1px solid var(--gray-200);border-radius:var(--radius);padding:14px;margin-bottom:12px;">
+        <div style="margin-bottom:6px;"><strong>Candidate:</strong> <span id="email-modal-name"></span></div>
+        <div id="email-modal-to-row"><strong>Email:</strong> <span id="email-modal-to"></span></div>
+      </div>
+      <label style="display:flex;align-items:center;gap:8px;margin-bottom:8px;cursor:pointer;" id="email-send-check-label">
+        <input type="checkbox" id="email-send-check" checked onchange="toggleEmailPreview()">
+        <span style="font-weight:600;font-size:14px;">Also send rejection email</span>
+      </label>
+      <div id="email-preview-section">
+        <div style="background:var(--gray-50);border:1px solid var(--gray-200);border-radius:var(--radius);padding:14px;margin-bottom:8px;">
+          <div><strong>Subject:</strong> <span id="email-modal-subject"></span></div>
+        </div>
+        <details style="margin-bottom:4px;">
+          <summary style="cursor:pointer;color:var(--primary);font-weight:600;font-size:13px;">Preview email body</summary>
+          <pre id="email-modal-body" style="white-space:pre-wrap;font-size:13px;background:white;border:1px solid var(--gray-200);border-radius:var(--radius);padding:12px;margin-top:8px;max-height:200px;overflow-y:auto;"></pre>
+        </details>
+      </div>
+    </div>
+    <div class="modal-footer" style="display:flex;gap:8px;justify-content:flex-end;">
+      <button class="btn btn-secondary" onclick="closeModal('email-modal')">Cancel</button>
+      <button class="btn btn-danger" id="email-modal-send" onclick="confirmRejectCandidate()">Reject Candidate</button>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== PHASE 5: EMAILS ==================== -->
+<div class="page" id="page-emails">
+  <div class="container">
+    <!-- SMTP status banner -->
+    <div id="smtp-status-banner" class="criteria-bar" style="margin-bottom:16px;display:flex;align-items:center;gap:12px;">
+      <span id="smtp-status-icon" style="font-size:18px;">&#x2709;</span>
+      <div style="flex:1;">
+        <div style="font-size:13px;font-weight:600;" id="smtp-status-text">Checking SMTP status...</div>
+        <div style="font-size:12px;color:var(--gray-500);" id="smtp-status-hint"></div>
+      </div>
+      <button class="btn btn-secondary btn-sm" onclick="showSmtpHelp()">Setup Guide</button>
+    </div>
+
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+      <div>
+        <h2 style="font-size:18px;font-weight:700;">Email History</h2>
+        <p style="font-size:13px;color:var(--gray-500);">All emails sent and logged across candidates.</p>
+      </div>
+      <button class="btn btn-secondary btn-sm" onclick="loadEmails()">Refresh</button>
+    </div>
+
+    <div style="display:flex;gap:12px;align-items:center;margin-bottom:16px;">
+      <label style="font-size:13px;font-weight:600;">Job:</label>
+      <select id="email-job-filter" onchange="loadEmails()" style="max-width:280px;">
+        <option value="">-- Select a job --</option>
+      </select>
+      <div class="filter-tabs">
+        <button class="filter-tab active" onclick="setEmailStatusFilter('all')">All</button>
+        <button class="filter-tab" onclick="setEmailStatusFilter('sent')">Sent</button>
+        <button class="filter-tab" onclick="setEmailStatusFilter('failed')">Failed</button>
+      </div>
+    </div>
+
+    <div class="stats" style="margin-bottom:16px;">
+      <div class="stat-card"><div class="label">Total</div><div class="value" id="email-stat-total">-</div></div>
+      <div class="stat-card"><div class="label">Sent</div><div class="value" id="email-stat-sent" style="color:var(--success);">-</div></div>
+      <div class="stat-card"><div class="label">Failed</div><div class="value" id="email-stat-failed" style="color:var(--danger);">-</div></div>
+      <div class="stat-card"><div class="label">This Week</div><div class="value" id="email-stat-week">-</div></div>
+    </div>
+
+    <div class="table-wrap">
+      <div id="emails-table">
+        <div class="empty-state"><p>Select a job opening to view email history.</p></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- SMTP Setup Help Modal -->
+<div class="modal-overlay" id="smtp-help-modal">
+  <div class="modal wide">
+    <div class="modal-header">
+      <h2>SMTP Setup Guide</h2>
+      <button class="modal-close" onclick="closeModal('smtp-help-modal')">&times;</button>
+    </div>
+    <div class="modal-body">
+      <p style="margin-bottom:16px;color:var(--gray-600);">
+        Emails are queued into the database regardless of SMTP config. To actually deliver them, configure an SMTP credential in n8n <strong>once</strong>:
+      </p>
+      <ol style="margin-left:20px;line-height:2;">
+        <li>Open <a href="http://localhost:5678/home/credentials" target="_blank" style="color:var(--primary);font-weight:600;">n8n Credentials</a></li>
+        <li>Click <strong>Add credential</strong> &rarr; search <strong>SMTP</strong> &rarr; select it</li>
+        <li>Name it exactly <code style="background:var(--gray-100);padding:2px 6px;border-radius:3px;">SMTP</code></li>
+        <li>Fill in:
+          <ul style="margin-left:24px;margin-top:6px;font-size:13px;color:var(--gray-600);">
+            <li><strong>User:</strong> your-email@diyar.com</li>
+            <li><strong>Password:</strong> app password (not your account password)</li>
+            <li><strong>Host:</strong> smtp.gmail.com (or your provider)</li>
+            <li><strong>Port:</strong> 587 (TLS) or 465 (SSL)</li>
+          </ul>
+        </li>
+        <li>Click <strong>Save</strong></li>
+        <li>Optionally set <code style="background:var(--gray-100);padding:2px 6px;border-radius:3px;">SMTP_FROM</code> env var for the From address</li>
+      </ol>
+
+      <div style="margin-top:20px;padding:14px;background:#fef9c3;border-left:3px solid #f59e0b;border-radius:var(--radius);font-size:13px;">
+        <strong>Gmail users:</strong> you must create an <a href="https://myaccount.google.com/apppasswords" target="_blank" style="color:var(--primary);">App Password</a> (requires 2FA enabled). Your normal Google password won't work.
+      </div>
+
+      <div style="margin-top:16px;padding:14px;background:var(--gray-50);border-radius:var(--radius);font-size:13px;">
+        <strong>Testing locally?</strong> Run Mailpit (<code style="background:white;padding:2px 6px;border-radius:3px;">docker run -d -p 1025:1025 -p 8025:8025 axllent/mailpit</code>) and use host <code style="background:white;padding:2px 6px;border-radius:3px;">localhost</code> port <code style="background:white;padding:2px 6px;border-radius:3px;">1025</code> with no auth. View caught mail at <a href="http://localhost:8025" target="_blank" style="color:var(--primary);">localhost:8025</a>.
+      </div>
+
+      <p style="margin-top:20px;color:var(--gray-500);font-size:13px;">
+        <strong>How to verify it's working:</strong> send a test rejection from the CV Evaluation page. If the Email History status shows <span class="badge badge-hired">sent</span>, you're all set. If it shows <span class="badge badge-rejected">failed</span>, hover the row to see the error.
+      </p>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('smtp-help-modal')">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<script>
+const API = 'http://localhost:5678/webhook';
+let currentSource = 'manual';
+let currentPage = 'jobs';
+let evalJobId = null;
+let evalCandidates = [];
+let evalResults = [];
+
+// --- API helpers ---
+async function apiGet(path) {
+  const res = await fetch(`${API}${path}`);
+  return res.json();
+}
+
+async function apiPost(path, data) {
+  const res = await fetch(`${API}${path}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data)
+  });
+  return { status: res.status, data: await res.json() };
+}
+
+// --- Page navigation ---
+function switchPage(page) {
+  currentPage = page;
+  document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelector(`.nav-tab[onclick*="${page}"]`).classList.add('active');
+  document.getElementById(`page-${page}`).classList.add('active');
+
+  if (page === 'dashboard') loadDashboard();
+  if (page === 'jobs') loadJobs();
+  if (page === 'cv-eval' && evalWizardStep === 1 && !evalSelectedJob) loadJobsForEval();
+  if (page === 'shortlist') loadJobsForShortlist();
+  if (page === 'emails') initEmailsPage();
+}
+
+// ==================== PHASE 2: JOB OPENINGS ====================
+let allJobs = [];
+let jobFilter = 'all';
+
+async function loadJobs(showLoading) {
+  const el = document.getElementById('jobs-table');
+  if (showLoading) el.innerHTML = '<div class="loading"><div class="spinner"></div><br>Loading...</div>';
+
+  try {
+    const res = await apiGet('/job-openings');
+    allJobs = res.data || [];
+    filterJobs();
+  } catch (err) {
+    el.innerHTML = `<div class="empty-state" style="color:var(--danger)">Failed to load jobs. Is n8n running?<br><small>${err.message}</small></div>`;
+  }
+}
+
+function setJobFilter(filter) {
+  jobFilter = filter;
+  document.querySelectorAll('.filter-tab').forEach(t => t.classList.remove('active'));
+  document.querySelector(`.filter-tab[onclick*="${filter}"]`).classList.add('active');
+  filterJobs();
+}
+
+function filterJobs() {
+  const search = (document.getElementById('job-search').value || '').toLowerCase();
+  let filtered = allJobs;
+
+  if (jobFilter === 'active') filtered = filtered.filter(j => j.is_active);
+  else if (jobFilter === 'inactive') filtered = filtered.filter(j => !j.is_active);
+
+  if (search) {
+    filtered = filtered.filter(j =>
+      (j.job_title || '').toLowerCase().includes(search) ||
+      (j.department || '').toLowerCase().includes(search)
+    );
+  }
+
+  document.getElementById('job-count').textContent = `${filtered.length} of ${allJobs.length} jobs`;
+  renderJobTable(filtered);
+}
+
+function renderJobTable(jobs) {
+  const el = document.getElementById('jobs-table');
+  if (jobs.length === 0) {
+    el.innerHTML = '<div class="empty-state"><svg width="48" height="48" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"/></svg><p>No job openings found.</p></div>';
+    return;
+  }
+
+  let html = '<table><thead><tr><th>Job Title</th><th>Department / Level</th><th>Created</th><th>Status</th><th>Active</th><th>LinkedIn</th></tr></thead><tbody>';
+  for (const job of jobs) {
+    const date = new Date(job.created_at).toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' });
+    const meta = [job.department, job.seniority_level, job.employment_type].filter(Boolean).join(' \u00b7 ');
+    html += `<tr>
+      <td><strong style="cursor:pointer;color:var(--primary);" onclick="viewJob(${job.id})">${esc(job.job_title)}</strong></td>
+      <td style="font-size:13px;color:var(--gray-500);">${esc(meta)}</td>
+      <td style="font-size:13px;color:var(--gray-500);">${date}</td>
+      <td><span class="badge badge-${job.status}">${esc(job.status)}</span></td>
+      <td>
+        <label class="toggle-switch" onclick="event.stopPropagation();">
+          <input type="checkbox" ${job.is_active ? 'checked' : ''} onchange="toggleJob(${job.id})">
+          <span class="toggle-slider"></span>
+        </label>
+      </td>
+      <td><button class="btn btn-sm btn-linkedin" onclick="event.stopPropagation();toast('LinkedIn publishing coming soon!','success')">Publish</button></td>
+    </tr>`;
+  }
+  html += '</tbody></table>';
+  el.innerHTML = html;
+}
+
+async function viewJob(id) {
+  const body = document.getElementById('detail-body');
+  const footer = document.getElementById('detail-footer');
+  body.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+  footer.innerHTML = '';
+  document.getElementById('detail-modal').classList.add('active');
+
+  try {
+    const res = await apiGet(`/job-opening?id=${id}`);
+    const job = res.data;
+    document.getElementById('detail-title').textContent = job.job_title;
+    body.innerHTML = `
+      <div class="detail-grid">
+        <div class="detail-item"><div class="label">Department</div><div class="value">${esc(job.department)}</div></div>
+        <div class="detail-item"><div class="label">Employment Type</div><div class="value">${esc(job.employment_type)}</div></div>
+        <div class="detail-item"><div class="label">Seniority Level</div><div class="value">${esc(job.seniority_level)}</div></div>
+        <div class="detail-item"><div class="label">Location</div><div class="value">${esc(job.location_type)}</div></div>
+        <div class="detail-item"><div class="label">Reporting To</div><div class="value">${esc(job.reporting_to || '—')}</div></div>
+        <div class="detail-item"><div class="label">Description Source</div><div class="value">${esc(job.description_source_type)}</div></div>
+        <div class="detail-item"><div class="label">Status</div><div class="value"><span class="badge badge-${job.status}">${job.status}</span></div></div>
+        <div class="detail-item"><div class="label">Active</div><div class="value"><span class="badge ${job.is_active ? 'badge-active' : 'badge-inactive'}">${job.is_active ? 'Active' : 'Inactive'}</span></div></div>
+        <div class="detail-item"><div class="label">Created</div><div class="value">${new Date(job.created_at).toLocaleString()}</div></div>
+        <div class="detail-item"><div class="label">Updated</div><div class="value">${new Date(job.updated_at).toLocaleString()}</div></div>
+        ${job.uploaded_file_name ? `<div class="detail-item"><div class="label">Uploaded File</div><div class="value">${esc(job.uploaded_file_name)}</div></div>` : ''}
+        <div class="detail-desc"><div class="label">Job Description</div><div class="value">${esc(job.job_description)}</div></div>
+      </div>`;
+    footer.innerHTML = `
+      <button class="btn ${job.is_active ? 'btn-danger' : 'btn-success'}" onclick="toggleJob(${job.id}); closeModal('detail-modal')">
+        ${job.is_active ? 'Deactivate' : 'Activate'}
+      </button>
+      <button class="btn btn-secondary" onclick="closeModal('detail-modal')">Close</button>`;
+  } catch (err) {
+    body.innerHTML = '<div style="color:var(--danger)">Failed to load job details.</div>';
+  }
+}
+
+async function toggleJob(id) {
+  try {
+    const res = await apiPost(`/job-opening-toggle?id=${id}`, {});
+    if (res.data.success) toast(`Job is now ${res.data.data.is_active ? 'active' : 'inactive'}`, 'success');
+    else toast(res.data.error || 'Failed to toggle', 'error');
+    loadJobs();
+  } catch (err) { toast('Failed to toggle status', 'error'); }
+}
+
+let createStep = 1;
+
+function setCreateStep(step) {
+  createStep = step;
+  document.getElementById('create-step-1').classList.toggle('active', step === 1);
+  document.getElementById('create-step-2').classList.toggle('active', step === 2);
+  // Step indicators
+  const ws1 = document.getElementById('create-ws-1');
+  const ws2 = document.getElementById('create-ws-2');
+  const wc1 = document.getElementById('create-wc-1');
+  ws1.className = 'wizard-step ' + (step === 1 ? 'active' : 'completed');
+  ws2.className = 'wizard-step ' + (step === 2 ? 'active' : '');
+  wc1.className = 'wizard-connector ' + (step >= 2 ? 'completed' : '');
+  // Footer
+  document.getElementById('create-back-btn').style.display = step === 1 ? 'none' : '';
+  document.getElementById('create-next-btn').textContent = step === 1 ? 'Continue \u2192' : 'Create Job Opening';
+  document.getElementById('create-next-btn').onclick = step === 1 ? nextCreateStep : createJob;
+  document.getElementById('create-step-info').textContent = `Step ${step} of 2`;
+}
+
+function nextCreateStep() {
+  const title = document.getElementById('f-title').value.trim();
+  if (!title) { toast('Job title is required', 'error'); return; }
+  setCreateStep(2);
+}
+
+function getDepartment() {
+  const sel = document.getElementById('f-department-select');
+  if (sel.value === 'Other' || sel.value === '') {
+    return document.getElementById('f-department').value.trim() || sel.value;
+  }
+  return sel.value;
+}
+
+async function createJob() {
+  const btn = document.getElementById('create-next-btn');
+  btn.disabled = true; btn.textContent = 'Creating...';
+
+  const payload = {
+    job_title: document.getElementById('f-title').value.trim(),
+    department: getDepartment(),
+    employment_type: document.getElementById('f-employment').value,
+    seniority_level: document.getElementById('f-seniority').value,
+    location_type: document.getElementById('f-location').value,
+    reporting_to: document.getElementById('f-reporting').value.trim(),
+    description_source: currentSource
+  };
+
+  if (currentSource === 'manual') {
+    payload.job_description = document.getElementById('f-description').value.trim();
+  } else if (currentSource === 'file_upload') {
+    const fileInput = document.getElementById('f-file');
+    if (fileInput.files.length > 0) {
+      const file = fileInput.files[0];
+      payload.file_name = file.name;
+      payload.file_content = await file.text();
+    }
+  }
+
+  try {
+    const res = await apiPost('/job-openings', payload);
+    if (res.status === 201 || res.data.success) {
+      toast('Job opening created!', 'success');
+      closeModal('create-modal'); resetForm(); loadJobs();
+    } else {
+      toast(res.data.error || 'Failed to create', 'error');
+    }
+  } catch (err) { toast('Request failed: ' + err.message, 'error'); }
+
+  btn.disabled = false; btn.textContent = 'Create Job Opening';
+}
+
+function switchSource(source) {
+  currentSource = source;
+  const container = document.getElementById('create-source-tabs');
+  container.querySelectorAll('.source-tab').forEach(t => t.classList.remove('active'));
+  container.querySelector(`.source-tab[onclick*="${source}"]`).classList.add('active');
+  document.querySelectorAll('#panel-manual,#panel-ai_generate,#panel-file_upload').forEach(p => p.classList.remove('active'));
+  document.getElementById(`panel-${source}`).classList.add('active');
+  document.getElementById('create-step2-status').style.display = 'none';
+}
+
+// ==================== PHASE 3: CV EVALUATION ====================
+let evalWizardStep = 1;
+let evalSelectedJob = null;
+let evalJobsCache = [];
+let evalCriteria = { text: '', source: 'manual', weights: { skills: 40, experience: 35, education: 25 } };
+let evalUploadedFiles = [];
+
+function evalGoStep(step) {
+  // Validate before advancing
+  if (step === 2 && !evalSelectedJob) { toast('Select a job first', 'error'); return; }
+  if (step === 3) {
+    // Read from the active panel's textarea (AI uses its own output textarea)
+    const activeSource = evalCriteria.source || 'manual';
+    const aiText = document.getElementById('criteria-text-ai').value.trim();
+    const manualText = document.getElementById('criteria-text').value.trim();
+    evalCriteria.text = activeSource === 'ai' && aiText ? aiText : manualText;
+    // Keep canonical textarea in sync
+    document.getElementById('criteria-text').value = evalCriteria.text;
+    evalCriteria.weights.skills = parseInt(document.getElementById('w-skills').value);
+    evalCriteria.weights.experience = parseInt(document.getElementById('w-experience').value);
+    evalCriteria.weights.education = parseInt(document.getElementById('w-education').value);
+    const total = evalCriteria.weights.skills + evalCriteria.weights.experience + evalCriteria.weights.education;
+    if (total !== 100) { toast(`Weights must sum to 100% (currently ${total}%)`, 'error'); return; }
+    // Save criteria set if checked
+    if (document.getElementById('save-criteria-check').checked) {
+      const name = document.getElementById('save-criteria-name').value.trim();
+      if (name) saveCriteriaSet(name);
+    }
+    // Fill criteria bar
+    updateCriteriaBar();
+  }
+  if (step === 2) {
+    // Pre-fill criteria text with job description on first visit
+    if (!document.getElementById('criteria-text').value.trim()) {
+      document.getElementById('criteria-text').value = evalSelectedJob.job_description || '';
+    }
+    loadCriteriaSets().then(() => updateStep2Context());
+  }
+
+  evalWizardStep = step;
+  for (let i = 1; i <= 4; i++) {
+    document.getElementById(`eval-step-${i}`).classList.toggle('active', i === step);
+    const ws = document.getElementById(`eval-ws-${i}`);
+    ws.className = 'wizard-step ' + (i === step ? 'active' : i < step ? 'completed' : '');
+  }
+  for (let i = 1; i <= 3; i++) {
+    document.getElementById(`eval-wc-${i}`).className = 'wizard-connector ' + (i < step ? 'completed' : '');
+  }
+}
+
+// Clicking a wizard step indicator navigates to it.
+// Step 2 (Set Criteria) is always reachable once a job is selected — it's an editable
+// workspace, not a one-time gate. Step 3 (Upload CVs) is also always reachable.
+// Step 4 (Results) requires at least uploaded CVs. Only Step 1 → elsewhere without a
+// selected job is blocked.
+function evalStepClick(target) {
+  if (target === evalWizardStep) return;
+  if (target === 1) { evalApplyStepUI(1); return; }
+  // Any step beyond 1 requires a selected job
+  if (!evalSelectedJob) {
+    toast('Select a job first', 'error');
+    return;
+  }
+  // Step 2 is always open once a job is selected (criteria is an editable screen).
+  if (target === 2) {
+    evalJumpTo(2);
+    return;
+  }
+  // Step 3 opens freely too — uploading CVs is also an editable action.
+  if (target === 3) {
+    evalJumpTo(3);
+    return;
+  }
+  // Step 4 only makes sense if there are candidates (uploaded or already evaluated).
+  if (target === 4) {
+    const st = evalSelectedJob.state || {};
+    if (!st.has_cvs && !st.has_evaluations) {
+      toast('Upload CVs before viewing results', 'error');
+      return;
+    }
+    evalJumpTo(4);
+    return;
+  }
+}
+
+// Internal: just switch UI panels and indicator state, no side effects.
+function evalApplyStepUI(step) {
+  evalWizardStep = step;
+  for (let i = 1; i <= 4; i++) {
+    document.getElementById(`eval-step-${i}`).classList.toggle('active', i === step);
+    const ws = document.getElementById(`eval-ws-${i}`);
+    // Preserve "completed" for steps beyond current if they were already reached
+    const wasCompleted = ws.classList.contains('completed') && i > step;
+    ws.className = 'wizard-step ' + (i === step ? 'active' : (i < step || wasCompleted) ? 'completed' : '');
+  }
+  for (let i = 1; i <= 3; i++) {
+    const wc = document.getElementById(`eval-wc-${i}`);
+    wc.className = 'wizard-connector ' + (i < step ? 'completed' : wc.className.includes('completed') ? 'completed' : '');
+  }
+}
+
+// Advance from Step 1, routing to the most useful step based on existing job state.
+//   has_evaluations       → jump straight to Results (Step 4), data already scored
+//   has_cvs, no eval      → jump to Step 4 so user can click Run Evaluation
+//   has_criteria only     → jump to Step 3 to upload CVs
+//   new/empty job         → Step 2 as usual
+async function evalAdvanceFromStep1() {
+  if (!evalSelectedJob) { toast('Select a job first', 'error'); return; }
+  const state = (evalSelectedJob && evalSelectedJob.state) || await fetchJobState(evalSelectedJob.id);
+  evalSelectedJob.state = state;
+
+  // Load + apply saved criteria so Steps 3/4 have the right weights + text
+  await loadCriteriaSets();
+  const sel = document.getElementById('criteria-set-select');
+  if (sel.options.length > 1) {
+    sel.selectedIndex = 1; // most recent
+    applyCriteriaSet();
+  } else if (!document.getElementById('criteria-text').value.trim()) {
+    document.getElementById('criteria-text').value = evalSelectedJob.job_description || '';
+  }
+  evalCriteria.text = document.getElementById('criteria-text').value.trim();
+  evalCriteria.weights.skills = parseInt(document.getElementById('w-skills').value);
+  evalCriteria.weights.experience = parseInt(document.getElementById('w-experience').value);
+  evalCriteria.weights.education = parseInt(document.getElementById('w-education').value);
+  updateCriteriaBar();
+
+  // Mark all steps that are satisfied so indicators are clickable
+  if (state.has_criteria || sel.options.length > 1) markStepCompleted(2);
+  if (state.has_cvs) markStepCompleted(3);
+  if (state.has_evaluations) markStepCompleted(4);
+
+  if (state.has_evaluations) {
+    evalApplyStepUI(4);
+    loadEvalResults();
+    toast(`Loaded ${state.eval_count} evaluation(s) — edit criteria or add CVs as needed`, 'success');
+  } else if (state.has_cvs) {
+    evalApplyStepUI(4);
+    loadEvalResults();
+    toast(`${state.cv_count} CV(s) ready — click Run Evaluation to score`, 'success');
+  } else if (state.has_criteria || sel.options.length > 1) {
+    evalApplyStepUI(3);
+    toast('Saved criteria loaded — upload CVs next', 'success');
+  } else {
+    evalGoStep(2);
+    updateStep2Context();
+  }
+}
+
+function resetEvalWizard() {
+  evalSelectedJob = null;
+  evalUploadedFiles = [];
+  evalCriteria = { text: '', source: 'manual', weights: { skills: 40, experience: 35, education: 25 } };
+  document.getElementById('criteria-text').value = '';
+  document.getElementById('w-skills').value = 40;
+  document.getElementById('w-experience').value = 35;
+  document.getElementById('w-education').value = 25;
+  updateWeights();
+  document.getElementById('cv-file-list').innerHTML = '';
+  document.getElementById('cv-drop-input').value = '';
+  document.getElementById('btn-upload-cvs').disabled = true;
+  document.getElementById('save-criteria-check').checked = false;
+  document.getElementById('save-criteria-name').style.display = 'none';
+  evalGoStep(1);
+  loadJobsForEval();
+}
+
+// --- Step 1: Job selection cards ---
+async function loadJobsForEval() {
+  const el = document.getElementById('eval-job-cards');
+  el.innerHTML = '<div class="loading"><div class="spinner"></div><br>Loading jobs...</div>';
+  try {
+    const res = await apiGet('/job-openings?is_active=true');
+    evalJobsCache = res.data || [];
+    renderJobCards(evalJobsCache);
+  } catch (err) {
+    el.innerHTML = '<div class="empty-state" style="color:var(--danger)">Failed to load jobs.</div>';
+  }
+}
+
+function filterEvalJobs() {
+  const search = (document.getElementById('eval-job-search').value || '').toLowerCase();
+  const filtered = evalJobsCache.filter(j =>
+    (j.job_title || '').toLowerCase().includes(search) ||
+    (j.department || '').toLowerCase().includes(search)
+  );
+  renderJobCards(filtered);
+}
+
+function renderJobCards(jobs) {
+  const el = document.getElementById('eval-job-cards');
+  if (jobs.length === 0) {
+    el.innerHTML = '<div class="empty-state"><p>No active job openings found.</p></div>';
+    return;
+  }
+  let html = '';
+  for (const job of jobs) {
+    const selected = evalSelectedJob && evalSelectedJob.id === job.id ? 'selected' : '';
+    html += `<div class="job-card ${selected}" data-jid="${job.id}" onclick="selectJobCard(${job.id})" ondblclick="selectJobCard(${job.id}).then(()=>evalAdvanceFromStep1())">
+      <div class="job-card-title">${esc(job.job_title)}</div>
+      <div class="job-card-meta">
+        <span>${esc(job.department)}</span>
+        <span class="dot">${esc(job.seniority_level)}</span>
+        <span class="dot">${esc(job.employment_type)}</span>
+      </div>
+      <div class="job-card-stats">
+        <span><svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg> ${esc(job.location_type)}</span>
+        <span>Posted ${new Date(job.created_at).toLocaleDateString()}</span>
+      </div>
+      <div class="job-card-state" id="job-card-state-${job.id}"></div>
+    </div>`;
+  }
+  el.innerHTML = html;
+  // Lazily hydrate each card with its completion badges (criteria / CVs / evaluations)
+  hydrateJobCardBadges(jobs);
+}
+
+async function hydrateJobCardBadges(jobs) {
+  await Promise.all(jobs.map(async job => {
+    const state = await fetchJobState(job.id);
+    const el = document.getElementById(`job-card-state-${job.id}`);
+    if (!el) return;
+    const bits = [];
+    if (state.has_criteria) bits.push(`<span class="mini-pill">&#x2713; Criteria</span>`);
+    if (state.has_cvs) bits.push(`<span class="mini-pill">&#x2713; ${state.cv_count} CV${state.cv_count===1?'':'s'}</span>`);
+    if (state.has_evaluations) bits.push(`<span class="mini-pill">&#x2713; ${state.eval_count} Evaluated</span>`);
+    el.innerHTML = bits.join('');
+  }));
+}
+
+async function selectJobCard(jobId) {
+  evalSelectedJob = evalJobsCache.find(j => j.id === jobId) || null;
+  evalJobId = jobId;
+  document.querySelectorAll('.job-card').forEach(c => {
+    c.classList.toggle('selected', c.dataset.jid == jobId);
+  });
+  document.getElementById('eval-next-1').disabled = !evalSelectedJob;
+  refreshAIGenBtnState();
+
+  // Reset stepper completion state — we'll set it based on persistent state below
+  for (let i = 2; i <= 4; i++) document.getElementById(`eval-ws-${i}`).classList.remove('completed');
+  for (let i = 1; i <= 3; i++) document.getElementById(`eval-wc-${i}`).classList.remove('completed');
+
+  // Show "loading" in status panel while we fetch
+  const panel = document.getElementById('job-status-panel');
+  const pills = document.getElementById('job-status-pills');
+  const shortcuts = document.getElementById('job-status-shortcuts');
+  panel.style.display = '';
+  pills.innerHTML = '<span class="status-pill">Checking job state&hellip;</span>';
+  shortcuts.innerHTML = '';
+
+  const state = await fetchJobState(jobId);
+  if (evalSelectedJob) evalSelectedJob.state = state;
+  renderJobStatusPanel(state);
+  // Mark stepper based on persistent state so user can jump around
+  if (state.has_criteria) markStepCompleted(2);
+  if (state.has_cvs) markStepCompleted(3);
+  if (state.has_evaluations) markStepCompleted(4);
+
+  // Update main Continue button label to reflect what will happen
+  const nextBtn = document.getElementById('eval-next-1');
+  if (state.has_evaluations) nextBtn.innerHTML = 'View Results &#8594;';
+  else if (state.has_cvs) nextBtn.innerHTML = 'Go to Results &#8594;';
+  else if (state.has_criteria) nextBtn.innerHTML = 'Upload CVs &#8594;';
+  else nextBtn.innerHTML = 'Set Criteria &#8594;';
+}
+
+// Build the per-job state: what has and hasn't been done.
+async function fetchJobState(jobId) {
+  try {
+    const [cr, ca, ev] = await Promise.all([
+      apiGet(`/criteria-sets?job_id=${jobId}`).catch(() => ({ data: [] })),
+      apiGet(`/candidates?job_id=${jobId}`).catch(() => ({ data: [] })),
+      apiGet(`/evaluations?job_id=${jobId}`).catch(() => ({ data: [] })),
+    ]);
+    const criteria = (cr.data || []).filter(c => c && c.id);
+    const cvs = (ca.data || []).filter(c => c && c.id);
+    const evals = (ev.data || []).filter(e => e && e.id);
+    return {
+      has_criteria: criteria.length > 0,
+      has_cvs: cvs.length > 0,
+      has_evaluations: evals.length > 0,
+      criteria_count: criteria.length,
+      cv_count: cvs.length,
+      eval_count: evals.length,
+    };
+  } catch (err) {
+    return { has_criteria: false, has_cvs: false, has_evaluations: false, criteria_count: 0, cv_count: 0, eval_count: 0 };
+  }
+}
+
+// Render the status panel under the job cards when a job is selected.
+// The criteria pill distinguishes three states:
+//   has_criteria          → "N criteria set(s)" (green/done)
+//   !has_criteria + evals → "Criteria used (not saved)" (yellow/warn) — evaluations
+//                           were run with ad-hoc criteria_text that was never saved
+//   !has_criteria + none  → "No criteria yet" (gray/empty)
+function renderJobStatusPanel(state) {
+  const pills = document.getElementById('job-status-pills');
+  const shortcuts = document.getElementById('job-status-shortcuts');
+  const pill = (done, label, cls) => `<span class="status-pill ${cls || (done ? 'done' : 'empty')}">${done ? '&#x2713; ' : ''}${label}</span>`;
+
+  let criteriaPill;
+  if (state.has_criteria) {
+    criteriaPill = pill(true, `${state.criteria_count} criteria set(s)`);
+  } else if (state.has_evaluations) {
+    criteriaPill = `<span class="status-pill warn" title="Evaluations were run with ad-hoc criteria that wasn't saved as a named set.">&#9888; Criteria used (not saved)</span>`;
+  } else {
+    criteriaPill = pill(false, 'No criteria yet');
+  }
+
+  pills.innerHTML =
+    criteriaPill +
+    pill(state.has_cvs, state.has_cvs ? `${state.cv_count} CV(s)` : 'No CVs') +
+    pill(state.has_evaluations, state.has_evaluations ? `${state.eval_count} evaluated` : 'Not evaluated');
+
+  // Quick-jump shortcuts. "Set/Edit Criteria" is always offered — criteria is an editable workspace.
+  const btns = [];
+  btns.push(`<button class="btn btn-sm btn-secondary" onclick="evalJumpTo(2)">${state.has_criteria ? 'Edit Criteria' : 'Set Criteria'}</button>`);
+  if (state.has_cvs) btns.push(`<button class="btn btn-sm btn-secondary" onclick="evalJumpTo(3)">Manage CVs</button>`);
+  if (state.has_evaluations) btns.push(`<button class="btn btn-sm btn-primary" onclick="evalJumpTo(4)">View Results &#8594;</button>`);
+  shortcuts.innerHTML = btns.join('');
+}
+
+// Mark a step (and the connector leading into it) as completed so user can click it.
+function markStepCompleted(n) {
+  const ws = document.getElementById(`eval-ws-${n}`);
+  if (ws) ws.classList.add('completed');
+  if (n >= 2) {
+    const wc = document.getElementById(`eval-wc-${n - 1}`);
+    if (wc) wc.classList.add('completed');
+  }
+}
+
+// Quick-jump: used by status-panel shortcut buttons and stepper clicks.
+// Loads criteria + preps state, then activates the target step. Never blocks on criteria:
+// Step 2 is an editable workspace — entering it with empty values is valid.
+async function evalJumpTo(target) {
+  if (!evalSelectedJob) { toast('Select a job first', 'error'); return; }
+  // Ensure saved criteria are loaded so Step 2 reflects what's on file
+  await loadCriteriaSets();
+  const sel = document.getElementById('criteria-set-select');
+  if (sel.options.length > 1 && !document.getElementById('criteria-text').value.trim()) {
+    sel.selectedIndex = 1;
+    applyCriteriaSet();
+  }
+  // Don't auto-fill from job_description when jumping to Step 2 — let the user decide.
+  // Only pre-fill for Steps 3/4 where criteria text is needed downstream.
+  if (target !== 2 && !document.getElementById('criteria-text').value.trim()) {
+    document.getElementById('criteria-text').value = evalSelectedJob.job_description || '';
+  }
+  evalCriteria.text = document.getElementById('criteria-text').value.trim();
+  evalCriteria.weights.skills = parseInt(document.getElementById('w-skills').value);
+  evalCriteria.weights.experience = parseInt(document.getElementById('w-experience').value);
+  evalCriteria.weights.education = parseInt(document.getElementById('w-education').value);
+  updateCriteriaBar();
+  evalApplyStepUI(target);
+  if (target === 2) updateStep2Context();
+  if (target === 4) loadEvalResults();
+}
+
+// Update Step 2 headings + banner + continue button based on whether criteria already
+// exist for this job. Called whenever the user enters Step 2 so wording matches state.
+function updateStep2Context() {
+  const heading = document.getElementById('step2-heading');
+  const sub = document.getElementById('step2-subheading');
+  const banner = document.getElementById('step2-context-banner');
+  const continueBtn = document.getElementById('step2-continue-btn');
+  const sel = document.getElementById('criteria-set-select');
+  const state = (evalSelectedJob && evalSelectedJob.state) || {};
+  const hasSavedSet = sel && sel.options.length > 1;
+  const jobName = evalSelectedJob ? evalSelectedJob.job_title : '';
+
+  if (hasSavedSet || state.has_criteria) {
+    heading.textContent = 'Edit Evaluation Criteria';
+    sub.textContent = 'Update or replace the criteria used to score candidates for this role.';
+    banner.style.display = '';
+    banner.style.background = '#eff6ff';
+    banner.style.border = '1px solid #bfdbfe';
+    banner.style.color = '#1e40af';
+    banner.innerHTML = `<strong>&#x270F;&#xFE0F; Edit mode</strong> &mdash; Current criteria for <strong>${esc(jobName)}</strong> is loaded below. Changes here will apply to the next evaluation run.`;
+    if (continueBtn) continueBtn.innerHTML = 'Save &amp; Continue &#8594;';
+  } else if (state.has_evaluations) {
+    heading.textContent = 'Set Evaluation Criteria';
+    sub.textContent = 'Previous evaluations used ad-hoc criteria that was not saved. Define criteria now to save it for reuse.';
+    banner.style.display = '';
+    banner.style.background = '#fef3c7';
+    banner.style.border = '1px solid #fde68a';
+    banner.style.color = '#92400e';
+    banner.innerHTML = `<strong>&#9888; No saved criteria set for ${esc(jobName)}</strong> &mdash; ${state.eval_count || ''} evaluation(s) on file were scored with criteria that wasn't saved. Define and save criteria here so future runs are consistent.`;
+    if (continueBtn) continueBtn.innerHTML = 'Save &amp; Continue &#8594;';
+  } else {
+    heading.textContent = 'Define Evaluation Criteria';
+    sub.textContent = 'Create a custom criteria set or select saved criteria for this evaluation.';
+    banner.style.display = 'none';
+    banner.innerHTML = '';
+    if (continueBtn) continueBtn.innerHTML = 'Continue &#8594;';
+  }
+}
+
+// --- Step 2: Criteria ---
+function switchCriteriaSource(source) {
+  evalCriteria.source = source;
+  document.querySelectorAll('#criteria-tabs .source-tab').forEach(t => t.classList.remove('active'));
+  document.querySelector(`#criteria-tabs .source-tab[onclick*="${source}"]`).classList.add('active');
+  ['manual', 'ai', 'upload'].forEach(s => {
+    const el = document.getElementById(`criteria-panel-${s}`);
+    if (el) el.style.display = s === source ? '' : 'none';
+  });
+  // Show the Generate block only when AI source is active
+  const aiBlock = document.getElementById('ai-generate-block');
+  if (aiBlock) aiBlock.style.display = source === 'ai' ? '' : 'none';
+  refreshAIGenBtnState();
+}
+
+// Enable the Generate button only when we have a job + some context (description or criteria text).
+// Called when source changes, when a job is selected, and when criteria text changes.
+function refreshAIGenBtnState() {
+  const btn = document.getElementById('ai-gen-btn');
+  const status = document.getElementById('ai-gen-status');
+  if (!btn) return;
+  const hasJob = !!evalSelectedJob;
+  const ctx = (evalSelectedJob && evalSelectedJob.job_description) || document.getElementById('criteria-text').value.trim();
+  const hasContext = !!ctx;
+  // Don't clobber an in-flight "Generating…" state
+  if (btn.dataset.busy === '1') return;
+  btn.disabled = !(hasJob && hasContext);
+  if (!hasJob) status.textContent = 'Select a job to enable generation.';
+  else if (!hasContext) status.textContent = 'Add job description or context first.';
+  else status.textContent = 'Ready — generation respects the weights above.';
+  status.style.color = 'var(--gray-600)';
+}
+
+// Keep the canonical criteria-text in sync when user edits the AI output directly.
+function syncAICriteriaText() {
+  document.getElementById('criteria-text').value = document.getElementById('criteria-text-ai').value;
+}
+
+async function generateAICriteria() {
+  if (!evalSelectedJob) { toast('Select a job first', 'error'); return; }
+  const btn = document.getElementById('ai-gen-btn');
+  const status = document.getElementById('ai-gen-status');
+  const out = document.getElementById('criteria-text-ai');
+  const extraCtx = (document.getElementById('ai-extra-context').value || '').trim();
+  if (btn.dataset.busy === '1') return; // double-click guard
+
+  // Warn before overwriting existing generated criteria
+  if (out.value.trim()) {
+    if (!confirm('This will replace the current generated criteria. Continue?')) return;
+  }
+
+  btn.dataset.busy = '1';
+  btn.disabled = true;
+  const originalText = btn.innerHTML;
+  btn.innerHTML = '<span class="spinner" style="width:14px;height:14px;border-width:2px;display:inline-block;vertical-align:middle;margin-right:6px;"></span>Generating&hellip;';
+  status.textContent = 'Calling Ollama (qwen3:4b)... 30-90 seconds';
+  status.style.color = 'var(--gray-600)';
+  // Read current weights so the model produces criteria aligned with them
+  const w = {
+    skills: parseInt(document.getElementById('w-skills').value),
+    experience: parseInt(document.getElementById('w-experience').value),
+    education: parseInt(document.getElementById('w-education').value),
+  };
+  const previous = out.value; // preserve on failure
+  // Combine job description with optional user-provided context
+  const combinedDescription = [
+    evalSelectedJob.job_description || '',
+    extraCtx ? '\n\nAdditional context / requirements from HR:\n' + extraCtx : ''
+  ].join('').trim();
+  try {
+    const res = await fetch(`${API}/generate-criteria`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        job_title: evalSelectedJob.job_title,
+        department: evalSelectedJob.department,
+        seniority_level: evalSelectedJob.seniority_level,
+        employment_type: evalSelectedJob.employment_type,
+        job_description: combinedDescription,
+        extra_context: extraCtx,
+        skills_weight: w.skills,
+        experience_weight: w.experience,
+        education_weight: w.education
+      })
+    });
+    const data = await res.json();
+    if (data.success && data.criteria_text) {
+      out.value = data.criteria_text;
+      // Mirror into canonical textarea so evalGoStep(3) and runEvaluation() pick it up
+      document.getElementById('criteria-text').value = data.criteria_text;
+      status.textContent = `Generated (aligned to ${w.skills}/${w.experience}/${w.education} weights). Edit if needed.`;
+      status.style.color = 'var(--success, #10b981)';
+      toast('Criteria generated', 'success');
+    } else {
+      const msg = data.error || 'Generation failed';
+      out.value = previous; // don't clobber prior output on error
+      status.textContent = msg;
+      status.style.color = 'var(--danger, #ef4444)';
+      toast(msg, 'error');
+    }
+  } catch (err) {
+    out.value = previous;
+    status.textContent = 'Network error: ' + err.message;
+    status.style.color = 'var(--danger, #ef4444)';
+    toast('Network error: ' + err.message, 'error');
+  } finally {
+    btn.dataset.busy = '0';
+    btn.disabled = false;
+    btn.innerHTML = originalText;
+    refreshAIGenBtnState();
+  }
+}
+
+function updateWeights() {
+  const s = parseInt(document.getElementById('w-skills').value);
+  const e = parseInt(document.getElementById('w-experience').value);
+  const ed = parseInt(document.getElementById('w-education').value);
+  document.getElementById('w-skills-val').textContent = s + '%';
+  document.getElementById('w-experience-val').textContent = e + '%';
+  document.getElementById('w-education-val').textContent = ed + '%';
+  const total = s + e + ed;
+  const totalEl = document.getElementById('weight-total');
+  totalEl.textContent = `Total: ${total}%`;
+  totalEl.className = 'weight-total' + (total !== 100 ? ' invalid' : '');
+}
+
+function updateCriteriaBar() {
+  const bar = document.getElementById('step3-criteria-bar');
+  const criteriaLen = evalCriteria.text.length;
+  bar.innerHTML = `
+    <div><strong>${esc(evalSelectedJob.job_title)}</strong> &mdash; ${criteriaLen > 0 ? criteriaLen + ' char criteria' : 'Using job description'}</div>
+    <div>Skills: <strong>${evalCriteria.weights.skills}%</strong> &middot; Exp: <strong>${evalCriteria.weights.experience}%</strong> &middot; Edu: <strong>${evalCriteria.weights.education}%</strong></div>
+  `;
+}
+
+async function handleCriteriaFile(input) {
+  if (!input.files.length) return;
+  const file = input.files[0];
+  try {
+    const text = await extractTextFromFile(file);
+    document.getElementById('criteria-text').value = text;
+    toast('Criteria text extracted from file', 'success');
+  } catch (err) { toast('Failed to read file: ' + err.message, 'error'); }
+}
+
+// --- Step 3: Upload CVs ---
+
+// --- Step 4: Results ---
+async function loadEvalResults() {
+  if (!evalJobId) return;
+  const el = document.getElementById('eval-results');
+  el.innerHTML = '<div class="loading"><div class="spinner"></div><br>Loading...</div>';
+
+  // Populate the Step-4 job switcher from the cached job list (fetch if empty)
+  const switchSel = document.getElementById('eval-results-job-switch');
+  if (switchSel) {
+    if (!evalJobsCache || evalJobsCache.length === 0) {
+      try {
+        const jr = await apiGet('/job-openings');
+        evalJobsCache = (jr.data || []).filter(j => j.is_active !== false);
+      } catch (_) { /* non-fatal */ }
+    }
+    switchSel.innerHTML = evalJobsCache.map(j =>
+      `<option value="${j.id}" ${j.id===evalJobId?'selected':''}>${esc(j.job_title)}${j.department ? ' — ' + esc(j.department) : ''}</option>`
+    ).join('');
+  }
+
+  try {
+    const [candRes, evalRes] = await Promise.all([
+      apiGet(`/candidates?job_id=${evalJobId}`),
+      apiGet(`/evaluations?job_id=${evalJobId}`)
+    ]);
+
+    evalCandidates = (candRes.data || []).filter(c => c.id);
+    evalResults = (evalRes.data || []).filter(e => e.id);
+
+    updateEvalStats(evalCandidates, evalResults);
+    renderEvalResults(evalCandidates, evalResults);
+  } catch (err) {
+    el.innerHTML = `<div class="empty-state" style="color:var(--danger)">Failed to load data.<br><small>${err.message}</small></div>`;
+  }
+}
+
+// Switch the Results view to a different job without redoing the wizard.
+function switchEvalResultsJob(jobId) {
+  if (!jobId) return;
+  const id = parseInt(jobId);
+  const job = (evalJobsCache || []).find(j => j.id === id);
+  if (!job) { toast('Job not found', 'error'); return; }
+  evalJobId = id;
+  evalSelectedJob = job;
+  loadEvalResults();
+}
+
+function updateEvalStats(candidates, results) {
+  document.getElementById('stat-candidates').textContent = candidates.length || '-';
+  document.getElementById('stat-evaluated').textContent = results.length || '-';
+  if (results.length > 0) {
+    const scores = results.map(r => parseFloat(r.overall_score));
+    const avg = (scores.reduce((a, b) => a + b, 0) / scores.length).toFixed(1);
+    const top = Math.max(...scores).toFixed(1);
+    document.getElementById('stat-avg-score').textContent = avg;
+    document.getElementById('stat-top-score').textContent = top;
+  } else {
+    document.getElementById('stat-avg-score').textContent = '-';
+    document.getElementById('stat-top-score').textContent = '-';
+  }
+}
+
+function renderEvalResults(candidates, results) {
+  const el = document.getElementById('eval-results');
+
+  if (candidates.length === 0) {
+    el.innerHTML = '<div class="empty-state"><svg width="48" height="48" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/></svg><p>No candidates submitted yet. Click "Submit CV" to add one.</p></div>';
+    return;
+  }
+
+  // Build a map of evaluations by candidate_id
+  const evalMap = {};
+  for (const e of results) evalMap[e.candidate_id] = e;
+
+  // Sort: evaluated first (by score desc), then unevaluated
+  const sorted = [...candidates].sort((a, b) => {
+    const ea = evalMap[a.id], eb = evalMap[b.id];
+    if (ea && !eb) return -1;
+    if (!ea && eb) return 1;
+    if (ea && eb) return parseFloat(eb.overall_score) - parseFloat(ea.overall_score);
+    return 0;
+  });
+
+  // Horizontal scroller guarantees the Actions column is reachable even if the table overflows.
+  let html = '<div class="table-scroll"><table><thead><tr><th>#</th><th>Candidate</th><th>Email</th><th>Submitted</th><th>Overall</th><th>Skills</th><th>Experience</th><th>Education</th><th style="min-width:260px;">Actions</th></tr></thead><tbody>';
+
+  for (let i = 0; i < sorted.length; i++) {
+    const c = sorted[i];
+    const e = evalMap[c.id];
+    const rank = e ? (i + 1) : '-';
+
+    // Escape name + email once for safe embedding in inline onclick handlers
+    const nameArg = esc(c.candidate_name || '').replace(/'/g, "\\'");
+    const emailArg = esc(c.email || '').replace(/'/g, "\\'");
+    // Actions are candidate-level: Details + Shortlist + Reject appear on every row.
+    // Unevaluated rows add a "Run Evaluation" button at the start.
+    const detailsLabel = e ? 'Details' : 'View CV';
+    const actionsHtml = `
+      <div class="actions-container">
+        ${e ? '' : `<button class="btn btn-sm btn-purple" onclick="evaluateCandidate(${c.id})">Run Evaluation</button>`}
+        <button class="btn btn-sm btn-secondary" onclick="viewEvalDetail(${c.id})">${detailsLabel}</button>
+        <button class="btn btn-sm btn-success" onclick="addToShortlist(${c.id})">Shortlist</button>
+        <button class="btn btn-sm btn-danger" onclick="rejectCandidate(${c.id},'${nameArg}','${emailArg}')">Reject</button>
+      </div>`;
+
+    html += `<tr>
+      <td><strong>${rank}</strong></td>
+      <td><strong>${esc(c.candidate_name)}</strong></td>
+      <td>${esc(c.email || '—')}</td>
+      <td>${new Date(c.submitted_at).toLocaleDateString()}</td>`;
+
+    if (e) {
+      html += `
+        <td>${scoreBadge(e.overall_score)}</td>
+        <td>${scoreBadge(e.skills_score)}</td>
+        <td>${scoreBadge(e.experience_score)}</td>
+        <td>${scoreBadge(e.education_score)}</td>
+        <td class="actions-cell">${actionsHtml}</td>`;
+    } else {
+      html += `<td colspan="4" style="color:var(--gray-400);font-style:italic;">Not yet evaluated</td>
+        <td class="actions-cell">${actionsHtml}</td>`;
+    }
+    html += '</tr>';
+  }
+
+  html += '</tbody></table></div>';
+  el.innerHTML = html;
+}
+
+function scoreBadge(score) {
+  const s = parseFloat(score);
+  let cls = 'score-low';
+  if (s >= 7) cls = 'score-high';
+  else if (s >= 4) cls = 'score-mid';
+  return `<span class="score-badge ${cls}">${s.toFixed(1)}</span>`;
+}
+
+function viewEvalDetail(candidateId) {
+  // Use candidates data (has cv_text + all eval fields now)
+  const c = evalCandidates.find(c => c.id === candidateId);
+  if (!c) return;
+
+  const hasEval = c.overall_score != null;
+  document.getElementById('eval-detail-title').textContent = c.candidate_name;
+  const body = document.getElementById('eval-detail-body');
+
+  function scoreBar(label, score) {
+    const s = parseFloat(score) || 0;
+    const pct = s * 10;
+    const color = s >= 7 ? 'var(--success)' : s >= 4 ? 'var(--warning)' : 'var(--danger)';
+    return `<div style="margin-bottom:14px;">
+      <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
+        <span style="font-size:13px;font-weight:600;color:var(--gray-700)">${label}</span>
+        <span style="font-size:13px;font-weight:700;color:${color}">${s.toFixed(1)} / 10</span>
+      </div>
+      <div class="progress-bar"><div class="progress-fill" style="width:${pct}%;background:${color}"></div></div>
+    </div>`;
+  }
+
+  function bulletList(text, color) {
+    if (!text) return '<p style="color:var(--gray-400);font-style:italic;">None</p>';
+    return '<ul style="margin:0;padding-left:20px;">' +
+      text.split(';').map(s => s.trim()).filter(Boolean)
+        .map(s => `<li style="color:${color};margin-bottom:4px;font-size:14px;">${esc(s)}</li>`).join('') +
+      '</ul>';
+  }
+
+  const rank = hasEval ? evalCandidates.filter(x => x.overall_score != null && parseFloat(x.overall_score) > parseFloat(c.overall_score)).length + 1 : null;
+  const total = evalCandidates.filter(x => x.overall_score != null).length;
+
+  let html = `
+    <!-- Candidate Info -->
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;padding-bottom:16px;border-bottom:1px solid var(--gray-200);">
+      <div>
+        <div style="font-size:13px;color:var(--gray-500);">Email</div>
+        <div style="font-size:15px;">${esc(c.email || '—')}</div>
+      </div>
+      <div style="text-align:center;">
+        <div style="font-size:13px;color:var(--gray-500);">Submitted</div>
+        <div style="font-size:15px;">${new Date(c.submitted_at).toLocaleDateString()}</div>
+      </div>
+      ${hasEval ? `<div style="text-align:right;">
+        <div style="font-size:13px;color:var(--gray-500);">Rank</div>
+        <div style="font-size:15px;font-weight:700;">#${rank} of ${total}</div>
+      </div>` : ''}
+    </div>`;
+
+  if (hasEval) {
+    const overall = parseFloat(c.overall_score);
+    const overallColor = overall >= 7 ? 'var(--success)' : overall >= 4 ? 'var(--warning)' : 'var(--danger)';
+    const overallLabel = overall >= 8 ? 'Excellent' : overall >= 6 ? 'Good' : overall >= 4 ? 'Average' : overall >= 2 ? 'Below Average' : 'Poor';
+
+    html += `
+    <!-- Overall Score -->
+    <div style="text-align:center;margin-bottom:24px;">
+      <div style="font-size:56px;font-weight:800;color:${overallColor};line-height:1;">${overall.toFixed(1)}</div>
+      <div style="font-size:16px;font-weight:600;color:${overallColor};margin-top:4px;">${overallLabel}</div>
+      <div style="font-size:13px;color:var(--gray-400);margin-top:2px;">Overall Score / 10</div>
+    </div>
+
+    <!-- Score Bars -->
+    <div style="background:var(--gray-50);border-radius:var(--radius);padding:20px;margin-bottom:20px;">
+      <h4 style="font-size:14px;font-weight:700;color:var(--gray-800);margin-bottom:16px;">Score Breakdown</h4>
+      ${scoreBar('Skills Match (40%)', c.skills_score)}
+      ${scoreBar('Experience (35%)', c.experience_score)}
+      ${scoreBar('Education (25%)', c.education_score)}
+    </div>
+
+    <!-- Analysis -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px;">
+      <div style="background:#f0fdf4;border-radius:var(--radius);padding:16px;">
+        <h4 style="font-size:13px;font-weight:700;color:#166534;margin-bottom:8px;">Strengths</h4>
+        ${bulletList(c.strengths, '#166534')}
+      </div>
+      <div style="background:#fef2f2;border-radius:var(--radius);padding:16px;">
+        <h4 style="font-size:13px;font-weight:700;color:#991b1b;margin-bottom:8px;">Weaknesses</h4>
+        ${bulletList(c.weaknesses, '#991b1b')}
+      </div>
+    </div>
+
+    <!-- Reasoning -->
+    <div class="eval-detail-section">
+      <h4 style="font-size:13px;font-weight:700;color:var(--gray-700);">Evaluation Method</h4>
+      <p style="font-size:14px;color:var(--gray-600);margin-top:4px;">${esc(c.reasoning || 'Keyword-based analysis')}</p>
+      <p style="font-size:12px;color:var(--gray-400);margin-top:4px;">Evaluated: ${new Date(c.evaluated_at).toLocaleString()}</p>
+    </div>`;
+  } else {
+    html += `<div style="text-align:center;padding:30px;color:var(--gray-400);">
+      <p style="font-size:16px;font-weight:600;">Not Yet Evaluated</p>
+      <p style="margin-top:8px;">Click "Run Evaluation" to score this candidate.</p>
+    </div>`;
+  }
+
+  // CV Preview
+  if (c.cv_text) {
+    html += `
+    <div style="margin-top:20px;padding-top:20px;border-top:1px solid var(--gray-200);">
+      <h4 style="font-size:13px;font-weight:700;color:var(--gray-700);margin-bottom:8px;">CV / Resume</h4>
+      <div style="background:var(--gray-50);border:1px solid var(--gray-200);border-radius:var(--radius);padding:16px;max-height:300px;overflow-y:auto;font-size:13px;line-height:1.7;white-space:pre-wrap;color:var(--gray-700);">${esc(c.cv_text)}</div>
+    </div>`;
+  }
+
+  body.innerHTML = html;
+  document.getElementById('eval-detail-modal').classList.add('active');
+}
+
+// --- Step 3: Drag-drop CV upload ---
+function setupDragDrop() {
+  const zone = document.getElementById('cv-dropzone');
+  if (!zone) return;
+  zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('dragover'); });
+  zone.addEventListener('dragleave', () => zone.classList.remove('dragover'));
+  zone.addEventListener('drop', e => {
+    e.preventDefault(); zone.classList.remove('dragover');
+    if (e.dataTransfer.files.length) processDroppedFiles(e.dataTransfer.files);
+  });
+}
+
+async function processDroppedFiles(fileList) {
+  const files = Array.from(fileList);
+  const statusEl = document.getElementById('cv-upload-status');
+  statusEl.style.display = 'block';
+  statusEl.textContent = `Processing ${files.length} file(s)...`;
+
+  for (const file of files) {
+    // Check duplicate
+    if (evalUploadedFiles.some(f => f.fileName === file.name)) {
+      toast(`Duplicate: ${file.name} already added`, 'error');
+      continue;
+    }
+    const ext = (file.name.split('.').pop() || '').toLowerCase();
+    if (!['pdf', 'txt'].includes(ext)) {
+      evalUploadedFiles.push({ fileName: file.name, name: file.name, email: '', text: '', error: 'Not a PDF/TXT file' });
+      continue;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      evalUploadedFiles.push({ fileName: file.name, name: file.name, email: '', text: '', error: 'File too large (>10MB)' });
+      continue;
+    }
+    try {
+      const text = await extractTextFromFile(file);
+      const name = nameFromFilename(file.name);
+      const email = extractEmail(text);
+      evalUploadedFiles.push({ fileName: file.name, name, email, text, error: text.length < 10 ? 'Very little text' : '' });
+    } catch (err) {
+      evalUploadedFiles.push({ fileName: file.name, name: file.name, email: '', text: '', error: 'Read failed: ' + err.message });
+    }
+  }
+
+  statusEl.style.display = 'none';
+  renderFileList();
+}
+
+function renderFileList() {
+  const el = document.getElementById('cv-file-list');
+  if (evalUploadedFiles.length === 0) { el.innerHTML = ''; document.getElementById('btn-upload-cvs').disabled = true; return; }
+
+  let html = '';
+  for (let i = 0; i < evalUploadedFiles.length; i++) {
+    const f = evalUploadedFiles[i];
+    const statusBadge = f.error
+      ? `<span style="color:var(--danger);font-size:12px;">${esc(f.error)}</span>`
+      : '<span class="badge badge-active" style="font-size:11px;">Ready</span>';
+    html += `<div class="file-item">
+      <div class="file-info">
+        <span style="font-size:16px;">&#x1F4C4;</span>
+        <div>
+          <div class="file-name">${esc(f.fileName)}</div>
+          <div class="file-meta">${esc(f.name)} ${f.email ? '&middot; ' + esc(f.email) : ''}</div>
+        </div>
+      </div>
+      ${statusBadge}
+      <button class="file-remove" onclick="removeUploadedFile(${i})">&times;</button>
+    </div>`;
+  }
+  el.innerHTML = html;
+  const ready = evalUploadedFiles.filter(f => !f.error && f.text).length;
+  document.getElementById('btn-upload-cvs').disabled = ready === 0;
+}
+
+function removeUploadedFile(index) {
+  evalUploadedFiles.splice(index, 1);
+  renderFileList();
+}
+
+// --- Submit CVs (Step 3 action) ---
+// Uploads CVs and advances to Step 4. Evaluation is triggered separately from Step 4.
+async function submitCVs() {
+  const btn = document.getElementById('btn-upload-cvs');
+  btn.disabled = true;
+  const valid = evalUploadedFiles.filter(f => !f.error && f.text);
+
+  if (valid.length === 0) {
+    toast('No valid CVs to upload', 'error');
+    btn.disabled = false;
+    return;
+  }
+
+  let submitted = 0, failed = 0;
+  for (let i = 0; i < valid.length; i++) {
+    btn.textContent = `Uploading ${i + 1}/${valid.length}...`;
+    try {
+      const res = await apiPost('/cv-submit', {
+        job_opening_id: evalJobId,
+        candidate_name: valid[i].name,
+        email: valid[i].email,
+        cv_text: valid[i].text
+      });
+      if (res.data.success) submitted++; else failed++;
+    } catch (err) { failed++; }
+  }
+
+  if (submitted === 0) {
+    toast('All uploads failed', 'error');
+    btn.disabled = false; btn.innerHTML = 'Upload CVs \u2192';
+    return;
+  }
+
+  toast(`${submitted} CV(s) uploaded${failed ? `, ${failed} failed` : ''}`, 'success');
+  evalGoStep(4);
+  loadEvalResults();
+  btn.disabled = false; btn.innerHTML = 'Upload CVs \u2192';
+}
+
+// --- Run AI Evaluation (Step 4 action) ---
+// Scores all candidates for the selected job using the configured criteria/weights.
+async function runEvaluation() {
+  if (!evalJobId) { toast('No job selected', 'error'); return; }
+  const btn = document.getElementById('btn-run-eval');
+  const status = document.getElementById('run-eval-status');
+  btn.disabled = true;
+  const originalHtml = btn.innerHTML;
+  btn.innerHTML = '<span class="spinner" style="width:14px;height:14px;border-width:2px;display:inline-block;vertical-align:middle;"></span> AI evaluating...';
+  status.textContent = 'This may take a while (~1-2 min per candidate).';
+  status.style.color = 'var(--gray-600)';
+  try {
+    const payload = {
+      job_opening_id: evalJobId,
+      skills_weight: evalCriteria.weights.skills,
+      experience_weight: evalCriteria.weights.experience,
+      education_weight: evalCriteria.weights.education
+    };
+    if (evalCriteria.text) payload.criteria_text = evalCriteria.text;
+    const res = await apiPost('/cv-evaluate', payload);
+    if (res.data.success) {
+      toast(res.data.message || 'Evaluation complete', 'success');
+      status.textContent = 'Done.';
+      status.style.color = 'var(--success, #10b981)';
+    } else {
+      toast(res.data.error || 'Evaluation had issues', 'error');
+      status.textContent = res.data.error || 'Evaluation had issues';
+      status.style.color = 'var(--danger, #ef4444)';
+    }
+  } catch (err) {
+    toast('Evaluation failed: ' + err.message, 'error');
+    status.textContent = 'Network error';
+    status.style.color = 'var(--danger, #ef4444)';
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = originalHtml;
+    loadEvalResults();
+  }
+}
+
+// --- Run individual evaluation from results ---
+async function evaluateCandidate(candidateId) {
+  if (!evalJobId) return;
+  // Disable the button and show loading
+  const btns = document.querySelectorAll(`button[onclick="evaluateCandidate(${candidateId})"]`);
+  btns.forEach(b => { b.disabled = true; b.innerHTML = '<span class="spinner" style="width:14px;height:14px;border-width:2px;display:inline-block;vertical-align:middle;"></span> Evaluating...'; });
+  try {
+    const payload = {
+      job_opening_id: evalJobId,
+      candidate_id: candidateId,
+      skills_weight: evalCriteria.weights.skills,
+      experience_weight: evalCriteria.weights.experience,
+      education_weight: evalCriteria.weights.education
+    };
+    if (evalCriteria.text) payload.criteria_text = evalCriteria.text;
+    const res = await apiPost('/cv-evaluate', payload);
+    if (res.data.success) {
+      toast('AI evaluation complete!', 'success');
+      loadEvalResults();
+    } else {
+      toast(res.data.error || 'Evaluation failed', 'error');
+      btns.forEach(b => { b.disabled = false; b.textContent = 'Run Evaluation'; });
+    }
+  } catch (err) {
+    toast('Evaluation failed: ' + err.message, 'error');
+    btns.forEach(b => { b.disabled = false; b.textContent = 'Run Evaluation'; });
+  }
+}
+
+// ==================== PHASE 4: SHORTLIST ====================
+let shortlistData = [];
+
+async function loadJobsForShortlist() {
+  const select = document.getElementById('shortlist-job-select');
+  const currentVal = select.value;
+  try {
+    const res = await apiGet('/job-openings');
+    const jobs = res.data || [];
+    select.innerHTML = '<option value="">-- Select a job opening --</option>';
+    for (const job of jobs) {
+      select.innerHTML += `<option value="${job.id}" ${job.id == currentVal ? 'selected' : ''}>${esc(job.job_title)} — ${esc(job.department)}</option>`;
+    }
+    if (currentVal) loadShortlist();
+  } catch (err) { toast('Failed to load jobs', 'error'); }
+}
+
+async function loadShortlist() {
+  const jobId = document.getElementById('shortlist-job-select').value;
+  const el = document.getElementById('shortlist-content');
+
+  if (!jobId) {
+    el.innerHTML = '<div class="empty-state"><p>Select a job opening to view shortlisted candidates.</p></div>';
+    updateShortlistStats([]);
+    return;
+  }
+
+  el.innerHTML = '<div class="loading"><div class="spinner"></div><br>Loading...</div>';
+
+  try {
+    const res = await apiGet(`/shortlist?job_id=${jobId}`);
+    shortlistData = res.data || [];
+    updateShortlistStats(shortlistData);
+    renderShortlist(shortlistData);
+  } catch (err) {
+    el.innerHTML = `<div class="empty-state" style="color:var(--danger)">Failed to load shortlist.<br><small>${err.message}</small></div>`;
+  }
+}
+
+function updateShortlistStats(data) {
+  document.getElementById('stat-shortlisted').textContent = data.filter(d => d.status === 'shortlisted').length || '-';
+  document.getElementById('stat-interviewed').textContent = data.filter(d => d.status === 'interviewed').length || '-';
+  document.getElementById('stat-hired').textContent = data.filter(d => d.status === 'hired').length || '-';
+  document.getElementById('stat-rejected').textContent = data.filter(d => d.status === 'rejected').length || '-';
+}
+
+function renderShortlist(data) {
+  const el = document.getElementById('shortlist-content');
+
+  if (data.length === 0) {
+    el.innerHTML = '<div class="empty-state"><svg width="48" height="48" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg><p>No shortlisted candidates yet. Go to CV Evaluation to shortlist candidates.</p></div>';
+    return;
+  }
+
+  el.innerHTML = data.map(renderShortlistCard).join('');
+}
+
+// Build HTML for a single shortlist card. Used by both full render and in-place patching.
+function renderShortlistCard(s) {
+  const score = s.overall_score != null ? parseFloat(s.overall_score).toFixed(1) : '—';
+  const scoreClass = s.overall_score >= 7 ? 'score-high' : s.overall_score >= 4 ? 'score-mid' : 'score-low';
+  const statusActions = getStatusActions(s);
+
+  return `<div class="candidate-card" data-sid="${s.id}">
+      <div class="candidate-card-header">
+        <div style="display:flex;align-items:center;gap:12px;">
+          <h3>${esc(s.candidate_name)}</h3>
+          <span class="badge badge-${s.status}">${s.status}</span>
+        </div>
+        <span class="score-badge ${scoreClass}">${score}</span>
+      </div>
+      <div class="candidate-meta">
+        ${esc(s.email || '—')} &middot; Shortlisted ${new Date(s.shortlisted_at).toLocaleDateString()}
+        ${s.updated_at !== s.shortlisted_at ? ' &middot; Updated ' + new Date(s.updated_at).toLocaleDateString() : ''}
+      </div>
+
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:12px;">
+        <div style="background:var(--gray-50);padding:8px 12px;border-radius:var(--radius);text-align:center;">
+          <div style="font-size:11px;color:var(--gray-500);font-weight:600;">SKILLS</div>
+          <div style="font-size:18px;font-weight:700;color:var(--gray-800);">${s.skills_score != null ? parseFloat(s.skills_score).toFixed(1) : '—'}</div>
+        </div>
+        <div style="background:var(--gray-50);padding:8px 12px;border-radius:var(--radius);text-align:center;">
+          <div style="font-size:11px;color:var(--gray-500);font-weight:600;">EXPERIENCE</div>
+          <div style="font-size:18px;font-weight:700;color:var(--gray-800);">${s.experience_score != null ? parseFloat(s.experience_score).toFixed(1) : '—'}</div>
+        </div>
+        <div style="background:var(--gray-50);padding:8px 12px;border-radius:var(--radius);text-align:center;">
+          <div style="font-size:11px;color:var(--gray-500);font-weight:600;">EDUCATION</div>
+          <div style="font-size:18px;font-weight:700;color:var(--gray-800);">${s.education_score != null ? parseFloat(s.education_score).toFixed(1) : '—'}</div>
+        </div>
+      </div>
+
+      ${s.strengths ? `<div style="margin-top:10px;font-size:13px;color:var(--gray-600);"><strong style="color:#166534;">Strengths:</strong> ${esc(s.strengths)}</div>` : ''}
+      ${s.notes ? `<div style="margin-top:6px;font-size:13px;color:var(--gray-500);font-style:italic;">Notes: ${esc(s.notes)}</div>` : ''}
+
+      <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:14px;padding-top:12px;border-top:1px solid var(--gray-100);">
+        ${statusActions}
+      </div>
+    </div>`;
+}
+
+function getStatusActions(s) {
+  const btns = [];
+  // Escape candidate name & email for safe embedding in inline onclick
+  const nameArg = esc(s.candidate_name || '').replace(/'/g, "\\'");
+  const emailArg = esc(s.email || '').replace(/'/g, "\\'");
+  const hasEmail = s.email && s.email.includes('@');
+
+  if (s.status === 'shortlisted') {
+    btns.push(`<button class="btn btn-sm btn-primary" onclick="updateShortlistStatus(${s.id},'interviewed')">Mark Interviewed</button>`);
+    if (hasEmail) {
+      btns.push(`<button class="btn btn-sm btn-success" onclick="sendShortlistEmail(${s.candidate_id},${s.job_opening_id},'${nameArg}','${emailArg}','shortlisted')">&#x2709; Email Shortlist</button>`);
+      btns.push(`<button class="btn btn-sm btn-secondary" onclick="sendShortlistEmail(${s.candidate_id},${s.job_opening_id},'${nameArg}','${emailArg}','interview_invite')">&#x2709; Interview Invite</button>`);
+    }
+    btns.push(`<button class="btn btn-sm btn-danger" onclick="updateShortlistStatus(${s.id},'rejected')">Reject</button>`);
+  } else if (s.status === 'interviewed') {
+    btns.push(`<button class="btn btn-sm btn-success" onclick="updateShortlistStatus(${s.id},'hired')">Hire</button>`);
+    if (hasEmail) {
+      btns.push(`<button class="btn btn-sm btn-success" onclick="sendShortlistEmail(${s.candidate_id},${s.job_opening_id},'${nameArg}','${emailArg}','offer')">&#x2709; Send Offer</button>`);
+    }
+    btns.push(`<button class="btn btn-sm btn-danger" onclick="updateShortlistStatus(${s.id},'rejected')">Reject</button>`);
+    btns.push(`<button class="btn btn-sm btn-secondary" onclick="updateShortlistStatus(${s.id},'shortlisted')">Back to Shortlist</button>`);
+  } else if (s.status === 'hired') {
+    btns.push(`<span style="font-size:13px;color:var(--success);font-weight:600;">Candidate Hired</span>`);
+    btns.push(`<button class="btn btn-sm btn-secondary" onclick="updateShortlistStatus(${s.id},'interviewed')">Revert to Interviewed</button>`);
+  } else if (s.status === 'rejected') {
+    btns.push(`<span style="font-size:13px;color:var(--danger);font-weight:600;">Candidate Rejected</span>`);
+    btns.push(`<button class="btn btn-sm btn-secondary" onclick="updateShortlistStatus(${s.id},'shortlisted')">Reconsider</button>`);
+  }
+  return btns.join('');
+}
+
+async function addToShortlist(candidateId) {
+  const jobId = evalJobId;
+  if (!jobId) return;
+  try {
+    const res = await apiPost('/add-to-shortlist', { candidate_id: candidateId, job_opening_id: jobId });
+    if (res.data.success) {
+      animateAction(candidateId, 'shortlist');
+    } else {
+      toast(res.data.error || 'Failed to shortlist', 'error');
+    }
+  } catch (err) { toast('Failed: ' + err.message, 'error'); }
+}
+
+async function updateShortlistStatus(id, status) {
+  // Find the current card so we can flash it and patch in place (no full-list refresh)
+  const card = document.querySelector(`.candidate-card[data-sid="${id}"]`);
+  if (card) card.style.opacity = '0.5';
+  try {
+    const res = await apiPost('/update-shortlist-status', { id, status });
+    if (res.data.success) {
+      // Patch in-memory row and re-render just this card
+      const idx = shortlistData.findIndex(s => s.id === id);
+      if (idx >= 0) {
+        shortlistData[idx] = { ...shortlistData[idx], status, updated_at: new Date().toISOString() };
+        if (card) {
+          card.outerHTML = renderShortlistCard(shortlistData[idx]);
+        }
+        updateShortlistStats(shortlistData);
+      }
+      toast(`Status updated to "${status}"`, 'success');
+    } else {
+      if (card) card.style.opacity = '';
+      toast(res.data.error || 'Update failed', 'error');
+    }
+  } catch (err) {
+    if (card) card.style.opacity = '';
+    toast('Update failed: ' + err.message, 'error');
+  }
+}
+
+// ==================== PHASE 5: EMAILS ====================
+
+let pendingReject = null;
+let pendingShortlistEmail = null;
+
+// Send a shortlist-related notification (no status change) — used from Shortlist tab.
+// emailType: 'shortlisted' (custom), 'interview_invite', or 'offer'.
+function sendShortlistEmail(candidateId, jobOpeningId, candidateName, email, emailType) {
+  // Look up job title from the shortlist selector
+  const jobSel = document.getElementById('shortlist-job-select');
+  const jobTitle = (jobSel && jobSel.options[jobSel.selectedIndex])
+    ? jobSel.options[jobSel.selectedIndex].text : 'the position';
+
+  let subject, body, sendType;
+  if (emailType === 'shortlisted') {
+    sendType = 'custom';
+    subject = 'You have been shortlisted — ' + jobTitle;
+    body = `Dear ${candidateName},\n\nGreat news! After reviewing your application for the ${jobTitle} position, we are pleased to inform you that you have been shortlisted for the next stage of our hiring process.\n\nWe were impressed by your background and would like to move forward with your candidacy. A member of our team will be in touch shortly with next steps.\n\nThank you for your interest in joining our team.\n\nBest regards,\nHR Department`;
+  } else if (emailType === 'interview_invite') {
+    sendType = 'interview_invite';
+    subject = 'Interview Invitation - ' + jobTitle;
+    body = `Dear ${candidateName},\n\nWe are pleased to inform you that after reviewing your application for the ${jobTitle} position, we would like to invite you for an interview.\n\nPlease reply to this email with your availability for the coming week, and we will schedule a convenient time.\n\nWe look forward to speaking with you.\n\nBest regards,\nHR Department`;
+  } else if (emailType === 'offer') {
+    sendType = 'offer';
+    subject = 'Job Offer - ' + jobTitle;
+    body = `Dear ${candidateName},\n\nWe are delighted to extend an offer for the ${jobTitle} position.\n\nPlease find the details of the offer attached. We kindly ask you to review and respond within 5 business days.\n\nCongratulations, and we look forward to welcoming you to our team!\n\nBest regards,\nHR Department`;
+  } else {
+    return;
+  }
+
+  pendingShortlistEmail = {
+    candidate_id: candidateId,
+    job_opening_id: jobOpeningId,
+    candidate_name: candidateName,
+    recipient_email: email,
+    job_title: jobTitle,
+    email_type: sendType,
+    subject: subject,
+    body: body
+  };
+
+  // Reuse the reject/email modal but retarget confirm button to shortlist-email handler.
+  document.getElementById('email-modal-title').textContent =
+    emailType === 'shortlisted' ? 'Send Shortlist Notification' :
+    emailType === 'interview_invite' ? 'Send Interview Invitation' : 'Send Job Offer';
+  document.getElementById('email-modal-desc').textContent = `Send this email to ${candidateName}?`;
+  document.getElementById('email-modal-name').textContent = candidateName;
+  document.getElementById('email-modal-to').textContent = email || 'No email on file';
+  document.getElementById('email-modal-subject').textContent = subject;
+  document.getElementById('email-modal-body').textContent = body;
+  document.getElementById('email-send-check-label').style.display = 'none';
+  document.getElementById('email-send-check').checked = true;
+  document.getElementById('email-preview-section').style.display = '';
+  const sendBtn = document.getElementById('email-modal-send');
+  sendBtn.textContent = 'Send Email';
+  sendBtn.className = 'btn btn-success';
+  sendBtn.onclick = confirmSendShortlistEmail;
+  document.getElementById('email-modal').classList.add('active');
+}
+
+async function confirmSendShortlistEmail() {
+  if (!pendingShortlistEmail) return;
+  const btn = document.getElementById('email-modal-send');
+  btn.disabled = true;
+  btn.textContent = 'Sending...';
+  try {
+    const payload = {
+      candidate_id: pendingShortlistEmail.candidate_id,
+      job_opening_id: pendingShortlistEmail.job_opening_id,
+      email_type: pendingShortlistEmail.email_type,
+      recipient_email: pendingShortlistEmail.recipient_email,
+      candidate_name: pendingShortlistEmail.candidate_name,
+      job_title: pendingShortlistEmail.job_title
+    };
+    if (pendingShortlistEmail.email_type === 'custom') {
+      payload.custom_subject = pendingShortlistEmail.subject;
+      payload.custom_body = pendingShortlistEmail.body;
+    }
+    const res = await apiPost('/send-email', payload);
+    const status = res.data && res.data.status;
+    if (status === 'sent') {
+      toast('Email sent to ' + pendingShortlistEmail.recipient_email, 'success');
+    } else if (status === 'logged') {
+      toast('Email logged only — SMTP not configured. See Emails > Setup Guide.', 'error');
+    } else {
+      toast('Email failed — see Emails tab for details.', 'error');
+    }
+    closeModal('email-modal');
+  } catch (err) {
+    toast('Send failed: ' + err.message, 'error');
+  } finally {
+    btn.disabled = false;
+    // Restore default reject-mode handler for the modal
+    btn.onclick = confirmRejectCandidate;
+    pendingShortlistEmail = null;
+  }
+}
+
+function toggleEmailPreview() {
+  const checked = document.getElementById('email-send-check').checked;
+  document.getElementById('email-preview-section').style.display = checked ? '' : 'none';
+}
+
+function rejectCandidate(candidateId, candidateName, email) {
+  const jobTitle = evalSelectedJob ? evalSelectedJob.job_title || 'the position' : 'the position';
+  const subject = 'Application Update - ' + jobTitle;
+  const body = `Dear ${candidateName},\n\nThank you for your interest in the ${jobTitle} position and for taking the time to apply.\n\nAfter careful review of all applications, we regret to inform you that we have decided to move forward with other candidates whose qualifications more closely match our current requirements.\n\nWe appreciate your interest in our organization and encourage you to apply for future openings that match your skills and experience.\n\nWe wish you all the best in your job search and future endeavors.\n\nBest regards,\nHR Department`;
+
+  pendingReject = {
+    candidate_id: candidateId,
+    job_opening_id: evalJobId,
+    candidate_name: candidateName,
+    recipient_email: email,
+    job_title: jobTitle,
+    subject: subject,
+    body: body
+  };
+
+  document.getElementById('email-modal-title').textContent = 'Reject Candidate';
+  document.getElementById('email-modal-desc').textContent = `Are you sure you want to reject ${candidateName}?`;
+  document.getElementById('email-modal-name').textContent = candidateName;
+  document.getElementById('email-modal-to').textContent = email || 'No email on file';
+  document.getElementById('email-modal-subject').textContent = subject;
+  document.getElementById('email-modal-body').textContent = body;
+
+  const hasEmail = email && email.includes('@');
+  document.getElementById('email-send-check-label').style.display = hasEmail ? '' : 'none';
+  document.getElementById('email-send-check').checked = hasEmail;
+  document.getElementById('email-preview-section').style.display = hasEmail ? '' : 'none';
+  const sendBtn = document.getElementById('email-modal-send');
+  sendBtn.textContent = 'Reject Candidate';
+  sendBtn.className = 'btn btn-danger';
+  sendBtn.onclick = confirmRejectCandidate;
+  document.getElementById('email-modal').classList.add('active');
+}
+
+async function confirmRejectCandidate() {
+  if (!pendingReject) return;
+  const btn = document.getElementById('email-modal-send');
+  btn.disabled = true;
+  btn.textContent = 'Rejecting...';
+  try {
+    // 1. Add to shortlist as rejected
+    const shortlistRes = await apiPost('/add-to-shortlist', {
+      candidate_id: pendingReject.candidate_id,
+      job_opening_id: pendingReject.job_opening_id,
+      notes: 'Rejected from evaluation results'
+    });
+    if (shortlistRes.data.success) {
+      // Update status to rejected
+      const entry = shortlistRes.data.data;
+      const entryId = entry.id || (Array.isArray(entry) && entry[0] ? entry[0].id : null);
+      if (entryId) {
+        await apiPost('/update-shortlist-status', { id: entryId, status: 'rejected' });
+      }
+    }
+
+    // 2. Optionally send rejection email
+    const sendEmail = document.getElementById('email-send-check').checked;
+    if (sendEmail && pendingReject.recipient_email) {
+      await apiPost('/send-email', {
+        candidate_id: pendingReject.candidate_id,
+        job_opening_id: pendingReject.job_opening_id,
+        email_type: 'rejection',
+        recipient_email: pendingReject.recipient_email,
+        candidate_name: pendingReject.candidate_name,
+        job_title: pendingReject.job_title
+      });
+    }
+
+    closeModal('email-modal');
+    // Animate the row
+    animateAction(pendingReject.candidate_id, 'reject');
+
+  } catch (err) {
+    toast('Failed to reject: ' + err.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Reject Candidate';
+    pendingReject = null;
+  }
+}
+
+function animateAction(candidateId, action) {
+  const rows = document.querySelectorAll('#eval-results tbody tr');
+  for (const row of rows) {
+    const btns = row.querySelectorAll('button');
+    const match = Array.from(btns).some(b => {
+      const oc = b.getAttribute('onclick') || '';
+      return oc.includes(`(${candidateId},`) || oc.includes(`(${candidateId})`);
+    });
+    if (!match) continue;
+
+    // Replace only the inner container so the .actions-cell wrapper (with min-width) stays
+    const container = row.querySelector('.actions-container');
+    if (!container) break;
+
+    if (action === 'reject') {
+      row.classList.add('row-flash-reject');
+      container.innerHTML = `<span class="action-badge action-badge-reject">Rejected</span>`;
+    } else if (action === 'shortlist') {
+      row.classList.add('row-flash-shortlist');
+      container.innerHTML = `<span class="action-badge action-badge-shortlist">Shortlisted</span>`;
+    }
+    break;
+  }
+}
+
+// ==================== SHARED HELPERS ====================
+
+function openCreateModal() { resetForm(); setCreateStep(1); document.getElementById('create-modal').classList.add('active'); }
+function closeModal(id) { document.getElementById(id).classList.remove('active'); }
+
+function resetForm() {
+  ['f-title','f-department','f-reporting','f-description'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('f-department-select').value = '';
+  ['f-employment','f-seniority','f-location'].forEach(id => document.getElementById(id).selectedIndex = 0);
+  document.getElementById('f-file').value = '';
+  document.getElementById('create-step2-status').style.display = '';
+  currentSource = 'manual';
+  const container = document.getElementById('create-source-tabs');
+  container.querySelectorAll('.source-tab').forEach(t => t.classList.remove('active'));
+  container.querySelector('.source-tab[onclick*="manual"]').classList.add('active');
+  document.querySelectorAll('#panel-manual,#panel-ai_generate,#panel-file_upload').forEach(p => p.classList.remove('active'));
+  document.getElementById('panel-manual').classList.add('active');
+}
+
+function esc(str) {
+  if (!str) return '';
+  const d = document.createElement('div');
+  d.textContent = str;
+  return d.innerHTML;
+}
+
+function toast(msg, type) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = `toast toast-${type} show`;
+  setTimeout(() => el.classList.remove('show'), 3500);
+}
+
+document.querySelectorAll('.modal-overlay').forEach(overlay => {
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) overlay.classList.remove('active');
+  });
+});
+
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    document.querySelectorAll('.modal-overlay.active').forEach(m => m.classList.remove('active'));
+  }
+});
+
+// --- PDF extraction ---
+pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+function nameFromFilename(filename) {
+  let name = filename.replace(/\.[^.]+$/, '');
+  name = name.replace(/[-_\.]+/g, ' ');
+  name = name.replace(/([a-z])([A-Z])/g, '$1 $2');
+  name = name.replace(/([A-Z]+)([A-Z][a-z])/g, '$1 $2');
+  name = name.replace(/^(cv|resume|résumé|curriculum\s*vitae)\s+/i, '');
+  name = name.replace(/\s+(cv|resume|résumé|curriculum\s*vitae|II|III|IV|v\d+|final|updated|new|copy|\d{4}|\(\d+\))$/gi, '');
+  name = name.replace(/\s+/g, ' ').trim();
+  if (!name) return '';
+  return name.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ');
+}
+
+function extractEmail(text) {
+  const match = text.match(/[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/);
+  return match ? match[0].toLowerCase() : '';
+}
+
+async function extractTextFromFile(file) {
+  const ext = (file.name.split('.').pop() || '').toLowerCase();
+  if (ext === 'txt') return await file.text();
+  const ab = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({ data: ab }).promise;
+  let text = '';
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const page = await pdf.getPage(i);
+    const content = await page.getTextContent();
+    text += content.items.map(item => item.str).join(' ') + '\n';
+  }
+  return text.trim();
+}
+
+// --- Criteria sets (backend integration) ---
+async function loadCriteriaSets() {
+  const sel = document.getElementById('criteria-set-select');
+  try {
+    const res = await apiGet(`/criteria-sets?job_id=${evalJobId}`);
+    const sets = res.data || [];
+    sel.innerHTML = '<option value="">-- Use custom criteria --</option>';
+    for (const s of sets) {
+      sel.innerHTML += `<option value="${s.id}" data-text="${esc(s.criteria_text)}" data-sk="${s.skills_weight}" data-ex="${s.experience_weight}" data-ed="${s.education_weight}">${esc(s.name)}</option>`;
+    }
+  } catch (err) {
+    // Criteria sets endpoint may not exist yet — silently ignore
+  }
+}
+
+function applyCriteriaSet() {
+  const sel = document.getElementById('criteria-set-select');
+  const opt = sel.options[sel.selectedIndex];
+  if (!opt || !opt.value) return;
+  document.getElementById('criteria-text').value = opt.dataset.text || '';
+  document.getElementById('w-skills').value = opt.dataset.sk || 40;
+  document.getElementById('w-experience').value = opt.dataset.ex || 35;
+  document.getElementById('w-education').value = opt.dataset.ed || 25;
+  updateWeights();
+}
+
+async function saveCriteriaSet(name) {
+  try {
+    await apiPost('/criteria-sets', {
+      name: name,
+      job_opening_id: evalJobId,
+      criteria_text: evalCriteria.text,
+      skills_weight: evalCriteria.weights.skills,
+      experience_weight: evalCriteria.weights.experience,
+      education_weight: evalCriteria.weights.education
+    });
+    toast('Criteria set saved!', 'success');
+    // Refresh job state so the badge panel + stepper reflect that criteria now exist
+    if (evalSelectedJob && evalJobId) {
+      const fresh = await fetchJobState(evalJobId);
+      evalSelectedJob.state = fresh;
+      renderJobStatusPanel(fresh);
+      if (fresh.has_criteria) markStepCompleted(2);
+    }
+  } catch (err) { /* silently ignore if endpoint doesn't exist yet */ }
+}
+
+// ==================== PHASE 1: DASHBOARD ====================
+let dashStatusChart = null;
+
+async function loadDashboard() {
+  try {
+    const [jobsRes, candRes, slRes] = await Promise.all([
+      apiGet('/job-openings'),
+      apiGet('/dashboard-candidates'),
+      apiGet('/dashboard-shortlist')
+    ]);
+    const allJobs = jobsRes.data || [];
+
+    // Populate job filter dropdown (preserve current selection)
+    const filter = document.getElementById('dash-job-filter');
+    const currentVal = filter.value;
+    filter.innerHTML = '<option value="">All Jobs</option>' +
+      allJobs.map(j => `<option value="${j.id}" ${j.id==currentVal?'selected':''}>${esc(j.job_title)}</option>`).join('');
+    const selectedJobId = filter.value ? parseInt(filter.value) : null;
+
+    // If filtering to a single job, scope candidates & shortlist to it; keep jobs for Active Jobs count
+    const allCandidates = (candRes.data || []).filter(c => c.id);
+    const allShortlist = (slRes.data || []).filter(s => s.id);
+    const candidates = selectedJobId ? allCandidates.filter(c => c.job_opening_id === selectedJobId) : allCandidates;
+    const shortlist = selectedJobId ? allShortlist.filter(s => s.job_opening_id === selectedJobId) : allShortlist;
+    const jobs = selectedJobId ? allJobs.filter(j => j.id === selectedJobId) : allJobs;
+
+    // Top metrics
+    const activeJobs = jobs.filter(j => j.is_active).length;
+    document.getElementById('dash-active-jobs').textContent = selectedJobId ? (activeJobs ? '1' : '0') : activeJobs;
+    document.getElementById('dash-candidates').textContent = candidates.length;
+
+    const withScores = candidates.filter(c => c.overall_score != null);
+    const avgScore = withScores.length ? (withScores.reduce((a, c) => a + parseFloat(c.overall_score), 0) / withScores.length).toFixed(1) : '-';
+    document.getElementById('dash-avg-score').textContent = avgScore;
+
+    const hiredCount = shortlist.filter(s => s.status === 'hired').length;
+    document.getElementById('dash-hired').textContent = hiredCount;
+
+    // Funnel
+    const applied = candidates.length;
+    const evaluated = withScores.length;
+    const shortlisted = shortlist.filter(s => s.status === 'shortlisted').length;
+    const interviewed = shortlist.filter(s => s.status === 'interviewed').length;
+    const rejected = shortlist.filter(s => s.status === 'rejected').length;
+    renderFunnel([
+      { label: 'Applied',     count: applied,     color: '#3b82f6' },
+      { label: 'Evaluated',   count: evaluated,   color: '#8b5cf6' },
+      { label: 'Shortlisted', count: shortlisted, color: '#06b6d4' },
+      { label: 'Interviewed', count: interviewed, color: '#f59e0b' },
+      { label: 'Hired',       count: hiredCount,  color: '#16a34a' },
+      { label: 'Rejected',    count: rejected,    color: '#dc2626' }
+    ], applied);
+
+    // Status pie chart
+    renderStatusChart({ shortlisted, interviewed, hired: hiredCount, rejected });
+
+    // Top jobs table
+    const jobCounts = {};
+    for (const c of candidates) jobCounts[c.job_opening_id] = (jobCounts[c.job_opening_id] || 0) + 1;
+    const topJobs = jobs
+      .map(j => ({ ...j, candidateCount: jobCounts[j.id] || 0 }))
+      .sort((a, b) => b.candidateCount - a.candidateCount)
+      .slice(0, 8);
+    renderDashJobsTable(topJobs);
+
+    // Activity feed — derive from candidates submitted_at + shortlist updated_at
+    const activity = [
+      ...candidates.map(c => ({ type: 'applied', at: c.submitted_at, text: `${c.candidate_name} applied` })),
+      ...shortlist.map(s => ({ type: s.status, at: s.updated_at, text: `${s.candidate_name} &rarr; <strong>${s.status}</strong>` }))
+    ].filter(a => a.at).sort((a, b) => new Date(b.at) - new Date(a.at)).slice(0, 10);
+    renderActivity(activity);
+  } catch (err) {
+    document.getElementById('dash-jobs-table').innerHTML = `<div class="empty-state" style="color:var(--danger)">Failed to load dashboard.<br><small>${err.message}</small></div>`;
+  }
+}
+
+function renderFunnel(stages, max) {
+  const el = document.getElementById('dash-funnel');
+  let html = '';
+  for (const s of stages) {
+    const pct = max > 0 ? (s.count / max) * 100 : 0;
+    html += `<div style="margin-bottom:10px;">
+      <div style="display:flex;justify-content:space-between;margin-bottom:3px;font-size:13px;">
+        <span style="font-weight:600;color:var(--gray-700);">${s.label}</span>
+        <span style="font-weight:700;color:${s.color};">${s.count}</span>
+      </div>
+      <div class="progress-bar"><div class="progress-fill" style="width:${pct}%;background:${s.color};"></div></div>
+    </div>`;
+  }
+  el.innerHTML = html;
+}
+
+function renderStatusChart(data) {
+  const ctx = document.getElementById('dash-status-chart');
+  if (!ctx || typeof Chart === 'undefined') return;
+  const total = Object.values(data).reduce((a, b) => a + b, 0);
+  if (total === 0) {
+    ctx.parentElement.innerHTML = '<h3 style="font-size:14px;font-weight:700;margin-bottom:12px;">Candidates by Status</h3><div class="empty-state" style="padding:40px 0;"><p>No candidates on the shortlist yet.</p></div>';
+    return;
+  }
+  if (dashStatusChart) dashStatusChart.destroy();
+  dashStatusChart = new Chart(ctx, {
+    type: 'doughnut',
+    data: {
+      labels: ['Shortlisted', 'Interviewed', 'Hired', 'Rejected'],
+      datasets: [{
+        data: [data.shortlisted, data.interviewed, data.hired, data.rejected],
+        backgroundColor: ['#06b6d4', '#f59e0b', '#16a34a', '#dc2626'],
+        borderWidth: 0
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { position: 'bottom', labels: { font: { size: 12 }, padding: 10 } } },
+      cutout: '65%'
+    }
+  });
+}
+
+function renderDashJobsTable(jobs) {
+  const el = document.getElementById('dash-jobs-table');
+  if (jobs.length === 0) { el.innerHTML = '<div class="empty-state"><p>No jobs yet.</p></div>'; return; }
+  let html = '<table><thead><tr><th>Job</th><th>Dept</th><th>Candidates</th><th>Status</th></tr></thead><tbody>';
+  for (const j of jobs) {
+    html += `<tr>
+      <td><strong style="cursor:pointer;color:var(--primary);" onclick="switchPage('jobs');setTimeout(()=>viewJob(${j.id}),100)">${esc(j.job_title)}</strong></td>
+      <td style="color:var(--gray-500);font-size:13px;">${esc(j.department || '—')}</td>
+      <td><strong>${j.candidateCount}</strong></td>
+      <td><span class="badge ${j.is_active ? 'badge-active' : 'badge-inactive'}">${j.is_active ? 'Active' : 'Inactive'}</span></td>
+    </tr>`;
+  }
+  html += '</tbody></table>';
+  el.innerHTML = html;
+}
+
+function renderActivity(items) {
+  const el = document.getElementById('dash-activity');
+  if (items.length === 0) { el.innerHTML = '<p style="color:var(--gray-400);padding:20px;text-align:center;">No activity yet.</p>'; return; }
+  const now = Date.now();
+  const rel = (d) => {
+    const s = Math.floor((now - new Date(d)) / 1000);
+    if (s < 60) return 'just now';
+    if (s < 3600) return Math.floor(s/60) + 'm ago';
+    if (s < 86400) return Math.floor(s/3600) + 'h ago';
+    return Math.floor(s/86400) + 'd ago';
+  };
+  const colors = { applied: '#3b82f6', shortlisted: '#06b6d4', interviewed: '#f59e0b', hired: '#16a34a', rejected: '#dc2626' };
+  let html = '';
+  for (const a of items) {
+    html += `<div style="display:flex;gap:10px;padding:8px 0;border-bottom:1px solid var(--gray-100);font-size:13px;">
+      <div style="width:8px;height:8px;border-radius:50%;background:${colors[a.type] || '#999'};margin-top:6px;flex-shrink:0;"></div>
+      <div style="flex:1;">
+        <div>${a.text}</div>
+        <div style="color:var(--gray-400);font-size:12px;">${rel(a.at)}</div>
+      </div>
+    </div>`;
+  }
+  el.innerHTML = html;
+}
+
+// ==================== EMAILS PAGE ====================
+let emailData = [];
+let emailStatusFilter = 'all';
+
+async function initEmailsPage() {
+  await loadJobsForEmailFilter();
+  await checkSmtpStatus();
+}
+
+async function loadJobsForEmailFilter() {
+  const sel = document.getElementById('email-job-filter');
+  const cur = sel.value;
+  try {
+    const res = await apiGet('/job-openings');
+    const jobs = res.data || [];
+    sel.innerHTML = '<option value="">-- Select a job --</option>';
+    for (const j of jobs) sel.innerHTML += `<option value="${j.id}" ${j.id==cur?'selected':''}>${esc(j.job_title)}</option>`;
+    if (cur) loadEmails();
+  } catch (err) { /* ignore */ }
+}
+
+function setEmailStatusFilter(f) {
+  emailStatusFilter = f;
+  document.querySelectorAll('#page-emails .filter-tab').forEach(t => t.classList.remove('active'));
+  document.querySelector(`#page-emails .filter-tab[onclick*="${f}"]`).classList.add('active');
+  renderEmails();
+}
+
+async function loadEmails() {
+  const jobId = document.getElementById('email-job-filter').value;
+  const el = document.getElementById('emails-table');
+  if (!jobId) { el.innerHTML = '<div class="empty-state"><p>Select a job opening to view email history.</p></div>'; updateEmailStats([]); return; }
+  el.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+  try {
+    const res = await apiGet(`/email-history?job_id=${jobId}`);
+    emailData = (res.data || []).filter(e => e.id);
+    updateEmailStats(emailData);
+    renderEmails();
+  } catch (err) {
+    el.innerHTML = `<div class="empty-state" style="color:var(--danger)">Failed to load emails.<br><small>${err.message}</small></div>`;
+  }
+}
+
+function updateEmailStats(data) {
+  document.getElementById('email-stat-total').textContent = data.length || '-';
+  document.getElementById('email-stat-sent').textContent = data.filter(e => e.status === 'sent').length || '-';
+  document.getElementById('email-stat-failed').textContent = data.filter(e => e.status === 'failed').length || '-';
+  const oneWeek = Date.now() - 7 * 86400000;
+  document.getElementById('email-stat-week').textContent = data.filter(e => new Date(e.sent_at).getTime() > oneWeek).length || '-';
+}
+
+function renderEmails() {
+  const el = document.getElementById('emails-table');
+  let items = emailData;
+  if (emailStatusFilter !== 'all') items = items.filter(e => e.status === emailStatusFilter);
+
+  if (items.length === 0) { el.innerHTML = '<div class="empty-state"><p>No emails match the current filter.</p></div>'; return; }
+
+  const statusBadge = (s) => {
+    const cls = s === 'sent' ? 'badge-hired' : s === 'failed' ? 'badge-rejected' : 'badge-draft';
+    return `<span class="badge ${cls}">${s}</span>`;
+  };
+  const typeBadge = (t) => `<span class="badge badge-shortlisted">${t.replace('_', ' ')}</span>`;
+
+  let html = '<table><thead><tr><th>Date</th><th>Candidate</th><th>Type</th><th>Recipient</th><th>Subject</th><th>Status</th></tr></thead><tbody>';
+  for (const e of items) {
+    const titleAttr = e.error_message ? `title="${esc(e.error_message)}"` : '';
+    html += `<tr ${titleAttr} style="${e.status==='failed'?'background:#fef2f2;':''}">
+      <td style="font-size:13px;color:var(--gray-500);">${new Date(e.sent_at).toLocaleDateString()} ${new Date(e.sent_at).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}</td>
+      <td><strong>${esc(e.candidate_name || '—')}</strong></td>
+      <td>${typeBadge(e.email_type)}</td>
+      <td style="font-size:13px;">${esc(e.recipient_email)}</td>
+      <td style="font-size:13px;color:var(--gray-700);max-width:280px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(e.subject)}</td>
+      <td>${statusBadge(e.status)}</td>
+    </tr>`;
+  }
+  html += '</tbody></table>';
+  el.innerHTML = html;
+}
+
+async function checkSmtpStatus() {
+  // Send a test lookup — if last email had status=sent, SMTP is working; if all failed, it's not configured.
+  try {
+    const res = await fetch(`${API}/email-history?job_id=0`);
+    // If any recent emails have sent status, SMTP works
+    const recent = emailData.slice(0, 10);
+    const icon = document.getElementById('smtp-status-icon');
+    const text = document.getElementById('smtp-status-text');
+    const hint = document.getElementById('smtp-status-hint');
+
+    if (recent.length === 0) {
+      icon.textContent = '\u2709';
+      text.textContent = 'SMTP status unknown';
+      hint.textContent = 'Send an email to check. Use the setup guide if rejections show as "failed".';
+      return;
+    }
+    const sentCount = recent.filter(e => e.status === 'sent').length;
+    const failedCount = recent.filter(e => e.status === 'failed').length;
+    if (sentCount > 0) {
+      icon.textContent = '\u2705';
+      text.textContent = 'SMTP is working';
+      hint.textContent = `${sentCount} of last ${recent.length} emails delivered successfully.`;
+    } else if (failedCount > 0) {
+      icon.textContent = '\u26A0';
+      text.textContent = 'SMTP not configured — emails are logging only';
+      hint.textContent = 'Configure the "SMTP" credential in n8n to actually send emails.';
+    }
+  } catch (err) { /* ignore */ }
+}
+
+function showSmtpHelp() { document.getElementById('smtp-help-modal').classList.add('active'); }
+
+// Init
+loadDashboard();
+setupDragDrop();
+</script>
+</body>
+</html>

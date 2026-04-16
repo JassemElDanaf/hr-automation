@@ -1,0 +1,249 @@
+{
+  "id": "4",
+  "name": "Phase 5 - Emails",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "send-email",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "wh-send-email",
+      "name": "Send - Webhook - Send Email",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [250, 300],
+      "webhookId": "send-email"
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $input.first().json.body || $input.first().json || {};\nconst candidateId = parseInt(body.candidate_id);\nconst jobId = parseInt(body.job_opening_id);\nconst emailType = (body.email_type || '').trim().toLowerCase();\nconst recipientEmail = (body.recipient_email || '').trim();\nconst candidateName = (body.candidate_name || '').trim();\nconst jobTitle = (body.job_title || '').trim();\n\nconst validTypes = ['rejection', 'interview_invite', 'offer', 'custom'];\n\nif (!candidateId || isNaN(candidateId)) {\n  return [{ json: { error: true, message: 'Valid candidate_id required', status: 400 } }];\n}\nif (!jobId || isNaN(jobId)) {\n  return [{ json: { error: true, message: 'Valid job_opening_id required', status: 400 } }];\n}\nif (!validTypes.includes(emailType)) {\n  return [{ json: { error: true, message: 'email_type must be: ' + validTypes.join(', '), status: 400 } }];\n}\nif (!recipientEmail || !recipientEmail.includes('@')) {\n  return [{ json: { error: true, message: 'Valid recipient_email required', status: 400 } }];\n}\nif (emailType !== 'custom' && !candidateName) {\n  return [{ json: { error: true, message: 'candidate_name required for ' + emailType + ' emails', status: 400 } }];\n}\nif (emailType !== 'custom' && !jobTitle) {\n  return [{ json: { error: true, message: 'job_title required for ' + emailType + ' emails', status: 400 } }];\n}\n\nlet subject = '';\nlet emailBody = '';\n\nif (emailType === 'rejection') {\n  subject = 'Application Update - ' + jobTitle;\n  emailBody = 'Dear ' + candidateName + ',\\n\\nThank you for your interest in the ' + jobTitle + ' position and for taking the time to apply.\\n\\nAfter careful review of all applications, we regret to inform you that we have decided to move forward with other candidates whose qualifications more closely match our current requirements.\\n\\nWe appreciate your interest in our organization and encourage you to apply for future openings that match your skills and experience.\\n\\nWe wish you all the best in your job search and future endeavors.\\n\\nBest regards,\\nHR Department';\n} else if (emailType === 'interview_invite') {\n  subject = 'Interview Invitation - ' + jobTitle;\n  emailBody = 'Dear ' + candidateName + ',\\n\\nWe are pleased to inform you that after reviewing your application for the ' + jobTitle + ' position, we would like to invite you for an interview.\\n\\nPlease reply to this email with your availability for the coming week, and we will schedule a convenient time.\\n\\nWe look forward to speaking with you.\\n\\nBest regards,\\nHR Department';\n} else if (emailType === 'offer') {\n  subject = 'Job Offer - ' + jobTitle;\n  emailBody = 'Dear ' + candidateName + ',\\n\\nWe are delighted to extend an offer for the ' + jobTitle + ' position.\\n\\nPlease find the details of the offer attached. We kindly ask you to review and respond within 5 business days.\\n\\nCongratulations, and we look forward to welcoming you to our team!\\n\\nBest regards,\\nHR Department';\n} else {\n  subject = body.custom_subject || 'Regarding Your Application - ' + jobTitle;\n  emailBody = body.custom_body || '';\n}\n\n// Allow overrides\nif (body.custom_subject) subject = body.custom_subject;\nif (body.custom_body) emailBody = body.custom_body;\n\nreturn [{ json: { error: false, candidate_id: candidateId, job_opening_id: jobId, email_type: emailType, recipient_email: recipientEmail, candidate_name: candidateName, job_title: jobTitle, subject: subject, body: emailBody } }];"
+      },
+      "id": "validate-email",
+      "name": "Send - Validate & Build Email",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [480, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.error }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "email-valid-check",
+      "name": "Send - Valid?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [700, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ success: false, error: $json.message }) }}",
+        "options": {
+          "responseCode": "={{ $json.status || 400 }}"
+        }
+      },
+      "id": "email-error-resp",
+      "name": "Send - Error Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [920, 180]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://127.0.0.1:8901/",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ to: $json.recipient_email, subject: $json.subject, body: $json.body }) }}",
+        "options": {
+          "timeout": 25000
+        }
+      },
+      "id": "send-smtp",
+      "name": "Send - Via SMTP Bridge",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [920, 420],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO email_log (candidate_id, job_opening_id, email_type, recipient_email, subject, body, status, error_message) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *",
+        "options": {
+          "queryReplacement": "={{ [$('Send - Validate & Build Email').item.json.candidate_id, $('Send - Validate & Build Email').item.json.job_opening_id, $('Send - Validate & Build Email').item.json.email_type, $('Send - Validate & Build Email').item.json.recipient_email, $('Send - Validate & Build Email').item.json.subject, $('Send - Validate & Build Email').item.json.body, ($json.status === 'sent' ? 'sent' : ($json.status === 'logged' ? 'logged' : 'failed')), ($json.error || $json.reason || null)] }}"
+        }
+      },
+      "id": "log-email",
+      "name": "Send - Log Result",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [1140, 380],
+      "alwaysOutputData": true,
+      "credentials": {
+        "postgres": {
+          "id": "1",
+          "name": "HR PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO email_log (candidate_id, job_opening_id, email_type, recipient_email, subject, body, status, error_message) VALUES ($1, $2, $3, $4, $5, $6, 'failed', $7) RETURNING *",
+        "options": {
+          "queryReplacement": "={{ [$('Send - Validate & Build Email').item.json.candidate_id, $('Send - Validate & Build Email').item.json.job_opening_id, $('Send - Validate & Build Email').item.json.email_type, $('Send - Validate & Build Email').item.json.recipient_email, $('Send - Validate & Build Email').item.json.subject, $('Send - Validate & Build Email').item.json.body, (($json.error && ($json.error.message || $json.error.description)) || 'SMTP bridge unreachable at http://127.0.0.1:8901/ — is scripts/smtp_server.py running?')] }}"
+        }
+      },
+      "id": "log-bridge-down",
+      "name": "Send - Log Bridge Down",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [1140, 560],
+      "alwaysOutputData": true,
+      "credentials": {
+        "postgres": {
+          "id": "1",
+          "name": "HR PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ success: ($json.status === 'sent'), status: ($json.status || 'failed'), message: ($json.status === 'sent' ? 'Email sent and logged' : ($json.status === 'logged' ? 'Logged — SMTP not configured (set SMTP_HOST etc. then restart start.sh)' : 'Send failed — ' + ($json.error_message || $json.error || 'see email_log'))), data: $json }) }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "email-success-resp",
+      "name": "Send - Success Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1360, 460]
+    },
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "email-history",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "wh-email-history",
+      "name": "History - Webhook - Email History",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [250, 800],
+      "webhookId": "email-history"
+    },
+    {
+      "parameters": {
+        "jsCode": "const query = $input.first().json.query || {};\nconst candidateId = parseInt(query.candidate_id);\nconst jobId = parseInt(query.job_id);\nlet sql = 'SELECT el.*, c.candidate_name FROM email_log el INNER JOIN candidates c ON c.id = el.candidate_id WHERE 1=1';\nif (candidateId && !isNaN(candidateId)) sql += ' AND el.candidate_id = ' + candidateId;\nif (jobId && !isNaN(jobId)) sql += ' AND el.job_opening_id = ' + jobId;\nsql += ' ORDER BY el.sent_at DESC';\nreturn [{ json: { error: false, sql: sql } }];"
+      },
+      "id": "build-email-query",
+      "name": "History - Build Query",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [480, 800]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "={{ $json.sql }}",
+        "options": {}
+      },
+      "id": "fetch-email-hist",
+      "name": "History - Fetch Email History",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [700, 800],
+      "alwaysOutputData": true,
+      "credentials": {
+        "postgres": {
+          "id": "1",
+          "name": "HR PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ success: true, data: $input.all().map(i => i.json).filter(i => i.id), count: $input.all().map(i => i.json).filter(i => i.id).length }) }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "email-hist-resp",
+      "name": "History - History Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [920, 800]
+    }
+  ],
+  "connections": {
+    "Send - Webhook - Send Email": {
+      "main": [[{ "node": "Send - Validate & Build Email", "type": "main", "index": 0 }]]
+    },
+    "Send - Validate & Build Email": {
+      "main": [[{ "node": "Send - Valid?", "type": "main", "index": 0 }]]
+    },
+    "Send - Valid?": {
+      "main": [
+        [{ "node": "Send - Error Response", "type": "main", "index": 0 }],
+        [{ "node": "Send - Via SMTP Bridge", "type": "main", "index": 0 }]
+      ]
+    },
+    "Send - Via SMTP Bridge": {
+      "main": [
+        [{ "node": "Send - Log Result", "type": "main", "index": 0 }],
+        [{ "node": "Send - Log Bridge Down", "type": "main", "index": 0 }]
+      ]
+    },
+    "Send - Log Result": {
+      "main": [[{ "node": "Send - Success Response", "type": "main", "index": 0 }]]
+    },
+    "Send - Log Bridge Down": {
+      "main": [[{ "node": "Send - Success Response", "type": "main", "index": 0 }]]
+    },
+    "History - Webhook - Email History": {
+      "main": [[{ "node": "History - Build Query", "type": "main", "index": 0 }]]
+    },
+    "History - Build Query": {
+      "main": [[{ "node": "History - Fetch Email History", "type": "main", "index": 0 }]]
+    },
+    "History - Fetch Email History": {
+      "main": [[{ "node": "History - History Response", "type": "main", "index": 0 }]]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    { "name": "Phase 5" },
+    { "name": "Emails" }
+  ],
+  "triggerCount": 2
+}
