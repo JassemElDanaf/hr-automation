@@ -106,6 +106,8 @@ These rules are **load-bearing**. Breaking them has caused real bugs.
 ### Emails (Phase 5)
 9. **SMTP status must be real, not "unknown".** Four states: `not_configured`, `configured_not_tested`, `healthy`, `failing`. The Emails page surfaces the live status with a colored badge.
 10. **Every send attempt is logged** — `email_log` row with candidate, job, recipient, subject, timestamp, status, and error message if any.
+11. **Every candidate-facing email is editable before send.** Subject and body are real `<input>` / `<textarea>` fields, never read-only preview. Default templates prefill on open; a "Reset to default template" button restores them. The backend uses the user-edited subject/body verbatim (via `custom_subject` / `custom_body`) — it never silently regenerates or overwrites user input. This rule applies to **every** email flow: rejection, shortlist notification, interview invitation, job offer, and any future status-change email. All flows route through one shared `openEmailComposer({ candidate, job, emailType, defaultSubject, defaultBody, sendLabel, showSendToggle, onSend })` helper in `frontend/index.html` — don't build per-flow modals.
+12. **Email composer validation before send:** subject non-empty, body non-empty, recipient email contains `@`. The "Reject Candidate" flow is the only one that allows completing the action **without** sending an email (via the "Also send email" toggle); all other flows require a valid recipient.
 
 ### Shortlist (Phase 4)
 11. **Reconsider / status changes refresh only the affected card**, not the whole page. Status transitions are patched in place via `updateShortlistStatus(id, status)`.
@@ -187,6 +189,7 @@ Major bugs + how they were fixed. Use this to avoid re-introducing them.
 | 2026-04 | "No criteria" shown despite evaluations existing | `has_criteria` only checks `criteria_sets` table, but evals can run with ad-hoc text | Added "Criteria used (not saved)" yellow pill for the `has_evaluations && !has_criteria` case |
 | 2026-03 | n8n webhooks didn't register after import | `activeVersionId` was not set in `workflow_entity` | `UPDATE workflow_entity SET active=1, activeVersionId=versionId WHERE id='N'` in sqlite after every import |
 | 2026-04 | Results table overflowed horizontally — Actions column clipped behind scrollbar | Table mixed summary + detail columns (Skills / Experience / Education badges) | Simplified to 5 summary columns (Candidate / Email / Submitted / Overall / Actions). Per-dimension breakdown moved exclusively to the Details modal. Removed `.table-scroll` wrapper since the narrower table fits natively |
+| 2026-04 | Candidate emails not editable before send — subject locked, body preview-only | Reject modal used `<span>`/`<pre>` read-only elements; shortlist flow passed `custom_*` only when `email_type === 'custom'` | Replaced modal with editable `<input>` + `<textarea>`. All flows now route through a shared `openEmailComposer()` helper. Every send passes `custom_subject`/`custom_body` verbatim to `/send-email`. Added validation (non-empty subject/body, valid email) and a "Reset to default template" button |
 
 ---
 

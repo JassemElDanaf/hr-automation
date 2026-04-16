@@ -70,6 +70,22 @@ Rendered by `renderEvalResults(candidates, results)` (table) and `viewEvalDetail
 
 The same pattern should be used whenever a dataset has both a quick-scan summary and detailed per-row dimensions: keep the table minimal, put decomposition in a modal.
 
+**Shared email composer.**
+Every candidate-facing email flow (Reject, Shortlist notification, Interview invitation, Job offer, plus any future status-change email) opens the **same** `#email-modal` via a single helper `openEmailComposer(cfg)`. Subject is a real `<input>`, body is a real `<textarea>` — both pre-filled with a flow-specific template and fully editable. The caller supplies:
+
+| Field | Purpose |
+|-------|---------|
+| `title`, `description` | Modal heading + one-line explainer |
+| `candidate {id, name, email}` | Displayed in the "To" / "Candidate" row |
+| `job {id, title}` | Used by `onSend` when building the send payload |
+| `emailType` | One of `rejection` / `interview_invite` / `offer` / `custom` — mapped to `email_log.email_type` |
+| `defaultSubject`, `defaultBody` | Prefilled into the editable fields; "Reset to default template" restores them |
+| `sendLabel`, `sendClass` | Customizes the primary action button |
+| `showSendToggle` | `true` for Reject (email is optional — candidate may be rejected silently). `false` for invite/offer (reaching the modal means the user committed to sending) |
+| `onSend({ subject, body, sendEmail })` | Async callback with the **user-edited** values. The helper never regenerates or overrides them |
+
+Validation before `onSend` fires: subject non-empty, body non-empty, recipient contains `@`. All send paths call `sendEmailRequest(...)`, which POSTs to `/webhook/send-email` with `custom_subject` + `custom_body` — the backend validator (n8n Code node) uses those verbatim for every `email_type`.
+
 ### n8n workflows — `workflows/*`
 Each JSON file is one logical workflow containing multiple webhooks. Tags identify the phase.
 

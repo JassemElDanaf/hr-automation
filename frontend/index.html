@@ -1003,36 +1003,44 @@
   </div>
 </div>
 
-<!-- Reject / Email Confirmation Modal -->
+<!-- Universal Email Composer Modal -->
+<!-- Used by every candidate-facing email flow (Reject, Shortlist notify, Interview invite, Offer).
+     Subject is a real <input>, body is a real <textarea> — both editable. Default templates
+     prefill on open; "Reset to template" restores them. Per-flow behavior (title, send label,
+     onSend callback) is passed through openEmailComposer(). -->
 <div class="modal-overlay" id="email-modal">
-  <div class="modal" style="max-width:520px;">
+  <div class="modal" style="max-width:640px;">
     <div class="modal-header">
-      <h3 id="email-modal-title">Reject Candidate</h3>
+      <h3 id="email-modal-title">Compose Email</h3>
       <button class="modal-close" onclick="closeModal('email-modal')">&times;</button>
     </div>
     <div class="modal-body" style="padding:20px;">
-      <p style="margin-bottom:12px;color:var(--gray-600);" id="email-modal-desc">Are you sure you want to reject this candidate?</p>
-      <div style="background:var(--gray-50);border:1px solid var(--gray-200);border-radius:var(--radius);padding:14px;margin-bottom:12px;">
-        <div style="margin-bottom:6px;"><strong>Candidate:</strong> <span id="email-modal-name"></span></div>
-        <div id="email-modal-to-row"><strong>Email:</strong> <span id="email-modal-to"></span></div>
+      <p style="margin-bottom:14px;color:var(--gray-600);" id="email-modal-desc"></p>
+      <div style="background:var(--gray-50);border:1px solid var(--gray-200);border-radius:var(--radius);padding:12px;margin-bottom:14px;font-size:13px;">
+        <div style="margin-bottom:4px;"><strong>To:</strong> <span id="email-modal-to"></span></div>
+        <div><strong>Candidate:</strong> <span id="email-modal-name"></span></div>
       </div>
-      <label style="display:flex;align-items:center;gap:8px;margin-bottom:8px;cursor:pointer;" id="email-send-check-label">
-        <input type="checkbox" id="email-send-check" checked onchange="toggleEmailPreview()">
-        <span style="font-weight:600;font-size:14px;">Also send rejection email</span>
+      <label style="display:flex;align-items:center;gap:8px;margin-bottom:14px;cursor:pointer;" id="email-send-check-label">
+        <input type="checkbox" id="email-send-check" checked onchange="toggleEmailEditor()">
+        <span style="font-weight:600;font-size:14px;">Also send email</span>
       </label>
-      <div id="email-preview-section">
-        <div style="background:var(--gray-50);border:1px solid var(--gray-200);border-radius:var(--radius);padding:14px;margin-bottom:8px;">
-          <div><strong>Subject:</strong> <span id="email-modal-subject"></span></div>
+      <div id="email-no-email-warn" style="display:none;background:#fef2f2;border:1px solid #fecaca;color:#991b1b;padding:10px 12px;border-radius:var(--radius);font-size:13px;margin-bottom:12px;">
+        No email on file for this candidate. Email cannot be sent.
+      </div>
+      <div id="email-editor-section">
+        <label style="display:block;font-size:12px;font-weight:700;color:var(--gray-700);margin-bottom:4px;">Subject</label>
+        <input type="text" id="email-modal-subject" placeholder="Subject line" style="width:100%;margin-bottom:12px;">
+        <label style="display:block;font-size:12px;font-weight:700;color:var(--gray-700);margin-bottom:4px;">Body</label>
+        <textarea id="email-modal-body" placeholder="Email body" style="width:100%;min-height:220px;font-size:13px;line-height:1.6;"></textarea>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;gap:10px;flex-wrap:wrap;">
+          <button class="btn btn-sm btn-secondary" id="email-reset-btn" type="button" onclick="resetEmailTemplate()">&#x21BA; Reset to default template</button>
+          <span style="font-size:12px;color:var(--gray-500);">Tip: personalize before sending.</span>
         </div>
-        <details style="margin-bottom:4px;">
-          <summary style="cursor:pointer;color:var(--primary);font-weight:600;font-size:13px;">Preview email body</summary>
-          <pre id="email-modal-body" style="white-space:pre-wrap;font-size:13px;background:white;border:1px solid var(--gray-200);border-radius:var(--radius);padding:12px;margin-top:8px;max-height:200px;overflow-y:auto;"></pre>
-        </details>
       </div>
     </div>
     <div class="modal-footer" style="display:flex;gap:8px;justify-content:flex-end;">
       <button class="btn btn-secondary" onclick="closeModal('email-modal')">Cancel</button>
-      <button class="btn btn-danger" id="email-modal-send" onclick="confirmRejectCandidate()">Reject Candidate</button>
+      <button class="btn btn-primary" id="email-modal-send">Send</button>
     </div>
   </div>
 </div>
@@ -2514,28 +2522,209 @@ async function updateShortlistStatus(id, status) {
 }
 
 // ==================== PHASE 5: EMAILS ====================
+//
+// Universal email composer. Every candidate-facing email flow (Reject, Shortlist notify,
+// Interview invite, Offer, and any future flow) goes through openEmailComposer(). The
+// subject and body are ALWAYS editable; default templates prefill on open; "Reset to
+// default template" restores them. The caller owns the send logic via an onSend callback
+// which receives the edited values verbatim — no silent regeneration or overwrite.
 
-let pendingReject = null;
-let pendingShortlistEmail = null;
+let currentEmailContext = null;
 
-// Send a shortlist-related notification (no status change) — used from Shortlist tab.
-// emailType: 'shortlisted' (custom), 'interview_invite', or 'offer'.
+/**
+ * Open the shared email composer.
+ * @param {Object} cfg
+ * @param {string} cfg.title            Modal title
+ * @param {string} cfg.description      Short explanation shown at top of body
+ * @param {{id:number,name:string,email:string}} cfg.candidate
+ * @param {{id:number,title:string}}   cfg.job
+ * @param {string} cfg.emailType        'rejection' | 'interview_invite' | 'offer' | 'custom'
+ * @param {string} cfg.defaultSubject   Template subject (pre-filled, user-editable)
+ * @param {string} cfg.defaultBody      Template body (pre-filled, user-editable)
+ * @param {string} [cfg.sendLabel]      Send button label (default 'Send Email')
+ * @param {string} [cfg.sendClass]      Send button btn-* class (default 'btn-primary')
+ * @param {boolean} [cfg.showSendToggle]  If true, show "Also send email" checkbox
+ *                                        (for flows where email is optional, e.g. Reject).
+ *                                        If false/omitted, the modal always sends.
+ * @param {(payload:{subject:string, body:string, sendEmail:boolean}) => Promise<void>} cfg.onSend
+ *                                      Called when user confirms. Receives the user-edited
+ *                                      subject/body and whether the email should actually go out.
+ */
+function openEmailComposer(cfg) {
+  currentEmailContext = cfg;
+  const hasEmail = cfg.candidate.email && cfg.candidate.email.includes('@');
+  const showToggle = cfg.showSendToggle === true;
+
+  document.getElementById('email-modal-title').textContent = cfg.title || 'Compose Email';
+  document.getElementById('email-modal-desc').textContent = cfg.description || '';
+  document.getElementById('email-modal-name').textContent = cfg.candidate.name || '—';
+  document.getElementById('email-modal-to').textContent = cfg.candidate.email || 'No email on file';
+
+  document.getElementById('email-modal-subject').value = cfg.defaultSubject || '';
+  document.getElementById('email-modal-body').value = cfg.defaultBody || '';
+
+  const toggleLabel = document.getElementById('email-send-check-label');
+  const toggleCheckbox = document.getElementById('email-send-check');
+  if (showToggle && hasEmail) {
+    toggleLabel.style.display = '';
+    toggleCheckbox.checked = true;
+  } else {
+    toggleLabel.style.display = 'none';
+    toggleCheckbox.checked = hasEmail; // hidden => driven by whether email exists
+  }
+
+  document.getElementById('email-no-email-warn').style.display = hasEmail ? 'none' : '';
+  document.getElementById('email-editor-section').style.display = hasEmail ? '' : 'none';
+
+  const sendBtn = document.getElementById('email-modal-send');
+  sendBtn.textContent = cfg.sendLabel || 'Send Email';
+  sendBtn.className = 'btn ' + (cfg.sendClass || 'btn-primary');
+  sendBtn.onclick = handleComposerSend;
+  // Send button disabled only when the flow REQUIRES email but none is available.
+  // Flows with showSendToggle=true (e.g. Reject) can still proceed without sending.
+  sendBtn.disabled = !hasEmail && !showToggle;
+
+  document.getElementById('email-modal').classList.add('active');
+  if (hasEmail) setTimeout(() => document.getElementById('email-modal-body').focus(), 50);
+}
+
+function resetEmailTemplate() {
+  if (!currentEmailContext) return;
+  document.getElementById('email-modal-subject').value = currentEmailContext.defaultSubject || '';
+  document.getElementById('email-modal-body').value = currentEmailContext.defaultBody || '';
+  toast('Reset to default template', 'success');
+}
+
+// Show/hide the editor when the "Also send email" toggle changes (Reject flow only).
+function toggleEmailEditor() {
+  const checked = document.getElementById('email-send-check').checked;
+  const hasEmail = currentEmailContext && currentEmailContext.candidate.email &&
+                   currentEmailContext.candidate.email.includes('@');
+  document.getElementById('email-editor-section').style.display = (checked && hasEmail) ? '' : 'none';
+}
+
+async function handleComposerSend() {
+  if (!currentEmailContext) return;
+  const btn = document.getElementById('email-modal-send');
+  const hasEmail = currentEmailContext.candidate.email && currentEmailContext.candidate.email.includes('@');
+  const showToggle = currentEmailContext.showSendToggle === true;
+  const toggleChecked = document.getElementById('email-send-check').checked;
+
+  // Is this submission actually sending an email?
+  const sendEmail = hasEmail && (showToggle ? toggleChecked : true);
+
+  let subject = '', body = '';
+  if (sendEmail) {
+    subject = document.getElementById('email-modal-subject').value.trim();
+    body = document.getElementById('email-modal-body').value.trim();
+    if (!subject) { toast('Subject cannot be empty', 'error'); return; }
+    if (!body)    { toast('Email body cannot be empty', 'error'); return; }
+    if (!currentEmailContext.candidate.email.includes('@')) {
+      toast('Invalid recipient email', 'error'); return;
+    }
+  }
+
+  const origLabel = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = 'Working...';
+  const ctx = currentEmailContext; // snapshot in case onSend closes the modal
+  try {
+    await ctx.onSend({ subject, body, sendEmail });
+    closeModal('email-modal');
+  } catch (err) {
+    toast('Failed: ' + (err.message || err), 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = origLabel;
+    currentEmailContext = null;
+  }
+}
+
+// Low-level POST /send-email helper. Always passes the user-edited subject/body as
+// custom_subject/custom_body; the backend uses these verbatim for every email type.
+async function sendEmailRequest({ candidateId, jobId, emailType, recipientEmail, candidateName, jobTitle, subject, body }) {
+  const res = await apiPost('/send-email', {
+    candidate_id: candidateId,
+    job_opening_id: jobId,
+    email_type: emailType,
+    recipient_email: recipientEmail,
+    candidate_name: candidateName,
+    job_title: jobTitle,
+    custom_subject: subject,
+    custom_body: body
+  });
+  const status = res.data && res.data.status;
+  if (status === 'sent')        toast('Email sent to ' + recipientEmail, 'success');
+  else if (status === 'logged') toast('Email logged only — SMTP not configured. See Emails > Setup Guide.', 'error');
+  else                          toast('Email attempt complete — check Emails tab for details.', 'error');
+  return res;
+}
+
+// ---- Flow: Reject from CV Evaluation results --------------------------------
+// Rejection updates shortlist status AND (optionally) emails the candidate.
+// Email is optional — user can reject without notifying by unchecking the toggle.
+function rejectCandidate(candidateId, candidateName, email) {
+  const jobTitle = evalSelectedJob ? evalSelectedJob.job_title || 'the position' : 'the position';
+  const defaultSubject = 'Application Update - ' + jobTitle;
+  const defaultBody = `Dear ${candidateName},\n\nThank you for your interest in the ${jobTitle} position and for taking the time to apply.\n\nAfter careful review of all applications, we regret to inform you that we have decided to move forward with other candidates whose qualifications more closely match our current requirements.\n\nWe appreciate your interest in our organization and encourage you to apply for future openings that match your skills and experience.\n\nWe wish you all the best in your job search and future endeavors.\n\nBest regards,\nHR Department`;
+
+  openEmailComposer({
+    title: 'Reject Candidate',
+    description: `Reject ${candidateName}? You can edit the rejection message before sending, or uncheck "Also send email" to reject silently.`,
+    candidate: { id: candidateId, name: candidateName, email: email },
+    job: { id: evalJobId, title: jobTitle },
+    emailType: 'rejection',
+    defaultSubject: defaultSubject,
+    defaultBody: defaultBody,
+    sendLabel: 'Reject Candidate',
+    sendClass: 'btn-danger',
+    showSendToggle: true,
+    onSend: async ({ subject, body, sendEmail }) => {
+      // 1. Always record the rejection in shortlist.
+      const shortlistRes = await apiPost('/add-to-shortlist', {
+        candidate_id: candidateId,
+        job_opening_id: evalJobId,
+        notes: 'Rejected from evaluation results'
+      });
+      if (shortlistRes.data.success) {
+        const entry = shortlistRes.data.data;
+        const entryId = entry.id || (Array.isArray(entry) && entry[0] ? entry[0].id : null);
+        if (entryId) {
+          await apiPost('/update-shortlist-status', { id: entryId, status: 'rejected' });
+        }
+      }
+      // 2. Email only if the user kept the toggle checked and provided valid content.
+      if (sendEmail) {
+        await sendEmailRequest({
+          candidateId, jobId: evalJobId, emailType: 'rejection',
+          recipientEmail: email, candidateName, jobTitle, subject, body
+        });
+      }
+      animateAction(candidateId, 'reject');
+    }
+  });
+}
+
+// ---- Flow: Send shortlist / interview / offer from Shortlist tab -----------
+// Always sends (no toggle) — reaching this modal means the user already chose to email.
 function sendShortlistEmail(candidateId, jobOpeningId, candidateName, email, emailType) {
-  // Look up job title from the shortlist selector
   const jobSel = document.getElementById('shortlist-job-select');
   const jobTitle = (jobSel && jobSel.options[jobSel.selectedIndex])
     ? jobSel.options[jobSel.selectedIndex].text : 'the position';
 
-  let subject, body, sendType;
+  let title, sendType, subject, body;
   if (emailType === 'shortlisted') {
+    title = 'Send Shortlist Notification';
     sendType = 'custom';
     subject = 'You have been shortlisted — ' + jobTitle;
     body = `Dear ${candidateName},\n\nGreat news! After reviewing your application for the ${jobTitle} position, we are pleased to inform you that you have been shortlisted for the next stage of our hiring process.\n\nWe were impressed by your background and would like to move forward with your candidacy. A member of our team will be in touch shortly with next steps.\n\nThank you for your interest in joining our team.\n\nBest regards,\nHR Department`;
   } else if (emailType === 'interview_invite') {
+    title = 'Send Interview Invitation';
     sendType = 'interview_invite';
     subject = 'Interview Invitation - ' + jobTitle;
     body = `Dear ${candidateName},\n\nWe are pleased to inform you that after reviewing your application for the ${jobTitle} position, we would like to invite you for an interview.\n\nPlease reply to this email with your availability for the coming week, and we will schedule a convenient time.\n\nWe look forward to speaking with you.\n\nBest regards,\nHR Department`;
   } else if (emailType === 'offer') {
+    title = 'Send Job Offer';
     sendType = 'offer';
     subject = 'Job Offer - ' + jobTitle;
     body = `Dear ${candidateName},\n\nWe are delighted to extend an offer for the ${jobTitle} position.\n\nPlease find the details of the offer attached. We kindly ask you to review and respond within 5 business days.\n\nCongratulations, and we look forward to welcoming you to our team!\n\nBest regards,\nHR Department`;
@@ -2543,157 +2732,24 @@ function sendShortlistEmail(candidateId, jobOpeningId, candidateName, email, ema
     return;
   }
 
-  pendingShortlistEmail = {
-    candidate_id: candidateId,
-    job_opening_id: jobOpeningId,
-    candidate_name: candidateName,
-    recipient_email: email,
-    job_title: jobTitle,
-    email_type: sendType,
-    subject: subject,
-    body: body
-  };
-
-  // Reuse the reject/email modal but retarget confirm button to shortlist-email handler.
-  document.getElementById('email-modal-title').textContent =
-    emailType === 'shortlisted' ? 'Send Shortlist Notification' :
-    emailType === 'interview_invite' ? 'Send Interview Invitation' : 'Send Job Offer';
-  document.getElementById('email-modal-desc').textContent = `Send this email to ${candidateName}?`;
-  document.getElementById('email-modal-name').textContent = candidateName;
-  document.getElementById('email-modal-to').textContent = email || 'No email on file';
-  document.getElementById('email-modal-subject').textContent = subject;
-  document.getElementById('email-modal-body').textContent = body;
-  document.getElementById('email-send-check-label').style.display = 'none';
-  document.getElementById('email-send-check').checked = true;
-  document.getElementById('email-preview-section').style.display = '';
-  const sendBtn = document.getElementById('email-modal-send');
-  sendBtn.textContent = 'Send Email';
-  sendBtn.className = 'btn btn-success';
-  sendBtn.onclick = confirmSendShortlistEmail;
-  document.getElementById('email-modal').classList.add('active');
-}
-
-async function confirmSendShortlistEmail() {
-  if (!pendingShortlistEmail) return;
-  const btn = document.getElementById('email-modal-send');
-  btn.disabled = true;
-  btn.textContent = 'Sending...';
-  try {
-    const payload = {
-      candidate_id: pendingShortlistEmail.candidate_id,
-      job_opening_id: pendingShortlistEmail.job_opening_id,
-      email_type: pendingShortlistEmail.email_type,
-      recipient_email: pendingShortlistEmail.recipient_email,
-      candidate_name: pendingShortlistEmail.candidate_name,
-      job_title: pendingShortlistEmail.job_title
-    };
-    if (pendingShortlistEmail.email_type === 'custom') {
-      payload.custom_subject = pendingShortlistEmail.subject;
-      payload.custom_body = pendingShortlistEmail.body;
-    }
-    const res = await apiPost('/send-email', payload);
-    const status = res.data && res.data.status;
-    if (status === 'sent') {
-      toast('Email sent to ' + pendingShortlistEmail.recipient_email, 'success');
-    } else if (status === 'logged') {
-      toast('Email logged only — SMTP not configured. See Emails > Setup Guide.', 'error');
-    } else {
-      toast('Email failed — see Emails tab for details.', 'error');
-    }
-    closeModal('email-modal');
-  } catch (err) {
-    toast('Send failed: ' + err.message, 'error');
-  } finally {
-    btn.disabled = false;
-    // Restore default reject-mode handler for the modal
-    btn.onclick = confirmRejectCandidate;
-    pendingShortlistEmail = null;
-  }
-}
-
-function toggleEmailPreview() {
-  const checked = document.getElementById('email-send-check').checked;
-  document.getElementById('email-preview-section').style.display = checked ? '' : 'none';
-}
-
-function rejectCandidate(candidateId, candidateName, email) {
-  const jobTitle = evalSelectedJob ? evalSelectedJob.job_title || 'the position' : 'the position';
-  const subject = 'Application Update - ' + jobTitle;
-  const body = `Dear ${candidateName},\n\nThank you for your interest in the ${jobTitle} position and for taking the time to apply.\n\nAfter careful review of all applications, we regret to inform you that we have decided to move forward with other candidates whose qualifications more closely match our current requirements.\n\nWe appreciate your interest in our organization and encourage you to apply for future openings that match your skills and experience.\n\nWe wish you all the best in your job search and future endeavors.\n\nBest regards,\nHR Department`;
-
-  pendingReject = {
-    candidate_id: candidateId,
-    job_opening_id: evalJobId,
-    candidate_name: candidateName,
-    recipient_email: email,
-    job_title: jobTitle,
-    subject: subject,
-    body: body
-  };
-
-  document.getElementById('email-modal-title').textContent = 'Reject Candidate';
-  document.getElementById('email-modal-desc').textContent = `Are you sure you want to reject ${candidateName}?`;
-  document.getElementById('email-modal-name').textContent = candidateName;
-  document.getElementById('email-modal-to').textContent = email || 'No email on file';
-  document.getElementById('email-modal-subject').textContent = subject;
-  document.getElementById('email-modal-body').textContent = body;
-
-  const hasEmail = email && email.includes('@');
-  document.getElementById('email-send-check-label').style.display = hasEmail ? '' : 'none';
-  document.getElementById('email-send-check').checked = hasEmail;
-  document.getElementById('email-preview-section').style.display = hasEmail ? '' : 'none';
-  const sendBtn = document.getElementById('email-modal-send');
-  sendBtn.textContent = 'Reject Candidate';
-  sendBtn.className = 'btn btn-danger';
-  sendBtn.onclick = confirmRejectCandidate;
-  document.getElementById('email-modal').classList.add('active');
-}
-
-async function confirmRejectCandidate() {
-  if (!pendingReject) return;
-  const btn = document.getElementById('email-modal-send');
-  btn.disabled = true;
-  btn.textContent = 'Rejecting...';
-  try {
-    // 1. Add to shortlist as rejected
-    const shortlistRes = await apiPost('/add-to-shortlist', {
-      candidate_id: pendingReject.candidate_id,
-      job_opening_id: pendingReject.job_opening_id,
-      notes: 'Rejected from evaluation results'
-    });
-    if (shortlistRes.data.success) {
-      // Update status to rejected
-      const entry = shortlistRes.data.data;
-      const entryId = entry.id || (Array.isArray(entry) && entry[0] ? entry[0].id : null);
-      if (entryId) {
-        await apiPost('/update-shortlist-status', { id: entryId, status: 'rejected' });
-      }
-    }
-
-    // 2. Optionally send rejection email
-    const sendEmail = document.getElementById('email-send-check').checked;
-    if (sendEmail && pendingReject.recipient_email) {
-      await apiPost('/send-email', {
-        candidate_id: pendingReject.candidate_id,
-        job_opening_id: pendingReject.job_opening_id,
-        email_type: 'rejection',
-        recipient_email: pendingReject.recipient_email,
-        candidate_name: pendingReject.candidate_name,
-        job_title: pendingReject.job_title
+  openEmailComposer({
+    title,
+    description: `Send this email to ${candidateName}. Edit the subject or body before sending — the template is just a starting point.`,
+    candidate: { id: candidateId, name: candidateName, email: email },
+    job: { id: jobOpeningId, title: jobTitle },
+    emailType: sendType,
+    defaultSubject: subject,
+    defaultBody: body,
+    sendLabel: 'Send Email',
+    sendClass: 'btn-success',
+    showSendToggle: false,
+    onSend: async ({ subject, body }) => {
+      await sendEmailRequest({
+        candidateId, jobId: jobOpeningId, emailType: sendType,
+        recipientEmail: email, candidateName, jobTitle, subject, body
       });
     }
-
-    closeModal('email-modal');
-    // Animate the row
-    animateAction(pendingReject.candidate_id, 'reject');
-
-  } catch (err) {
-    toast('Failed to reject: ' + err.message, 'error');
-  } finally {
-    btn.disabled = false;
-    btn.textContent = 'Reject Candidate';
-    pendingReject = null;
-  }
+  });
 }
 
 function animateAction(candidateId, action) {

@@ -100,6 +100,23 @@ All paths are prefixed with `http://localhost:5678/webhook`.
 | POST | `/send-email` | Send via SMTP sidecar + log |
 | GET | `/email-history?job_id=N` | List email log rows |
 
+**`POST /send-email` request shape** (used by every candidate email flow):
+
+```jsonc
+{
+  "candidate_id": 42,
+  "job_opening_id": 7,
+  "email_type": "rejection",          // or "interview_invite" | "offer" | "custom"
+  "recipient_email": "jane@acme.com",
+  "candidate_name": "Jane Doe",
+  "job_title": "Senior Engineer",
+  "custom_subject": "Application Update - Senior Engineer",   // required — user-edited
+  "custom_body":    "Dear Jane,\n\nThank you for..."           // required — user-edited
+}
+```
+
+The Validate node seeds a default subject/body from `email_type` and then **always** applies `custom_subject` / `custom_body` on top if present. The frontend (`openEmailComposer`) sends them on every call, so the backend defaults are only a safety net for malformed client requests. If you add a new email type, update the `validTypes` list and the default-template branch in `workflows/phase4-email/phase4-email.json` (node: "Send - Validate & Build Email").
+
 ---
 
 ## Import / Export
