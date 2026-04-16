@@ -92,6 +92,9 @@ The only container is PostgreSQL (`hr-postgres`). There is **no `docker-compose.
 
 These rules are **load-bearing**. Breaking them has caused real bugs.
 
+### Cross-tab Job Context
+0. **One selected job, visible everywhere.** CV Evaluation, Shortlist, and Emails all operate on the same `globalSelectedJob`. The header renders a "Current Job: {title} · {department}" badge that reflects it, and every per-tab selector mirrors it. Any selection in one tab propagates to the others instantly — the user never has to re-select a job after switching tabs. Persisted in `localStorage` under `hr_selected_job` so selection survives reloads. See §5a for the full lifecycle.
+
 ### CV Evaluation (Phase 3)
 1. **Existing jobs must be non-linear.** If a job already has state, the stepper lets the user jump between Set Criteria / Upload CVs / Results freely. Don't force them back through Step 1.
 2. **Set Criteria is always reachable once a job is selected.** It's an editable workspace, not a one-time gate. Entering it with empty criteria is valid.
@@ -114,7 +117,37 @@ These rules are **load-bearing**. Breaking them has caused real bugs.
 
 ---
 
-## 5. State Model (CV Evaluation)
+## 5. State Model
+
+### 5a. Global Selected Job (cross-tab context)
+
+Every tab that operates on a single job (CV Evaluation, Shortlist, Emails, and optionally Dashboard) reads from the **same** job selection. This is stored in one place — `globalSelectedJob` — and mirrored into each tab's per-tab selector. A "Current Job" badge in the header always shows the active job so the user never loses context when switching tabs.
+
+**State:**
+```js
+let globalSelectedJob = null;   // { id, job_title, department } or null
+const GLOBAL_JOB_KEY = 'hr_selected_job';   // localStorage key
+```
+
+**Lifecycle rules:**
+1. **Single source of truth.** Any job selection (CV Eval card click, Shortlist dropdown, Email filter, Dashboard filter with a specific job) calls `setGlobalSelectedJob(job)`, which updates the in-memory state, writes to `localStorage`, re-renders the header badge, and mirrors the value into every other tab's selector via `syncSelectorsToGlobal()`.
+2. **Persistence.** `loadGlobalSelectedJob()` runs once at init (before `loadDashboard`) to restore the last-selected job from `localStorage` so selection survives reloads.
+3. **Per-tab population.** `loadJobsForShortlist()`, `loadJobsForEmailFilter()`, and the Dashboard's filter read `select.value || globalSelectedJob.id` when rebuilding options — so the first visit to any tab preselects the global job and immediately loads its data.
+4. **CV Evaluation entry.** On the Select Job step, if no card is selected yet and a `globalSelectedJob` exists, `loadJobsForEval()` auto-clicks the matching card. If the user is already mid-wizard on a different job (past Step 1) we do **not** switch jobs on them — per-tab override wins for workflow continuity.
+5. **Dashboard "All Jobs" exception.** On the Dashboard, picking a specific job updates global as usual, but switching to "All Jobs" is a dashboard-local view and does NOT clear the global selection — other tabs keep their current job.
+6. **Clearing.** The `&times;` button on the header badge calls `clearGlobalSelectedJob()` which removes localStorage and resets every mirrored selector to empty.
+7. **Option data attributes.** Every `<option>` populated for job selectors carries `data-title` and `data-dept` so `readJobFromSelect()` can reconstruct `{id, job_title, department}` without an extra API lookup.
+
+Selector IDs that mirror `globalSelectedJob`:
+
+| Tab | Selector | onchange handler |
+|-----|----------|------------------|
+| Dashboard | `#dash-job-filter` | `onDashboardJobFilterChange()` |
+| CV Evaluation | (job cards, not a `<select>`) | `selectJobCard(id)` |
+| Shortlist | `#shortlist-job-select` | `onShortlistJobChange()` |
+| Emails | `#email-job-filter` | `onEmailJobFilterChange()` |
+
+### 5b. CV Evaluation Wizard
 
 The Phase 3 wizard stepper is driven by three booleans per job, derived from `fetchJobState(jobId)`:
 
@@ -190,6 +223,7 @@ Major bugs + how they were fixed. Use this to avoid re-introducing them.
 | 2026-03 | n8n webhooks didn't register after import | `activeVersionId` was not set in `workflow_entity` | `UPDATE workflow_entity SET active=1, activeVersionId=versionId WHERE id='N'` in sqlite after every import |
 | 2026-04 | Results table overflowed horizontally — Actions column clipped behind scrollbar | Table mixed summary + detail columns (Skills / Experience / Education badges) | Simplified to 5 summary columns (Candidate / Email / Submitted / Overall / Actions). Per-dimension breakdown moved exclusively to the Details modal. Removed `.table-scroll` wrapper since the narrower table fits natively |
 | 2026-04 | Candidate emails not editable before send — subject locked, body preview-only | Reject modal used `<span>`/`<pre>` read-only elements; shortlist flow passed `custom_*` only when `email_type === 'custom'` | Replaced modal with editable `<input>` + `<textarea>`. All flows now route through a shared `openEmailComposer()` helper. Every send passes `custom_subject`/`custom_body` verbatim to `/send-email`. Added validation (non-empty subject/body, valid email) and a "Reset to default template" button |
+| 2026-04 | Selecting a job in one tab didn't carry over to other tabs — user had to reselect on every tab | Each tab had its own state (`evalSelectedJob`, `#shortlist-job-select`, `#email-job-filter`, `#dash-job-filter`) with no shared source of truth | Introduced `globalSelectedJob` (module-level + `localStorage` under `hr_selected_job`). Every per-tab selector mirrors it via `syncSelectorsToGlobal()`, every selection calls `setGlobalSelectedJob()`. Header renders a "Current Job" badge. CV Eval Step 1 auto-selects the matching card on entry. Dashboard "All Jobs" doesn't clear global (view-only mode) |
 
 ---
 

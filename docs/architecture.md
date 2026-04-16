@@ -55,6 +55,27 @@ Single-file SPA. Includes inline:
 - `allJobs`, `evalJobsCache` — list caches
 - `evalSelectedJob`, `evalWizardStep`, `evalCriteria`, `evalUploadedFiles` — CV wizard state
 - `currentPage`, `evalJobId` — navigation
+- `globalSelectedJob` — the single cross-tab job selection (see "Global selected job" below)
+
+**Global selected job (cross-tab context).**
+`globalSelectedJob` is the one source of truth for "which job is the user working on right now?" It's a module-level `{id, job_title, department}` (or `null`) backed by `localStorage` under the key `hr_selected_job`. A dashed-pill badge in the header ("Current Job: {title} · {department}") is always visible so the user never loses context when switching tabs.
+
+| Helper | Role |
+|--------|------|
+| `loadGlobalSelectedJob()` | Called once at init — restores the last selection from `localStorage` before any tab loads |
+| `setGlobalSelectedJob(job)` | Updates state + storage + badge, then calls `syncSelectorsToGlobal()` to mirror into every per-tab `<select>` |
+| `clearGlobalSelectedJob()` | Wired to the `&times;` button on the badge — clears state, storage, and every mirrored selector |
+| `renderGlobalJobBadge()` | Re-renders the header pill (empty state vs. populated) |
+| `syncSelectorsToGlobal()` | Sets `.value` on `#shortlist-job-select`, `#email-job-filter`, `#dash-job-filter` if the matching option exists |
+| `readJobFromSelect(el)` | Reconstructs `{id, job_title, department}` from a selector's current `<option>` using `data-title` / `data-dept` attributes set at render time |
+
+**Propagation rules:**
+- CV Eval **card click** (`selectJobCard`) → `setGlobalSelectedJob(evalSelectedJob)`.
+- Shortlist dropdown change (`onShortlistJobChange`) → `setGlobalSelectedJob(...)` → `loadShortlist()`.
+- Email filter change (`onEmailJobFilterChange`) → `setGlobalSelectedJob(...)` → `loadEmails()`.
+- Dashboard filter change (`onDashboardJobFilterChange`) → a **specific** job updates global; "All Jobs" does **not** clear global (it's a dashboard-local view so other tabs keep their current selection).
+- On CV Eval entry, if no card is selected yet and `globalSelectedJob` exists, `loadJobsForEval()` auto-clicks the matching card — but if the user is past Step 1 on a different job, per-tab override wins (workflow continuity).
+- Each per-tab load (`loadJobsForShortlist`, `loadJobsForEmailFilter`, `loadDashboard`) reads `select.value || globalSelectedJob.id` when rebuilding options, so first visit to any tab preselects the global job and auto-loads its data.
 
 **API access** — a single constant `const API = 'http://localhost:5678/webhook';` and two helpers `apiGet(path)` / `apiPost(path, body)`.
 

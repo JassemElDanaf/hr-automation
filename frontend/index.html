@@ -46,6 +46,31 @@
     .header h1 { font-size: 22px; font-weight: 700; color: var(--gray-900); }
     .header h1 span { color: var(--primary); }
 
+    /* Global "Current Job" badge — visible in every tab */
+    .global-job-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 12px;
+      background: var(--gray-50);
+      border: 1px solid var(--gray-200);
+      border-radius: 20px;
+      font-size: 13px;
+      max-width: 520px;
+    }
+    .global-job-badge .global-job-label { color: var(--gray-500); font-weight: 500; }
+    .global-job-badge .global-job-title { color: var(--primary); font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 220px; }
+    .global-job-badge .global-job-dept { color: var(--gray-500); }
+    .global-job-badge .global-job-clear {
+      background: none; border: none; color: var(--gray-400); cursor: pointer;
+      font-size: 18px; padding: 0 2px; line-height: 1;
+    }
+    .global-job-badge .global-job-clear:hover { color: var(--danger); }
+    .global-job-badge.empty {
+      color: var(--gray-400); background: white; font-style: italic;
+      border-style: dashed;
+    }
+
     /* Nav tabs */
     .nav-tabs {
       display: flex;
@@ -524,6 +549,9 @@
 
 <div class="header">
   <h1><span>Diyar</span> HR Automation</h1>
+  <div id="global-job-badge" class="global-job-badge empty">
+    <span class="global-job-label">No job selected</span>
+  </div>
 </div>
 
 <div class="nav-tabs">
@@ -913,7 +941,7 @@
       </div>
       <div style="display:flex;gap:8px;align-items:center;">
         <label style="font-weight:600;font-size:13px;white-space:nowrap;color:var(--gray-600);">View:</label>
-        <select id="dash-job-filter" onchange="loadDashboard()" style="min-width:240px;">
+        <select id="dash-job-filter" onchange="onDashboardJobFilterChange()" style="min-width:240px;">
           <option value="">All Jobs</option>
         </select>
       </div>
@@ -970,7 +998,7 @@
 
     <div style="display:flex;gap:12px;align-items:center;margin-bottom:16px;">
       <label style="font-weight:600;font-size:14px;white-space:nowrap;">Select Job:</label>
-      <select id="shortlist-job-select" onchange="loadShortlist()" style="max-width:350px;">
+      <select id="shortlist-job-select" onchange="onShortlistJobChange()" style="max-width:350px;">
         <option value="">-- Select a job opening --</option>
       </select>
       <button class="btn btn-secondary btn-sm" onclick="loadShortlist()">Refresh</button>
@@ -1068,7 +1096,7 @@
 
     <div style="display:flex;gap:12px;align-items:center;margin-bottom:16px;">
       <label style="font-size:13px;font-weight:600;">Job:</label>
-      <select id="email-job-filter" onchange="loadEmails()" style="max-width:280px;">
+      <select id="email-job-filter" onchange="onEmailJobFilterChange()" style="max-width:280px;">
         <option value="">-- Select a job --</option>
       </select>
       <div class="filter-tabs">
@@ -1148,6 +1176,89 @@ let currentPage = 'jobs';
 let evalJobId = null;
 let evalCandidates = [];
 let evalResults = [];
+
+// --- Global selected job (persisted in localStorage, synced across tabs) ---
+// A single source of truth: whenever the user picks a job anywhere (CV Eval card,
+// Shortlist dropdown, Email filter, Dashboard filter), we store {id, job_title, department}
+// here and mirror it into every per-tab selector. Empty state renders as a dashed pill.
+let globalSelectedJob = null;
+const GLOBAL_JOB_KEY = 'hr_selected_job';
+
+function loadGlobalSelectedJob() {
+  try {
+    const raw = localStorage.getItem(GLOBAL_JOB_KEY);
+    if (raw) {
+      const obj = JSON.parse(raw);
+      if (obj && obj.id) globalSelectedJob = obj;
+    }
+  } catch (e) { globalSelectedJob = null; }
+  renderGlobalJobBadge();
+}
+
+function setGlobalSelectedJob(job) {
+  if (!job || !job.id) { clearGlobalSelectedJob(); return; }
+  globalSelectedJob = {
+    id: parseInt(job.id),
+    job_title: job.job_title || '',
+    department: job.department || ''
+  };
+  try { localStorage.setItem(GLOBAL_JOB_KEY, JSON.stringify(globalSelectedJob)); } catch (e) {}
+  renderGlobalJobBadge();
+  syncSelectorsToGlobal();
+}
+
+function clearGlobalSelectedJob() {
+  globalSelectedJob = null;
+  try { localStorage.removeItem(GLOBAL_JOB_KEY); } catch (e) {}
+  renderGlobalJobBadge();
+  syncSelectorsToGlobal();
+}
+
+function renderGlobalJobBadge() {
+  const el = document.getElementById('global-job-badge');
+  if (!el) return;
+  if (!globalSelectedJob) {
+    el.classList.add('empty');
+    el.innerHTML = '<span class="global-job-label">Select a job opening to continue</span>';
+    return;
+  }
+  el.classList.remove('empty');
+  const dept = globalSelectedJob.department
+    ? `<span class="global-job-dept">&middot; ${esc(globalSelectedJob.department)}</span>`
+    : '';
+  el.innerHTML = `
+    <span class="global-job-label">Current Job:</span>
+    <span class="global-job-title">${esc(globalSelectedJob.job_title)}</span>
+    ${dept}
+    <button class="global-job-clear" title="Clear selection" onclick="clearGlobalSelectedJob()">&times;</button>
+  `;
+}
+
+// Mirror the current globalSelectedJob into every per-tab selector on the page.
+// Safe to call at any time; a selector without a matching <option> is left alone
+// (it will sync naturally the next time its options are rebuilt).
+function syncSelectorsToGlobal() {
+  const id = globalSelectedJob ? String(globalSelectedJob.id) : '';
+  for (const selectId of ['shortlist-job-select', 'email-job-filter', 'dash-job-filter']) {
+    const sel = document.getElementById(selectId);
+    if (!sel) continue;
+    const hasOption = Array.from(sel.options).some(o => o.value === id);
+    if (id === '' || hasOption) sel.value = id;
+  }
+}
+
+// Read {job_title, department} out of the currently selected <option> of a selector,
+// preferring data-* attributes we set at render time, then falling back to option text.
+function readJobFromSelect(selectEl) {
+  if (!selectEl || !selectEl.value) return null;
+  const opt = selectEl.options[selectEl.selectedIndex];
+  if (!opt) return null;
+  return {
+    id: parseInt(selectEl.value),
+    job_title: opt.dataset.title || opt.text || '',
+    department: opt.dataset.dept || ''
+  };
+}
 
 // --- API helpers ---
 async function apiGet(path) {
@@ -1551,6 +1662,12 @@ async function loadJobsForEval() {
     const res = await apiGet('/job-openings?is_active=true');
     evalJobsCache = res.data || [];
     renderJobCards(evalJobsCache);
+    // Auto-select the global job if it's in this list (so the wizard picks up
+    // where another tab left off without the user having to click the card again).
+    if (!evalSelectedJob && globalSelectedJob) {
+      const match = evalJobsCache.find(j => j.id === globalSelectedJob.id);
+      if (match) selectJobCard(match.id);
+    }
   } catch (err) {
     el.innerHTML = '<div class="empty-state" style="color:var(--danger)">Failed to load jobs.</div>';
   }
@@ -1609,6 +1726,7 @@ async function hydrateJobCardBadges(jobs) {
 async function selectJobCard(jobId) {
   evalSelectedJob = evalJobsCache.find(j => j.id === jobId) || null;
   evalJobId = jobId;
+  if (evalSelectedJob) setGlobalSelectedJob(evalSelectedJob);
   document.querySelectorAll('.job-card').forEach(c => {
     c.classList.toggle('selected', c.dataset.jid == jobId);
   });
@@ -2355,16 +2473,27 @@ let shortlistData = [];
 
 async function loadJobsForShortlist() {
   const select = document.getElementById('shortlist-job-select');
-  const currentVal = select.value;
+  // Prefer explicit in-select value; otherwise fall back to the global selection
+  const currentVal = select.value || (globalSelectedJob ? String(globalSelectedJob.id) : '');
   try {
     const res = await apiGet('/job-openings');
     const jobs = res.data || [];
     select.innerHTML = '<option value="">-- Select a job opening --</option>';
     for (const job of jobs) {
-      select.innerHTML += `<option value="${job.id}" ${job.id == currentVal ? 'selected' : ''}>${esc(job.job_title)} — ${esc(job.department)}</option>`;
+      const sel = String(job.id) === currentVal ? 'selected' : '';
+      select.innerHTML += `<option value="${job.id}" data-title="${esc(job.job_title)}" data-dept="${esc(job.department||'')}" ${sel}>${esc(job.job_title)} &mdash; ${esc(job.department)}</option>`;
     }
     if (currentVal) loadShortlist();
   } catch (err) { toast('Failed to load jobs', 'error'); }
+}
+
+// User picked a different job in the Shortlist dropdown — propagate to global state.
+function onShortlistJobChange() {
+  const sel = document.getElementById('shortlist-job-select');
+  const job = readJobFromSelect(sel);
+  if (job) setGlobalSelectedJob(job);
+  else clearGlobalSelectedJob();
+  loadShortlist();
 }
 
 async function loadShortlist() {
@@ -2906,6 +3035,16 @@ async function saveCriteriaSet(name) {
 // ==================== PHASE 1: DASHBOARD ====================
 let dashStatusChart = null;
 
+// User picked a job in the Dashboard filter.
+// Specific job -> update global. "All Jobs" is a local dashboard view and does NOT
+// clear the global selection (other tabs keep their current job).
+function onDashboardJobFilterChange() {
+  const sel = document.getElementById('dash-job-filter');
+  const job = readJobFromSelect(sel);
+  if (job) setGlobalSelectedJob(job);
+  loadDashboard();
+}
+
 async function loadDashboard() {
   try {
     const [jobsRes, candRes, slRes] = await Promise.all([
@@ -2915,11 +3054,14 @@ async function loadDashboard() {
     ]);
     const allJobs = jobsRes.data || [];
 
-    // Populate job filter dropdown (preserve current selection)
+    // Populate job filter dropdown (preserve current selection; fall back to global if unset)
     const filter = document.getElementById('dash-job-filter');
-    const currentVal = filter.value;
+    const currentVal = filter.value || (globalSelectedJob ? String(globalSelectedJob.id) : '');
     filter.innerHTML = '<option value="">All Jobs</option>' +
-      allJobs.map(j => `<option value="${j.id}" ${j.id==currentVal?'selected':''}>${esc(j.job_title)}</option>`).join('');
+      allJobs.map(j => {
+        const sel = String(j.id) === currentVal ? 'selected' : '';
+        return `<option value="${j.id}" data-title="${esc(j.job_title)}" data-dept="${esc(j.department||'')}" ${sel}>${esc(j.job_title)}</option>`;
+      }).join('');
     const selectedJobId = filter.value ? parseInt(filter.value) : null;
 
     // If filtering to a single job, scope candidates & shortlist to it; keep jobs for Active Jobs count
@@ -3074,14 +3216,27 @@ async function initEmailsPage() {
 
 async function loadJobsForEmailFilter() {
   const sel = document.getElementById('email-job-filter');
-  const cur = sel.value;
+  // Prefer explicit in-select value; otherwise fall back to the global selection
+  const cur = sel.value || (globalSelectedJob ? String(globalSelectedJob.id) : '');
   try {
     const res = await apiGet('/job-openings');
     const jobs = res.data || [];
     sel.innerHTML = '<option value="">-- Select a job --</option>';
-    for (const j of jobs) sel.innerHTML += `<option value="${j.id}" ${j.id==cur?'selected':''}>${esc(j.job_title)}</option>`;
+    for (const j of jobs) {
+      const selAttr = String(j.id) === cur ? 'selected' : '';
+      sel.innerHTML += `<option value="${j.id}" data-title="${esc(j.job_title)}" data-dept="${esc(j.department||'')}" ${selAttr}>${esc(j.job_title)}</option>`;
+    }
     if (cur) loadEmails();
   } catch (err) { /* ignore */ }
+}
+
+// User picked a different job in the Email filter — propagate to global state.
+function onEmailJobFilterChange() {
+  const sel = document.getElementById('email-job-filter');
+  const job = readJobFromSelect(sel);
+  if (job) setGlobalSelectedJob(job);
+  else clearGlobalSelectedJob();
+  loadEmails();
 }
 
 function setEmailStatusFilter(f) {
@@ -3176,6 +3331,7 @@ async function checkSmtpStatus() {
 function showSmtpHelp() { document.getElementById('smtp-help-modal').classList.add('active'); }
 
 // Init
+loadGlobalSelectedJob();
 loadDashboard();
 setupDragDrop();
 </script>
