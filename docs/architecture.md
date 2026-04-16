@@ -58,6 +58,18 @@ Single-file SPA. Includes inline:
 
 **API access** — a single constant `const API = 'http://localhost:5678/webhook';` and two helpers `apiGet(path)` / `apiPost(path, body)`.
 
+**Summary table / Details modal split (CV Evaluation Results).**
+The Results screen uses a deliberately narrow table — only summary-level columns — backed by a richer Details modal. This keeps the table scannable at a glance and guarantees the Actions column (Details / Shortlist / Reject) never clips or hides behind a horizontal scrollbar.
+
+| Surface | Shown here |
+|---------|------------|
+| Results table | Candidate, Email, Submitted, **Overall** (colored badge), Actions |
+| Details modal (`viewEvalDetail`) | Overall score (large numeric + tier label), **Skills / Experience / Education** score bars, Strengths, Weaknesses, Evaluation Method + reasoning, Rank (`#N of M`), CV text preview |
+
+Rendered by `renderEvalResults(candidates, results)` (table) and `viewEvalDetail(candidateId)` (modal). Sort defaults to Overall score descending; unevaluated rows fall to the bottom. Rows with no evaluation show "Not evaluated" in the Overall cell and a "Run Evaluation" button in Actions.
+
+The same pattern should be used whenever a dataset has both a quick-scan summary and detailed per-row dimensions: keep the table minimal, put decomposition in a modal.
+
 ### n8n workflows — `workflows/*`
 Each JSON file is one logical workflow containing multiple webhooks. Tags identify the phase.
 
@@ -123,6 +135,7 @@ Reads `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM` from env v
    - Parse structured response (skills/experience/education scores + reasoning)
    - `INSERT INTO evaluations ... ON CONFLICT (candidate_id, job_opening_id) DO UPDATE`
 4. Respond with list of scored evaluations
+5. Frontend renders the response in the **Results table** (summary: Candidate, Email, Submitted, Overall, Actions) sorted by Overall desc. Clicking **Details** opens the modal with the full per-dimension breakdown, strengths/weaknesses, reasoning, and CV text. See the "Summary table / Details modal split" note above.
 
 ### Reject Candidate (Phase 4 → Phase 5)
 1. Browser POST `/webhook/shortlist-update` with `{candidate_id, status: 'rejected'}` (and optional email fields)

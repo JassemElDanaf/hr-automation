@@ -101,6 +101,7 @@ These rules are **load-bearing**. Breaking them has caused real bugs.
 6. **Generate Criteria button lives AFTER the scoring weights.** The button reads the current weights to inform the prompt.
 7. **Candidate actions are Details / Shortlist / Reject, plus Run Evaluation when unevaluated.** Actions are always rendered in a `<div class="actions-container">` inside a `<td class="actions-cell">` — never `display:flex` directly on a `td`.
 8. **Reject is candidate-level, not evaluation-level.** Every candidate row has a Reject button regardless of whether they've been scored.
+9. **Results table is summary-only.** Columns are fixed at: **Candidate | Email | Submitted | Overall | Actions**. Per-dimension scores (Skills / Experience / Education), strengths, weaknesses, reasoning, and CV text belong in the **Details modal**, never in the table. This keeps the table narrow enough to fit without horizontal scroll and keeps the Actions column (Details / Shortlist / Reject) fully visible on every row. Default sort is Overall score descending; unevaluated rows fall to the bottom.
 
 ### Emails (Phase 5)
 9. **SMTP status must be real, not "unknown".** Four states: `not_configured`, `configured_not_tested`, `healthy`, `failing`. The Emails page surfaces the live status with a colored badge.
@@ -185,6 +186,7 @@ Major bugs + how they were fixed. Use this to avoid re-introducing them.
 | 2026-04 | Set Criteria blocked for existing jobs | `evalStepClick` required `.completed` class on target step | Rewrote `evalStepClick` — Step 2 is reachable whenever a job is selected |
 | 2026-04 | "No criteria" shown despite evaluations existing | `has_criteria` only checks `criteria_sets` table, but evals can run with ad-hoc text | Added "Criteria used (not saved)" yellow pill for the `has_evaluations && !has_criteria` case |
 | 2026-03 | n8n webhooks didn't register after import | `activeVersionId` was not set in `workflow_entity` | `UPDATE workflow_entity SET active=1, activeVersionId=versionId WHERE id='N'` in sqlite after every import |
+| 2026-04 | Results table overflowed horizontally — Actions column clipped behind scrollbar | Table mixed summary + detail columns (Skills / Experience / Education badges) | Simplified to 5 summary columns (Candidate / Email / Submitted / Overall / Actions). Per-dimension breakdown moved exclusively to the Details modal. Removed `.table-scroll` wrapper since the narrower table fits natively |
 
 ---
 
@@ -197,6 +199,14 @@ Major bugs + how they were fixed. Use this to avoid re-introducing them.
 - **Do not break working flows.** Before changing a wizard step or workflow, verify the other steps/workflows still function end-to-end.
 - **Trust internal invariants.** Don't add defensive checks for cases that can't happen in this codebase. Only validate at external boundaries (user input, HTTP requests from the browser, Ollama output parsing).
 - **Don't rewrite unrelated code** during a bug fix. A UI fix doesn't need adjacent JS refactored.
+- **No code change without documentation update.** Every code change must be paired with the matching docs update in the **same commit**:
+  - UI behavior change → update UX rules in `claude.md`
+  - Table / modal structure → update `claude.md` UX rules **and** `docs/architecture.md`
+  - Workflow logic → update `docs/n8n.md`
+  - Database schema → update `docs/database.md` **and** list the migration in `claude.md` §3
+  - Feature behavior → update the README feature summary and the relevant `docs/*.md`
+  - Any bug fix → add a row to the Fix Log in `claude.md` §8
+  If docs are outdated, the system is considered broken. Reviewer should reject PRs with code changes that leave docs stale.
 
 ---
 

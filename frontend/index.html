@@ -1989,7 +1989,9 @@ function renderEvalResults(candidates, results) {
   const evalMap = {};
   for (const e of results) evalMap[e.candidate_id] = e;
 
-  // Sort: evaluated first (by score desc), then unevaluated
+  // Sort by Overall score desc by default. Unevaluated rows fall to the bottom.
+  // The per-dimension breakdown (Skills / Experience / Education) lives in the Details
+  // modal — this table is intentionally narrow so Actions never clip.
   const sorted = [...candidates].sort((a, b) => {
     const ea = evalMap[a.id], eb = evalMap[b.id];
     if (ea && !eb) return -1;
@@ -1998,13 +2000,12 @@ function renderEvalResults(candidates, results) {
     return 0;
   });
 
-  // Horizontal scroller guarantees the Actions column is reachable even if the table overflows.
-  let html = '<div class="table-scroll"><table><thead><tr><th>#</th><th>Candidate</th><th>Email</th><th>Submitted</th><th>Overall</th><th>Skills</th><th>Experience</th><th>Education</th><th style="min-width:260px;">Actions</th></tr></thead><tbody>';
+  // Summary-only columns. No horizontal scroller: with 5 columns the table fits natively.
+  let html = '<table><thead><tr><th>Candidate</th><th>Email</th><th>Submitted</th><th>Overall</th><th>Actions</th></tr></thead><tbody>';
 
   for (let i = 0; i < sorted.length; i++) {
     const c = sorted[i];
     const e = evalMap[c.id];
-    const rank = e ? (i + 1) : '-';
 
     // Escape name + email once for safe embedding in inline onclick handlers
     const nameArg = esc(c.candidate_name || '').replace(/'/g, "\\'");
@@ -2020,27 +2021,20 @@ function renderEvalResults(candidates, results) {
         <button class="btn btn-sm btn-danger" onclick="rejectCandidate(${c.id},'${nameArg}','${emailArg}')">Reject</button>
       </div>`;
 
+    const overallCell = e
+      ? scoreBadge(e.overall_score)
+      : '<span style="color:var(--gray-400);font-style:italic;font-size:13px;">Not evaluated</span>';
+
     html += `<tr>
-      <td><strong>${rank}</strong></td>
       <td><strong>${esc(c.candidate_name)}</strong></td>
       <td>${esc(c.email || '—')}</td>
-      <td>${new Date(c.submitted_at).toLocaleDateString()}</td>`;
-
-    if (e) {
-      html += `
-        <td>${scoreBadge(e.overall_score)}</td>
-        <td>${scoreBadge(e.skills_score)}</td>
-        <td>${scoreBadge(e.experience_score)}</td>
-        <td>${scoreBadge(e.education_score)}</td>
-        <td class="actions-cell">${actionsHtml}</td>`;
-    } else {
-      html += `<td colspan="4" style="color:var(--gray-400);font-style:italic;">Not yet evaluated</td>
-        <td class="actions-cell">${actionsHtml}</td>`;
-    }
-    html += '</tr>';
+      <td>${new Date(c.submitted_at).toLocaleDateString()}</td>
+      <td>${overallCell}</td>
+      <td class="actions-cell">${actionsHtml}</td>
+    </tr>`;
   }
 
-  html += '</tbody></table></div>';
+  html += '</tbody></table>';
   el.innerHTML = html;
 }
 
