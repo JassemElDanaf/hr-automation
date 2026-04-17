@@ -48,7 +48,7 @@ frontend-react/
       modals/
         Modal.jsx             ← Reusable modal (backdrop click, Escape key)
         EmailComposerModal.jsx ← Universal editable email composer
-        JobDetailModal.jsx    ← Job detail + toggle active/inactive
+        JobDetailModal.jsx    ← Job detail view/edit + toggle active/inactive
         EvalDetailModal.jsx   ← Evaluation detail with score bars, CV preview
     state/
       selectedJob.jsx         ← SelectedJobContext + provider (localStorage persistence)
@@ -121,6 +121,14 @@ No custom backend — all requests go to n8n webhook endpoints.
 
 ### Universal Email Composer
 All email flows (rejection, shortlist, interview, offer) go through `EmailComposerModal`. The caller provides `emailType`, default subject/body, and an `onSend` callback. The user can edit subject and body before sending. "Reset to default template" restores the prefilled values.
+
+### Job Detail Modal (Editable)
+Clicking a job title in the Job Openings table opens `JobDetailModal` in **view mode** showing all job fields (department, employment type, seniority, location, reporting to, description, status, dates). The modal has three modes:
+- **View mode:** Read-only display. Footer: Edit | Activate/Deactivate | Close
+- **Edit mode:** Form with editable fields (job title, department with custom "Other" option, employment type, seniority level, location type, reporting to, job description). Footer: Cancel | Save Changes
+- **Toggle:** Activate/Deactivate patches local state in-place (no full reload)
+
+Save submits to `/job-opening-update` (POST) which dynamically builds an UPDATE query for only the changed fields. The `onToggle` callback refreshes the parent table.
 
 ### CV Evaluation Wizard
 4-step wizard managed entirely in `CVEvaluation.jsx`:

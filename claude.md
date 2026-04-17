@@ -77,7 +77,7 @@ No custom backend — the "backend" is n8n. Each HTTP endpoint is a webhook node
 | Folder | New Phase | Internal Name | What it does |
 |--------|-----------|---------------|--------------|
 | `phase5-dashboard/` | **Phase 1** | `Phase 1 - Dashboard` | `/dashboard-candidates`, `/dashboard-shortlist` |
-| `phase1-job-opening/` | **Phase 2** | `Phase 2 - Job Openings` | CRUD for `/job-openings`, toggle active, list, get |
+| `phase1-job-opening/` | **Phase 2** | `Phase 2 - Job Openings` | CRUD for `/job-openings`, toggle active, list, get, `/job-opening-update` |
 | `phase2-cv-evaluation/` | **Phase 3** | `Phase 3 - CV Evaluation` | `/cv-submit`, `/cv-evaluate`, `/criteria-sets`, `/generate-criteria`, `/candidates`, `/evaluations` |
 | `phase3-shortlist/` | **Phase 4** | `Phase 4 - Shortlist` | `/shortlist` GET/POST, `/shortlist-update` |
 | `phase4-email/` | **Phase 5** | `Phase 5 - Emails` | `/send-email`, `/email-history` |
@@ -143,6 +143,10 @@ These rules are **load-bearing**. Breaking them has caused real bugs.
 11. **Every candidate-facing email is editable before send.** Subject and body are real `<input>` / `<textarea>` fields, never read-only preview. Default templates prefill on open; a "Reset to default template" button restores them. The backend uses the user-edited subject/body verbatim (via `custom_subject` / `custom_body`) — it never silently regenerates or overwrites user input. This rule applies to **every** email flow: rejection, shortlist notification, interview invitation, job offer, and any future status-change email. All flows route through one shared `openEmailComposer({ candidate, job, emailType, defaultSubject, defaultBody, sendLabel, showSendToggle, onSend })` helper in `frontend/index.html` — don't build per-flow modals.
 12. **Email composer validation before send:** subject non-empty, body non-empty, recipient email contains `@`. The "Reject Candidate" flow is the only one that allows completing the action **without** sending an email (via the "Also send email" toggle); all other flows require a valid recipient.
 13. **Email history table rows are expandable.** Each row in the Emails tab is clickable — clicking expands an inline detail panel showing: recipient, type, full date, delivery status badge, error message (if failed), full subject, and complete email body. A dedicated toggle arrow column (last column, fixed 28px width) stays in the same position whether expanded or collapsed so users can toggle without moving the mouse. Only one row can be expanded at a time.
+
+### Job Openings (Phase 2)
+18. **Job Detail Modal is fully editable.** Clicking a job title opens a detail modal in view mode. An "Edit" button switches to edit mode with form fields for: Job Title (required), Department (dropdown + custom "Other" input), Employment Type, Seniority Level, Location Type, Reporting To, and Job Description (textarea). "Save Changes" POSTs to `/job-opening-update` with the job ID and changed fields. "Cancel" reverts to view mode without saving. The modal footer switches between view actions (Edit / Activate|Deactivate / Close) and edit actions (Cancel / Save Changes). Department uses a select with predefined options; selecting "Other" reveals a text input for custom department names. All fields except Job Title are optional.
+19. **Job toggle patches local state.** Activating/deactivating a job in the table or detail modal patches the local `allJobs` array in-place (`setAllJobs(prev => prev.map(...))`) — never calls `loadJobs()` which would cause a flash/reload of the entire table.
 
 ### Shortlist (Phase 4)
 11. **Reconsider / status changes refresh only the affected card**, not the whole page. Status transitions are patched in place via `updateShortlistStatus(id, status)`.
@@ -272,6 +276,9 @@ Major bugs + how they were fixed. Use this to avoid re-introducing them.
 | 2026-04 | Shortlist tab showed candidates in arbitrary API order — recent actions appeared at bottom | No sorting applied to shortlist data | Added sort by `updated_at` (fallback `shortlisted_at`), newest first |
 | 2026-04 | Emails tab showed only summary columns — no way to see email body or full details | Table rows were static, no expand/detail view | Made rows clickable with expandable inline detail panel (recipient, type, date, status badge, error, subject, full body). Toggle arrow in fixed-width last column for stable click target |
 | 2026-04 | Shortlist email status only showed latest email with no way to see details or history | `emailMap` stored single object per candidate, no body/recipient data | Changed `emailMap` to array of all emails per candidate, stored body/recipient/error. Added expandable detail panel on click with full email history |
+| 2026-04 | Job Openings toggle (activate/deactivate) caused ugly flash — entire table reloaded | `toggleJob()` called `loadJobs()` which re-fetched all jobs and re-rendered the full table | Patched local `allJobs` state in-place with `setAllJobs(prev => prev.map(...))` — no API reload, smooth toggle |
+| 2026-04 | Job Detail Modal was read-only — no way to edit job title, department, description, or any field | Modal only displayed data, had no edit mode or update endpoint | Added full edit mode with view/edit toggle. Edit form covers all fields (title, department, employment type, seniority, location, reporting to, description). New `/job-opening-update` POST endpoint added to n8n workflow with dynamic SQL builder. Department supports custom values via "Other" option |
+| 2026-04 | Dashboard doughnut chart didn't render — blank space where chart should be | Manual Chart.js with `useRef` + `useEffect` had timing issue — canvas wasn't in DOM when effect fired due to conditional rendering | Replaced with `react-chartjs-2` `<Doughnut>` component which handles lifecycle automatically |
 
 ---
 

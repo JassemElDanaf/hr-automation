@@ -44,8 +44,11 @@ export default function JobOpenings() {
   async function toggleJob(id) {
     try {
       const res = await apiPost(`/job-opening-toggle?id=${id}`, {});
-      if (res.data.success) showToast(`Job is now ${res.data.data.is_active ? 'active' : 'inactive'}`, 'success');
-      loadJobs();
+      if (res.data.success) {
+        const isActive = res.data.data.is_active;
+        setAllJobs(prev => prev.map(j => j.id === id ? { ...j, is_active: isActive, status: isActive ? 'active' : 'inactive' } : j));
+        showToast(`Job is now ${isActive ? 'active' : 'inactive'}`, 'success');
+      }
     } catch { showToast('Failed to toggle status', 'error'); }
   }
 
