@@ -135,7 +135,7 @@ Save submits to `/job-opening-update` (POST) which dynamically builds an UPDATE 
 1. **Select Job** — job cards with state badges
 2. **Set Criteria** — 3-row stacked layout:
    - **Row 1** (`.criteria-grid`, 2-column): Criteria Source (left) + Scoring Preferences (right)
-   - **Row 2** (full width): Action card — three buttons (Write/Paste, AI Generate, Upload File) + source-specific controls inside
+   - **Row 2** (full width): Action card — four buttons (From Job Description, Write/Paste, AI Generate, Upload File) + source-specific controls inside. "From Job Description" pulls the selected job's JD directly into the criteria draft
    - **Row 3** (full width): Criteria Draft textarea + unsaved warning + save checkbox
    - **Save logic:** when save checkbox is checked, user must provide a name (prompted on Continue if blank); saved sets refresh immediately and appear in the dropdown
 3. **Upload CVs** — drag-and-drop file upload with PDF extraction

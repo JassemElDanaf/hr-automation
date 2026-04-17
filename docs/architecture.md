@@ -98,7 +98,7 @@ The Set Criteria step is a three-section, two-column page with a single source o
 
 | Column | Section | Contents |
 |--------|---------|----------|
-| Left | **A. Criteria Source** | Saved criteria sets dropdown (with refresh); three source tiles (Write / Paste · AI Generate · Upload File); source-specific inputs inline (Additional Context textarea for AI; file input for Upload; a hint for Manual) |
+| Left | **A. Criteria Source** | Saved criteria sets dropdown (with refresh); four source tiles (From Job Description · Write / Paste · AI Generate · Upload File); source-specific inputs inline ("From Job Description" loads the selected job's JD into the draft; Additional Context textarea for AI; file input for Upload; a hint for Manual) |
 | Left | **B. Scoring Preferences** | Compact weight sliders (Skills, Experience, Education) with a running **Total:** line that turns red + shows a ⚠ prefix when the total ≠ 100% |
 | Left | **C. Generate with AI** (conditional) | A subtle-gradient card with the **Generate Criteria** button and a status line. Visible only when the AI source tile is active, so the button physically sits *below* the weights it reads |
 | Right | **Criteria Draft** | One editable `<textarea id="criteria-text" class="criteria-draft">`. Every source writes here — AI generation, file upload, saved-set load, and manual typing all populate this single field. Below it: an amber **"Unsaved criteria"** warning card (shown when the draft has text and the save checkbox is unchecked) and the "Save this criteria set" checkbox + name input |
