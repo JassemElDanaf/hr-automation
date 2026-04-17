@@ -554,13 +554,32 @@ export default function CVEvaluation() {
           <div className="criteria-actions-card" style={{ marginTop: '20px' }}>
             <h4 className="criteria-actions-title">Choose How to Create Criteria</h4>
             <div className="criteria-actions-btns">
-              {[{ key: 'manual', icon: '\u270F', label: 'Write / Paste' }, { key: 'ai', icon: '\u2728', label: 'AI Generate' }, { key: 'upload', icon: '\uD83D\uDCC4', label: 'Upload File' }].map(s => (
+              {[{ key: 'job_desc', icon: '\uD83D\uDCCB', label: 'From Job Description' }, { key: 'manual', icon: '\u270F', label: 'Write / Paste' }, { key: 'ai', icon: '\u2728', label: 'AI Generate' }, { key: 'upload', icon: '\uD83D\uDCC4', label: 'Upload File' }].map(s => (
                 <button key={s.key} className={`criteria-action-btn ${criteriaSource === s.key ? 'active' : ''}`} onClick={() => setCriteriaSource(s.key)}>
                   <span className="criteria-action-icon">{s.icon}</span>
                   <span>{s.label}</span>
                 </button>
               ))}
             </div>
+            {criteriaSource === 'job_desc' && (
+              <div className="criteria-action-content">
+                {evalSelectedJob?.job_description ? (
+                  <>
+                    <p style={{ fontSize: '13px', color: 'var(--gray-600)', margin: '0 0 10px' }}>
+                      Use the job description from <strong>{evalSelectedJob.job_title}</strong> as your evaluation criteria.
+                    </p>
+                    <button className="btn btn-primary" style={{ width: '100%' }} onClick={() => {
+                      setCriteriaText(evalSelectedJob.job_description);
+                      showToast('Job description loaded as criteria', 'success');
+                    }}>
+                      Load Job Description
+                    </button>
+                  </>
+                ) : (
+                  <p style={{ fontSize: '13px', color: 'var(--gray-400)', fontStyle: 'italic', margin: 0 }}>This job has no description. Create one in Job Openings first.</p>
+                )}
+              </div>
+            )}
             {criteriaSource === 'ai' && (
               <div className="criteria-action-content">
                 <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--gray-600)', display: 'block', marginBottom: '6px' }}>Additional Context <span style={{ color: 'var(--gray-400)', fontWeight: 400 }}>(Optional)</span></label>
