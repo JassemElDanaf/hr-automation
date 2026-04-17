@@ -24,15 +24,16 @@ Full product + UX rules are in [`claude.md`](claude.md). Detailed operational do
 
 ## Stack
 
-| Component | Role | Port |
-|-----------|------|------|
-| Frontend (`frontend/index.html`) | Single-file SPA (HTML + CSS + JS) | 3000 |
-| n8n | Workflow engine + webhook API | 5678 |
-| PostgreSQL (Docker) | Persistent storage | 5432 |
-| Ollama | Local AI (`qwen3:4b`) for JD, criteria, CV scoring | 11434 |
-| SMTP sidecar (`scripts/smtp_server.py`) | Python relay for outbound email | 8901 |
+| Component | Role | Port | Data location |
+|-----------|------|------|---------------|
+| React Frontend (`frontend-react/`) | React + Vite app (primary) | 3001 | — |
+| Legacy Frontend (`frontend/index.html`) | Single-file SPA (fallback) | 3000 | — |
+| n8n | Workflow engine + webhook API | 5678 | `E:\n8n` |
+| PostgreSQL (Docker) | Persistent storage | 5432 | `E:\Docker` |
+| Ollama | Local AI (`qwen3:4b`) for JD, criteria, CV scoring | 11434 | `E:\ollama` |
+| SMTP sidecar (`scripts/smtp_server.py`) | Python relay for outbound email | 8901 | — |
 
-Nothing runs in the cloud. Nothing phones home.
+Nothing runs in the cloud. Nothing phones home. All data lives on E:\ drive.
 
 ---
 
@@ -53,7 +54,7 @@ Nothing runs in the cloud. Nothing phones home.
 bash start.sh       # Mac / Linux / Git Bash
 ```
 
-`start.sh` brings up Postgres, Ollama, n8n, the SMTP sidecar, and the frontend server, then opens the browser at <http://localhost:3000>.
+`start.sh` brings up Postgres, Ollama, n8n, the SMTP sidecar, the legacy frontend, and the React frontend, then opens the browser at <http://localhost:3001>.
 
 Full runbook: [`docs/runbook.md`](docs/runbook.md).
 

@@ -143,10 +143,10 @@ More complex flows add:
 - Set node to rename / restructure fields
 
 ### PostgreSQL — `hr-postgres` container
-Docker container built from `postgres:16`. Single database `hr_automation`. Schema grows additively via numbered migrations.
+Docker container built from `postgres:16`. Single database `hr_automation`. Schema grows additively via numbered migrations. Docker data root is `E:\Docker` (set in `daemon.json`).
 
-### Ollama — local process
-Model: `qwen3:4b` (~2.5 GB, runs fine on CPU). Invoked with:
+### Ollama — local process (`E:\ollama`)
+Program at `E:\ollama\program\ollama.exe`. Models stored at `E:\ollama` (set via `OLLAMA_MODELS` and `OLLAMA_HOME` env vars). Model: `qwen3:4b` (~2.5 GB, runs fine on CPU). Invoked with:
 ```json
 POST http://localhost:11434/api/generate
 {
@@ -215,11 +215,12 @@ LaTeX progress report packaged separately from the running system. `report.tex` 
 
 | Port | Service | Notes |
 |------|---------|-------|
-| 3000 | Frontend | `npx serve -l 3000 -s frontend` |
-| 5432 | PostgreSQL | `hr-postgres` container |
-| 5678 | n8n | web UI + `/webhook/*` API |
+| 3000 | Legacy Frontend | `npx serve -l 3000 -s frontend` (fallback) |
+| 3001 | React Frontend | `npx vite --port 3001` (primary) |
+| 5432 | PostgreSQL | `hr-postgres` container (Docker data on `E:\Docker`) |
+| 5678 | n8n | web UI + `/webhook/*` API (data in `E:\n8n`) |
 | 8901 | SMTP sidecar | loopback only (`127.0.0.1`) |
-| 11434 | Ollama | loopback |
+| 11434 | Ollama | loopback (program + models on `E:\ollama`) |
 
 ---
 

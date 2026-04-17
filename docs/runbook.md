@@ -155,7 +155,7 @@ In n8n → Settings → Credentials → Add "Postgres":
 
 **The one-click way** (recommended):
 
-Double-click `launch.bat` in the project root. It calls `start.sh` inside Git Bash, which starts everything in dependency order and opens <http://localhost:3000> in your browser.
+Double-click `launch.bat` in the project root. It calls `start.sh` inside Git Bash, which starts everything in dependency order and opens <http://localhost:3001> (React app) in your browser.
 
 **Manual equivalent** (for debugging):
 
@@ -166,32 +166,24 @@ bash start.sh
 
 `start.sh` enforces this startup order (see `start.sh` in the project root for the authoritative version):
 
-1. **Docker Desktop** — launched if not already running (waits up to 2 min)
+1. **Docker Desktop** — launched if not already running (waits up to 2 min). Data root on `E:\Docker`
 2. **hr-postgres** — `docker start hr-postgres`
-3. **Ollama** — `/e/ollama/program/ollama.exe serve` in background
+3. **Ollama** — `/e/ollama/program/ollama.exe serve` in background. Models on `E:\ollama`
 4. **SMTP sidecar** — `python scripts/smtp_server.py` in background, listens on `127.0.0.1:8901`
-5. **n8n** — `npx n8n start` in background, listens on `:5678`
-6. **Legacy Frontend** — `npx serve -l 3000 -s frontend` in background
-7. **Browser** — opens `http://localhost:3000`
-
-### React Frontend (alternative)
-
-The React app in `frontend-react/` replaces the legacy `frontend/index.html`. To use it instead:
-
-```bash
-cd frontend-react
-npm install          # first time only
-npm run dev          # starts Vite dev server on http://localhost:3001
-```
-
-Or build and serve statically:
-```bash
-cd frontend-react
-npm run build        # outputs to frontend-react/dist/
-npx serve -l 3001 -s dist
-```
+5. **n8n** — `npx n8n start` in background, listens on `:5678`. Data in `E:\n8n` (via `N8N_USER_FOLDER`)
+6. **Legacy Frontend** — `npx serve -l 3000 -s frontend` in background (fallback)
+7. **React Frontend** — `npx vite --port 3001` in background (primary)
+8. **Browser** — opens `http://localhost:3001`
 
 > **Note:** The React frontend uses `VITE_API_URL=http://localhost:5678/webhook` from `frontend-react/.env`. All other backend services (n8n, Postgres, Ollama, SMTP sidecar) remain the same.
+
+### Data locations (all on E:\)
+
+| Service | Data path | How |
+|---------|-----------|-----|
+| Docker | `E:\Docker` | `daemon.json` → `"data-root": "E:\\Docker"` |
+| n8n | `E:\n8n` | `N8N_USER_FOLDER=/e/n8n` in `start.sh` |
+| Ollama | `E:\ollama` | `OLLAMA_MODELS=/e/ollama` + `OLLAMA_HOME=/e/ollama` in `start.sh` |
 
 ---
 
@@ -219,12 +211,16 @@ curl -s http://127.0.0.1:8901/
 curl -s http://localhost:5678/healthz
 # expected: {"status":"ok"}
 
-# Frontend
+# Legacy Frontend
 curl -I -s http://localhost:3000 | head -1
+# expected: HTTP/1.1 200 OK
+
+# React Frontend (primary)
+curl -I -s http://localhost:3001 | head -1
 # expected: HTTP/1.1 200 OK
 ```
 
-Then visit <http://localhost:3000> and walk through:
+Then visit <http://localhost:3001> (React app) and walk through:
 - [ ] Dashboard loads, shows job + candidate counts
 - [ ] Phase 2 → Job Openings lists existing jobs
 - [ ] Phase 2 → Create Job completes 2-step wizard
@@ -243,7 +239,8 @@ docker stop hr-postgres                # stop DB
 pkill -f "npx n8n start"               # stop n8n
 pkill -f "smtp_server.py"              # stop sidecar
 pkill -f "ollama.exe serve"            # stop Ollama
-pkill -f "serve -l 3000"               # stop frontend
+pkill -f "serve -l 3000"               # stop legacy frontend
+pkill -f "vite --port 3001"            # stop React frontend
 ```
 
 On Windows native, use Task Manager to end `node.exe`, `python.exe`, `ollama.exe`.

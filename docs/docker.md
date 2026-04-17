@@ -96,7 +96,7 @@ docker inspect hr-postgres --format '{{.State.Status}}'
 
 ## Data Persistence
 
-The container uses its default volume. Data survives `docker stop` / `docker start`.
+Docker's data root is set to `E:\Docker` (via `daemon.json` `"data-root": "E:\\Docker"`). All images, volumes, and container data live on E:\ to save C:\ space. Data survives `docker stop` / `docker start`.
 
 **To wipe everything:**
 ```bash

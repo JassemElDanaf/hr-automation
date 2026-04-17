@@ -2,11 +2,13 @@
 # HR Automation - Start All Services
 # Run this script to start all required services
 
-export PATH="/c/Users/Jasse/AppData/Roaming/npm:/e/NodeJS:$PATH"
+export PATH="/e/NodeJS:/e/n8n/node_modules/.bin:/c/Users/Jasse/AppData/Roaming/npm:$PATH"
 export N8N_USER_MANAGEMENT_DISABLED=true
 export N8N_BASIC_AUTH_ACTIVE=false
 export N8N_AUTH_EXCLUDE_ENDPOINTS="*"
+export N8N_USER_FOLDER=/e/n8n
 export OLLAMA_MODELS=/e/ollama
+export OLLAMA_HOME=/e/ollama
 
 # Load local config (.env) — holds SMTP creds, any local overrides.
 # Keeps secrets out of this script and out of git.

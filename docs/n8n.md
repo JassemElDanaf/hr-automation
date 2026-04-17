@@ -10,8 +10,8 @@ n8n is the project's API gateway and business-logic engine. All browser requests
 
 - Installed globally via npm (`npm install -g n8n`) or invoked via `npx n8n start`
 - Listens on port **5678** (UI + webhook API)
-- Data directory: `%USERPROFILE%\.n8n\` (Windows) — contains `database.sqlite` with workflow definitions, credentials, executions
-- `start.sh` exports `N8N_USER_MANAGEMENT_DISABLED=true` to skip the first-run login screen
+- Data directory: `E:\n8n\` — contains `database.sqlite` with workflow definitions, credentials, executions. Redirected from default `%USERPROFILE%\.n8n\` via `N8N_USER_FOLDER=/e/n8n` in `start.sh`
+- `start.sh` exports `N8N_USER_MANAGEMENT_DISABLED=true` and `N8N_AUTH_EXCLUDE_ENDPOINTS=*` to skip the login screen
 
 ---
 
@@ -77,6 +77,7 @@ All paths are prefixed with `http://localhost:5678/webhook`.
 | POST | `/job-openings` | Create |
 | GET | `/job-opening?id=N` | Get one |
 | POST | `/job-opening-toggle?id=N` | Toggle `is_active` |
+| POST | `/job-opening-update` | Update job fields (title, dept, type, etc.) |
 
 ### Phase 3 — CV Evaluation
 | Method | Path | Purpose |
@@ -159,7 +160,7 @@ Known n8n bug: the `activeVersionId` column is sometimes not set. Fix via SQLite
 pkill -f "npx n8n start"
 
 # locate the DB
-cd ~/.n8n
+cd /e/n8n
 
 # update
 sqlite3 database.sqlite <<'SQL'
@@ -189,7 +190,7 @@ All workflows reference a credential named exactly **`HR PostgreSQL`**. Configur
 | Password | `hr_pass` |
 | SSL | disable |
 
-Credentials live in `~/.n8n/database.sqlite` (encrypted). They are **not** exported with workflow JSON.
+Credentials live in `E:\n8n\database.sqlite` (encrypted). They are **not** exported with workflow JSON.
 
 ### SMTP
 This project **does not use n8n's SMTP credential**. Emails go through the Python sidecar on port 8901, which reads SMTP env vars from `.env`.

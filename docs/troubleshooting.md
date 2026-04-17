@@ -84,7 +84,7 @@ curl http://localhost:5678/healthz
 **Fix:**
 ```bash
 pkill -f "npx n8n start"
-cd ~/.n8n
+cd /e/n8n
 sqlite3 database.sqlite "UPDATE workflow_entity SET active=1, activeVersionId=versionId WHERE id IN ('1','2','3','4','5');"
 npx n8n start > /dev/null 2>&1 &
 ```
