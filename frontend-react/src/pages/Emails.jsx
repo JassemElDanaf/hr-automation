@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { apiGet } from '../services/api';
 import { useSelectedJob } from '../state/selectedJob';
 import { useUI } from '../state/uiState';
@@ -19,6 +19,7 @@ export default function Emails() {
   const [loading, setLoading] = useState(false);
   const [smtpStatus, setSmtpStatus] = useState(null);
   const [showSmtpHelp, setShowSmtpHelp] = useState(false);
+  const [expandedRow, setExpandedRow] = useState(null); // email id of expanded row
 
   useEffect(() => {
     loadJobs();
@@ -127,17 +128,57 @@ export default function Emails() {
       <div className="table-wrap">
         {loading ? <Loading /> : !jobId ? <EmptyState>Select a job opening to view email history.</EmptyState> : filtered.length === 0 ? <EmptyState>No emails match the current filter.</EmptyState> : (
           <table>
-            <thead><tr><th>Date</th><th>Candidate</th><th>Type</th><th>Recipient</th><th>Subject</th><th>Status</th></tr></thead>
+            <thead><tr><th>Date</th><th>Candidate</th><th>Type</th><th>Recipient</th><th>Subject</th><th>Status</th><th style={{ width: '28px' }}></th></tr></thead>
             <tbody>
               {filtered.map(e => (
-                <tr key={e.id} title={e.error_message || ''} style={e.status === 'failed' ? { background: '#fef2f2' } : {}}>
-                  <td style={{ fontSize: '13px', color: 'var(--gray-500)' }}>{new Date(e.sent_at).toLocaleDateString()} {new Date(e.sent_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</td>
-                  <td><strong>{e.candidate_name || '\u2014'}</strong></td>
-                  <td><Badge type="shortlisted">{(e.email_type || '').replace('_', ' ')}</Badge></td>
-                  <td style={{ fontSize: '13px' }}>{e.recipient_email}</td>
-                  <td style={{ fontSize: '13px', color: 'var(--gray-700)', maxWidth: '280px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{e.subject}</td>
-                  <td><Badge type={e.status === 'sent' ? 'hired' : e.status === 'failed' ? 'rejected' : 'draft'}>{e.status}</Badge></td>
-                </tr>
+                <React.Fragment key={e.id}>
+                  <tr
+                    className="email-row-clickable"
+                    onClick={() => setExpandedRow(expandedRow === e.id ? null : e.id)}
+                    style={e.status === 'failed' ? { background: '#fef2f2' } : {}}
+                  >
+                    <td style={{ fontSize: '13px', color: 'var(--gray-500)' }}>{new Date(e.sent_at).toLocaleDateString()} {new Date(e.sent_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</td>
+                    <td><strong>{e.candidate_name || '\u2014'}</strong></td>
+                    <td><Badge type="shortlisted">{(e.email_type || '').replace('_', ' ')}</Badge></td>
+                    <td style={{ fontSize: '13px' }}>{e.recipient_email}</td>
+                    <td style={{ fontSize: '13px', color: 'var(--gray-700)', maxWidth: '280px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {e.subject}
+                    </td>
+                    <td><Badge type={e.status === 'sent' ? 'hired' : e.status === 'failed' ? 'rejected' : 'draft'}>{e.status}</Badge></td>
+                    <td style={{ textAlign: 'center' }}><span className="email-row-toggle">{expandedRow === e.id ? '\u25B2' : '\u25BC'}</span></td>
+                  </tr>
+                  {expandedRow === e.id && (
+                    <tr className="email-detail-row">
+                      <td colSpan={7}>
+                        <div className="email-detail-panel">
+                          <div className="email-detail-grid">
+                            <div className="email-detail-field"><span className="email-detail-label">To:</span> {e.recipient_email}</div>
+                            <div className="email-detail-field"><span className="email-detail-label">Type:</span> {(e.email_type || '').replace('_', ' ')}</div>
+                            <div className="email-detail-field"><span className="email-detail-label">Date:</span> {new Date(e.sent_at).toLocaleString()}</div>
+                            <div className="email-detail-field">
+                              <span className="email-detail-label">Status:</span>{' '}
+                              <span className={`sl-email-detail-badge sl-email-detail-badge--${e.status}`}>
+                                {e.status === 'sent' ? '\u2713 Delivered to mail server' : e.status === 'failed' ? '\u2717 Failed' : e.status === 'logged' ? '\u26A0 Logged only (SMTP not configured)' : e.status}
+                              </span>
+                            </div>
+                          </div>
+                          {e.error_message && (
+                            <div className="email-detail-error-box">
+                              <strong>Error:</strong> {e.error_message}
+                            </div>
+                          )}
+                          <div className="email-detail-field" style={{ marginTop: '8px' }}><span className="email-detail-label">Subject:</span> {e.subject}</div>
+                          {e.body && (
+                            <div className="email-detail-body-box">
+                              <div className="email-detail-label" style={{ marginBottom: '6px' }}>Message:</div>
+                              <pre className="email-detail-body-pre">{e.body}</pre>
+                            </div>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                </React.Fragment>
               ))}
             </tbody>
           </table>

@@ -44,7 +44,7 @@ export default function CVEvaluation() {
   const [detailCandidate, setDetailCandidate] = useState(null);
   const [shortlistMap, setShortlistMap] = useState({}); // candidateId -> status string
   const [recentlyChanged, setRecentlyChanged] = useState({}); // candidateId -> true (for animation)
-  const [resultsFilter, setResultsFilter] = useState('active'); // 'active' | 'shortlisted' | 'rejected' | 'archived' | 'all'
+  const [resultsFilter, setResultsFilter] = useState('all'); // 'active' | 'shortlisted' | 'rejected' | 'archived' | 'all'
   const [dupBannerDismissed, setDupBannerDismissed] = useState(false);
   const [archivedMap, setArchivedMap] = useState(() => { // candidateId -> previousStatus
     try { return JSON.parse(localStorage.getItem('hr_archived_candidates_v2') || '{}'); } catch { return {}; }
@@ -702,12 +702,12 @@ export default function CVEvaluation() {
             <div className="results-filter-bar">
               <span className="results-filter-label">Show:</span>
               {[
+                { key: 'all', label: 'All', count: candidates.length },
                 { key: 'active', label: 'Active', count: candidates.filter(c => !shortlistMap[c.id] && !isArchived(c.id) && !isDuplicate(c.id)).length },
                 { key: 'shortlisted', label: 'Shortlisted', count: candidates.filter(c => { const s = shortlistMap[c.id]; return !isArchived(c.id) && (s === 'shortlisted' || s === 'interviewed' || s === 'hired'); }).length },
                 { key: 'rejected', label: 'Rejected', count: candidates.filter(c => !isArchived(c.id) && shortlistMap[c.id] === 'rejected').length },
                 { key: 'duplicates', label: 'Duplicates', count: candidates.filter(c => isDuplicate(c.id) && !isArchived(c.id)).length },
                 { key: 'archived', label: 'Archived', count: candidates.filter(c => isArchived(c.id)).length },
-                { key: 'all', label: 'All', count: candidates.length },
               ].map(f => (
                 <button key={f.key} className={`results-filter-btn${resultsFilter === f.key ? ' active' : ''}${f.key === 'duplicates' && f.count > 0 ? ' has-duplicates' : ''}`} onClick={() => switchFilter(f.key)}>
                   {f.label}

@@ -132,7 +132,7 @@ All email flows (rejection, shortlist, interview, offer) go through `EmailCompos
    - **Save logic:** when save checkbox is checked, user must provide a name (prompted on Continue if blank); saved sets refresh immediately and appear in the dropdown
 3. **Upload CVs** — drag-and-drop file upload with PDF extraction
 4. **Results** — scored candidate table with filter bar, sorting, and state-dependent actions:
-   - **Filter bar:** Active (default) | Shortlisted | Rejected | Duplicates | Archived | All — each with count badge
+   - **Filter bar:** All (default) | Active | Shortlisted | Rejected | Duplicates | Archived — each with count badge
    - **Sort:** unevaluated first → evaluated-pending → shortlisted → rejected; newest first within each group
    - **Pending:** Details, Shortlist, Reject buttons (+ Run Evaluation if unevaluated)
    - **Shortlisted/Interviewed/Hired:** green status badge + Archive button
@@ -145,6 +145,24 @@ All email flows (rejection, shortlist, interview, offer) go through `EmailCompos
    - Toast colors: green for shortlist, red for reject, blue for archive
 
 Step access is governed by job state (`has_criteria`, `has_cvs`, `has_evaluations`). Existing jobs allow non-linear navigation.
+
+### Shortlist
+Candidate cards with status pipeline (shortlisted → interviewed → hired) and email actions. Features:
+- **Filter bar:** All (default) | Shortlisted | Interviewed | Hired | Rejected | Archived
+- **Archive:** same UX as Results — archive button, undo toast (5s), restore from Archived view
+- **Email actions:** shortlist notification, interview invite, job offer — all through the shared email composer
+- **Email status:** distinct messages for sent/logged/failed — never vague "logged only"
+- **Communication status on cards:** each candidate card shows a clickable email banner (latest type, status, timestamp). Clicking expands to show full email history: all emails for that candidate with recipient, subject, date, full body, and error details. Built from `/email-history?job_id=N`, stored as array per candidate. Green banner for sent, red for failed/logged. Updates immediately after sending
+- **Full card state transitions:** each card gets a CSS state class (`candidate-card--shortlisted/interviewed/hired/rejected`) that tints the entire card (background, border, shadow). On state change: scale+sweep animation plays (`candidate-card--transitioning`), a status chip appears top-right (`.card-status-chip`), and for decided statuses (hired/rejected) the action buttons are replaced with an animated state badge (`.card-state-badge`). Cards stay visible in the current filter via `retainedInView` until the user switches filters — the visual transition is the primary feedback, toasts are secondary
+- **Notified vs not-notified distinction:** shortlisted candidates with at least one successfully sent email get a stronger green card tint, green left accent border (`candidate-card--notified`), and a "✉ Notified" chip next to their name. Candidates not yet emailed keep the lighter default styling
+- **Sort order:** cards sorted by `updated_at` (fallback `shortlisted_at`), newest first
+
+### Emails
+Email history table with expandable row details. Features:
+- **Filter tabs:** All | Sent | Failed
+- **SMTP status banner:** derives health from recent send history (working/not configured/unknown)
+- **Expandable rows:** each row is clickable — expands to show full email details (recipient, type, date, delivery status badge, error message, full subject and body). Toggle arrow in a fixed-width last column stays in place when expanding/collapsing. Only one row expanded at a time
+- **Setup guide modal:** step-by-step SMTP/Gmail configuration instructions
 
 ### Dashboard Charts
 Uses Chart.js via react-chartjs-2. Doughnut chart for job status distribution, hiring funnel visualization, top jobs table, and recent activity feed.

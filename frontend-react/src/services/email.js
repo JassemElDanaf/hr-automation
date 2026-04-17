@@ -17,8 +17,9 @@ export async function sendEmailRequest({ candidateId, jobId, emailType, recipien
 export function getEmailStatus(res) {
   const status = res.data && res.data.status;
   if (status === 'sent') return { type: 'success', message: 'Email sent to ' + (res.data.recipient_email || '') };
-  if (status === 'logged') return { type: 'error', message: 'Email logged only — SMTP not configured.' };
-  return { type: 'error', message: 'Email attempt complete — check Emails tab.' };
+  if (status === 'logged') return { type: 'error', message: 'Email not sent \u2014 SMTP not configured. Email was saved to log only.' };
+  if (status === 'failed') return { type: 'error', message: 'Email failed to send: ' + (res.data.error || 'unknown error') };
+  return { type: 'error', message: 'Email delivery uncertain \u2014 check Emails tab for status.' };
 }
 
 export function getRejectionTemplate(candidateName, jobTitle) {

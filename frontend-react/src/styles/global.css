@@ -598,7 +598,134 @@ textarea { resize: vertical; min-height: 120px; }
 .candidate-card {
   background: white; border: 1px solid var(--gray-200); border-radius: var(--radius);
   padding: 20px; margin-bottom: 12px;
+  transition: background 0.4s ease, border-color 0.4s ease, box-shadow 0.4s ease;
+  position: relative;
+  overflow: hidden;
 }
+
+/* State variants — full card color change */
+.candidate-card--shortlisted {
+  background: #f0fdf4;
+  border-color: #86efac;
+  box-shadow: 0 0 0 1px #bbf7d0, 0 2px 8px rgba(22, 163, 74, 0.08);
+}
+.candidate-card--interviewed {
+  background: #eff6ff;
+  border-color: #93c5fd;
+  box-shadow: 0 0 0 1px #bfdbfe, 0 2px 8px rgba(37, 99, 235, 0.08);
+}
+.candidate-card--hired {
+  background: #ecfdf5;
+  border-color: #6ee7b7;
+  box-shadow: 0 0 0 1px #a7f3d0, 0 2px 8px rgba(5, 150, 105, 0.1);
+}
+.candidate-card--rejected {
+  background: #fef2f2;
+  border-color: #fca5a5;
+  box-shadow: 0 0 0 1px #fecaca, 0 2px 8px rgba(220, 38, 38, 0.06);
+}
+/* Shortlisted + email sent — stronger green to distinguish from not-yet-notified */
+.candidate-card--notified {
+  background: #ecfdf5;
+  border-color: #6ee7b7;
+  box-shadow: 0 0 0 1px #a7f3d0, 0 2px 8px rgba(5, 150, 105, 0.08);
+  border-left: 4px solid #34d399;
+}
+.card-notified-chip {
+  display: inline-flex; align-items: center; gap: 3px;
+  padding: 2px 8px; border-radius: 12px;
+  font-size: 11px; font-weight: 600;
+  background: #d1fae5; color: #065f46;
+  border: 1px solid #a7f3d0;
+}
+
+/* Card transition animation — plays once on state change */
+.candidate-card--transitioning {
+  animation: cardStateChange 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+@keyframes cardStateChange {
+  0%   { transform: scale(1); }
+  25%  { transform: scale(1.012); }
+  50%  { transform: scale(0.995); }
+  100% { transform: scale(1); }
+}
+
+/* Highlight sweep across card on state change */
+.candidate-card--transitioning::after {
+  content: '';
+  position: absolute;
+  top: 0; left: -100%; width: 100%; height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.5), transparent);
+  animation: highlightSweep 0.6s ease-out forwards;
+  pointer-events: none;
+}
+@keyframes highlightSweep {
+  from { left: -100%; }
+  to   { left: 100%; }
+}
+
+/* Card action area transition */
+.card-actions-area {
+  display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px;
+  padding-top: 12px; border-top: 1px solid var(--gray-100);
+  transition: border-color 0.4s ease;
+}
+.candidate-card--shortlisted .card-actions-area,
+.candidate-card--hired .card-actions-area { border-top-color: #dcfce7; }
+.candidate-card--interviewed .card-actions-area { border-top-color: #dbeafe; }
+.candidate-card--rejected .card-actions-area { border-top-color: #fee2e2; }
+
+/* State badge for decided cards (replaces action buttons) */
+.card-state-badge {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 8px 18px; border-radius: 24px;
+  font-size: 14px; font-weight: 600; letter-spacing: 0.01em;
+}
+.card-state-badge--shortlisted {
+  background: #dcfce7; color: #15803d; border: 1px solid #bbf7d0;
+}
+.card-state-badge--interviewed {
+  background: #dbeafe; color: #1d4ed8; border: 1px solid #bfdbfe;
+}
+.card-state-badge--hired {
+  background: #a7f3d0; color: #065f46; border: 1px solid #6ee7b7;
+}
+.card-state-badge--rejected {
+  background: #fee2e2; color: #b91c1c; border: 1px solid #fecaca;
+}
+
+/* Animate old actions fading out / new badge fading in */
+.card-actions-exit {
+  animation: actionsSlideOut 0.3s ease-out forwards;
+}
+@keyframes actionsSlideOut {
+  from { opacity: 1; transform: translateY(0); }
+  to   { opacity: 0; transform: translateY(-8px); }
+}
+.card-state-badge--enter {
+  animation: badgeSlideIn 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) 0.15s both;
+}
+@keyframes badgeSlideIn {
+  from { opacity: 0; transform: scale(0.8) translateY(6px); }
+  to   { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+/* Status chip in top-right corner of card */
+.card-status-chip {
+  position: absolute; top: 12px; right: 12px;
+  padding: 4px 12px; border-radius: 16px;
+  font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em;
+  animation: chipFadeIn 0.4s ease-out 0.1s both;
+}
+.card-status-chip--shortlisted { background: #dcfce7; color: #15803d; }
+.card-status-chip--interviewed { background: #dbeafe; color: #1d4ed8; }
+.card-status-chip--hired { background: #a7f3d0; color: #065f46; }
+.card-status-chip--rejected { background: #fee2e2; color: #b91c1c; }
+@keyframes chipFadeIn {
+  from { opacity: 0; transform: translateX(8px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
 .candidate-card-header {
   display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;
 }
@@ -612,6 +739,202 @@ textarea { resize: vertical; min-height: 120px; }
   .criteria-grid { grid-template-columns: 1fr; }
   .criteria-actions-btns { flex-wrap: wrap; }
   .criteria-action-btn { min-width: 100px; flex: 1; }
+}
+
+/* Shortlist — email status on candidate cards */
+.sl-email-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: var(--radius);
+  font-size: 13px;
+  line-height: 1.4;
+  background: var(--gray-100);
+  color: var(--gray-600);
+  border: 1px solid var(--gray-200);
+  margin-top: 8px;
+}
+.sl-email-sent {
+  background: #f0fdf4;
+  color: #166534;
+  border-color: #bbf7d0;
+}
+.sl-email-failed {
+  background: #fef2f2;
+  color: #991b1b;
+  border-color: #fecaca;
+}
+.sl-email-icon {
+  font-size: 16px;
+  flex-shrink: 0;
+}
+.sl-email-time {
+  color: var(--gray-400);
+  font-size: 12px;
+}
+.sl-email-clickable {
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.15s;
+}
+.sl-email-clickable:hover {
+  filter: brightness(0.97);
+}
+.sl-email-toggle {
+  font-size: 10px;
+  color: var(--gray-400);
+  flex-shrink: 0;
+  margin-left: 4px;
+}
+.sl-email-wrapper {
+  margin-top: 8px;
+}
+.sl-email-wrapper .sl-email-status {
+  margin-top: 0;
+  border-radius: var(--radius) var(--radius) var(--radius) var(--radius);
+}
+.sl-email-wrapper:has(.sl-email-details) .sl-email-status {
+  border-radius: var(--radius) var(--radius) 0 0;
+  border-bottom: none;
+}
+.sl-email-details {
+  border: 1px solid var(--gray-200);
+  border-top: none;
+  border-radius: 0 0 var(--radius) var(--radius);
+  background: white;
+  animation: emailDetailsSlideIn 0.2s ease-out;
+  overflow: hidden;
+}
+@keyframes emailDetailsSlideIn {
+  from { opacity: 0; max-height: 0; }
+  to   { opacity: 1; max-height: 600px; }
+}
+.sl-email-detail-item {
+  padding: 12px 14px;
+  border-top: 1px solid var(--gray-100);
+  font-size: 13px;
+}
+.sl-email-detail-item:first-child {
+  border-top: 1px solid var(--gray-200);
+}
+.sl-email-detail-item + .sl-email-detail-item {
+  border-top: 1px dashed var(--gray-200);
+}
+.sl-detail-sent { background: #fafff9; }
+.sl-detail-failed { background: #fffafa; }
+.sl-email-detail-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+}
+.sl-email-detail-badge {
+  padding: 2px 10px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 600;
+}
+.sl-email-detail-badge--sent { background: #dcfce7; color: #15803d; }
+.sl-email-detail-badge--failed { background: #fee2e2; color: #b91c1c; }
+.sl-email-detail-badge--logged { background: #fef3c7; color: #92400e; }
+.sl-email-detail-row {
+  color: var(--gray-600);
+  line-height: 1.5;
+  padding: 1px 0;
+}
+.sl-email-detail-label {
+  font-weight: 600;
+  color: var(--gray-500);
+  font-size: 12px;
+  margin-right: 4px;
+}
+.sl-email-detail-error {
+  color: #b91c1c;
+}
+.sl-email-detail-body {
+  margin-top: 8px;
+  padding: 10px 12px;
+  background: var(--gray-50);
+  border-radius: var(--radius);
+  border: 1px solid var(--gray-200);
+}
+.sl-email-detail-body pre {
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  font-family: inherit;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--gray-700);
+  margin: 0;
+}
+
+/* Emails tab — expandable rows */
+.email-row-clickable {
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.email-row-clickable:hover td {
+  background: var(--gray-50) !important;
+}
+.email-row-toggle {
+  font-size: 10px;
+  color: var(--gray-400);
+  display: inline-block;
+  width: 12px;
+  text-align: center;
+}
+.email-detail-row td {
+  padding: 0 !important;
+  background: white;
+}
+.email-detail-panel {
+  padding: 16px 20px;
+  background: var(--gray-50);
+  border-top: 1px solid var(--gray-200);
+  border-bottom: 1px solid var(--gray-200);
+  animation: emailDetailsSlideIn 0.2s ease-out;
+  font-size: 13px;
+}
+.email-detail-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px 20px;
+  margin-bottom: 10px;
+}
+.email-detail-field {
+  color: var(--gray-700);
+  line-height: 1.6;
+}
+.email-detail-label {
+  font-weight: 600;
+  color: var(--gray-500);
+  font-size: 12px;
+}
+.email-detail-error-box {
+  padding: 8px 12px;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: var(--radius);
+  color: #b91c1c;
+  font-size: 13px;
+  margin-top: 8px;
+}
+.email-detail-body-box {
+  margin-top: 10px;
+}
+.email-detail-body-pre {
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  font-family: inherit;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--gray-700);
+  margin: 0;
+  padding: 12px 14px;
+  background: white;
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius);
 }
 
 @media (max-width: 768px) {
