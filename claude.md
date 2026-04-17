@@ -20,7 +20,7 @@ Persistent source of truth for the project. Read this before making changes.
 | PostgreSQL (Docker) | `hr_automation` database. Schema in `db/schema.sql`, migrations in `db/migrations/`. |
 | Ollama (local, port 11434) | Runs `qwen3:4b`. Used for JD generation, criteria generation, CV scoring. |
 | SMTP sidecar (`scripts/smtp_server.py`) | Tiny Python HTTP server on `127.0.0.1:8901`. n8n POSTs here, it relays via `smtplib`. |
-| Launcher (`start.sh` / `launch.bat`) | Brings up everything in the right order and opens the browser. |
+| Launcher (`start.sh` / `launch.bat`) | Brings up everything in the right order (Docker → Postgres → Ollama → SMTP → n8n → legacy frontend → React frontend) and opens http://localhost:3001. n8n auth is disabled via env vars. |
 
 **How the pieces fit**
 
@@ -145,7 +145,7 @@ These rules are **load-bearing**. Breaking them has caused real bugs.
 13. **Email history table rows are expandable.** Each row in the Emails tab is clickable — clicking expands an inline detail panel showing: recipient, type, full date, delivery status badge, error message (if failed), full subject, and complete email body. A dedicated toggle arrow column (last column, fixed 28px width) stays in the same position whether expanded or collapsed so users can toggle without moving the mouse. Only one row can be expanded at a time.
 
 ### Job Openings (Phase 2)
-18. **Job Detail Modal is fully editable.** Clicking a job title opens a detail modal in view mode. An "Edit" button switches to edit mode with form fields for: Job Title (required), Department (dropdown + custom "Other" input), Employment Type, Seniority Level, Location Type, Reporting To, and Job Description (textarea). "Save Changes" POSTs to `/job-opening-update` with the job ID and changed fields. "Cancel" reverts to view mode without saving. The modal footer switches between view actions (Edit / Activate|Deactivate / Close) and edit actions (Cancel / Save Changes). Department uses a select with predefined options; selecting "Other" reveals a text input for custom department names. All fields except Job Title are optional.
+18. **Job Detail Modal is fully editable.** Clicking a job title opens a detail modal in view mode. An "Edit" button switches to edit mode with form fields for: Job Title (required), Department (dropdown + custom "Other" input), Employment Type, Seniority Level, Location Type, Reporting To, and Job Description (textarea). "Save Changes" POSTs to `/job-opening-update` with the job ID and changed fields. "Cancel" reverts to view mode without saving. The modal footer switches between view actions (Edit / Activate|Deactivate / Close) and edit actions (Cancel / Save Changes). Department uses a select with predefined options; selecting "Other" reveals a text input for custom department names. All fields except Job Title are optional. **No-op save handling:** if the user clicks "Save Changes" without modifying any field, the modal shows "No changes to save" (info toast), exits edit mode, and closes — it never sends a request or shows an error.
 19. **Job toggle patches local state.** Activating/deactivating a job in the table or detail modal patches the local `allJobs` array in-place (`setAllJobs(prev => prev.map(...))`) — never calls `loadJobs()` which would cause a flash/reload of the entire table.
 
 ### Shortlist (Phase 4)

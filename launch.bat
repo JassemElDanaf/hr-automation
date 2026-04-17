@@ -1,8 +1,8 @@
 @echo off
 REM Diyar HR Automation - one-click launcher
 REM Double-click this file (or pin to taskbar) to bring up everything:
-REM   Docker Desktop -> hr-postgres -> Ollama -> SMTP sidecar -> n8n -> frontend
-REM Then opens http://localhost:3000 in your default browser.
+REM   Docker Desktop -> hr-postgres -> Ollama -> SMTP sidecar -> n8n -> legacy frontend -> React frontend
+REM Then opens http://localhost:3001 (React app) in your default browser.
 
 cd /d "%~dp0"
 

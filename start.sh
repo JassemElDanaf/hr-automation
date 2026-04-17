@@ -4,6 +4,8 @@
 
 export PATH="/c/Users/Jasse/AppData/Roaming/npm:/e/NodeJS:$PATH"
 export N8N_USER_MANAGEMENT_DISABLED=true
+export N8N_BASIC_AUTH_ACTIVE=false
+export N8N_AUTH_EXCLUDE_ENDPOINTS="*"
 export OLLAMA_MODELS=/e/ollama
 
 # Load local config (.env) — holds SMTP creds, any local overrides.
@@ -100,28 +102,44 @@ else
   fi
 fi
 
-# 5. Start frontend server
-echo "[5/5] Starting frontend server..."
+# 5. Start legacy frontend server
+echo "[5/6] Starting legacy frontend (port 3000)..."
 if curl -s http://localhost:3000 > /dev/null 2>&1; then
-  echo "  Frontend already running."
+  echo "  Legacy frontend already running."
 else
   cd "$(dirname "$0")/frontend"
   npx serve -l 3000 -s . > /dev/null 2>&1 &
   sleep 2
-  echo "  Frontend started."
+  echo "  Legacy frontend started."
+fi
+
+# 6. Start React frontend (primary)
+echo "[6/6] Starting React frontend (port 3001)..."
+if curl -s http://localhost:3001 > /dev/null 2>&1; then
+  echo "  React frontend already running."
+else
+  cd "$(dirname "$0")/frontend-react"
+  npx vite --port 3001 > /dev/null 2>&1 &
+  sleep 3
+  if curl -s http://localhost:3001 > /dev/null 2>&1; then
+    echo "  React frontend started."
+  else
+    echo "  WARNING: React frontend may still be loading — check http://localhost:3001"
+  fi
 fi
 
 echo ""
 echo "All services started!"
-echo "  Frontend:    http://localhost:3000"
+echo "  React App:   http://localhost:3001  (primary)"
+echo "  Legacy App:  http://localhost:3000  (fallback)"
 echo "  n8n:         http://localhost:5678"
 echo "  Ollama:      http://localhost:11434"
 echo "  PostgreSQL:  localhost:5432"
 echo "  SMTP bridge: http://127.0.0.1:8901"
 
-# Open the frontend in the default browser (first run after a cold boot).
+# Open the React frontend in the default browser (first run after a cold boot).
 # Pass --no-open to skip, e.g. ./start.sh --no-open
 if [ "$1" != "--no-open" ]; then
   sleep 1
-  start "" "http://localhost:3000" 2>/dev/null || cmd.exe /c start "" "http://localhost:3000" 2>/dev/null || true
+  start "" "http://localhost:3001" 2>/dev/null || cmd.exe /c start "" "http://localhost:3001" 2>/dev/null || true
 fi

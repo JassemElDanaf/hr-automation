@@ -47,6 +47,14 @@ export default function JobDetailModal({ jobId, isOpen, onClose, onToggle }) {
 
   async function saveChanges() {
     if (!form.job_title.trim()) { showToast('Job title is required', 'error'); return; }
+    const original = buildForm(job);
+    const hasChanges = Object.keys(form).some(k => form[k] !== original[k]);
+    if (!hasChanges) {
+      showToast('No changes to save', 'info');
+      setEditing(false);
+      onClose();
+      return;
+    }
     setSaving(true);
     try {
       const res = await apiPost('/job-opening-update', { id: jobId, ...form });
