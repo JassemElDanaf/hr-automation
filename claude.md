@@ -20,7 +20,7 @@ Persistent source of truth for the project. Read this before making changes.
 | PostgreSQL (Docker) | `hr_automation` database. Schema in `db/schema.sql`, migrations in `db/migrations/`. |
 | Ollama (local, port 11434) | Runs `qwen3:4b`. Used for JD generation, criteria generation, CV scoring. |
 | SMTP sidecar (`scripts/smtp_server.py`) | Tiny Python HTTP server on `127.0.0.1:8901`. n8n POSTs here, it relays via `smtplib`. |
-| Launcher (`start.sh` / `launch.bat`) | Brings up everything in the right order (Docker → Postgres → Ollama → SMTP → n8n → legacy frontend → React frontend) and opens http://localhost:3001. n8n auth is disabled via env vars. All data lives on E:\ (Docker data in `E:\Docker`, n8n data in `E:\n8n`, Ollama models+program in `E:\ollama`). |
+| Launcher (`start.sh` / `launch.bat`) | Brings up everything in the right order (Docker → Postgres → Ollama → SMTP → n8n → legacy frontend → React frontend) and opens http://localhost:3001. n8n auth is disabled via env vars. All data lives on E:\ (Docker WSL2 distro reimported to `E:\Docker\wsl\data`, n8n data in `E:\n8n`, Ollama models+program in `E:\ollama`). |
 
 **How the pieces fit**
 

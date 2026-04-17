@@ -166,7 +166,7 @@ bash start.sh
 
 `start.sh` enforces this startup order (see `start.sh` in the project root for the authoritative version):
 
-1. **Docker Desktop** — launched if not already running (waits up to 2 min). Data root on `E:\Docker`
+1. **Docker Desktop** — launched if not already running (waits up to 2 min). WSL distro on `E:\Docker\wsl\data`
 2. **hr-postgres** — `docker start hr-postgres`
 3. **Ollama** — `/e/ollama/program/ollama.exe serve` in background. Models on `E:\ollama`
 4. **SMTP sidecar** — `python scripts/smtp_server.py` in background, listens on `127.0.0.1:8901`
@@ -181,7 +181,7 @@ bash start.sh
 
 | Service | Data path | How |
 |---------|-----------|-----|
-| Docker | `E:\Docker` | `daemon.json` → `"data-root": "E:\\Docker"` |
+| Docker | `E:\Docker\wsl\data` | WSL2 distro reimported to E:\ (do NOT set `data-root` in daemon.json) |
 | n8n | `E:\n8n` | `N8N_USER_FOLDER=/e/n8n` in `start.sh` |
 | Ollama | `E:\ollama` | `OLLAMA_MODELS=/e/ollama` + `OLLAMA_HOME=/e/ollama` in `start.sh` |
 

@@ -96,7 +96,7 @@ docker inspect hr-postgres --format '{{.State.Status}}'
 
 ## Data Persistence
 
-Docker's data root is set to `E:\Docker` (via `daemon.json` `"data-root": "E:\\Docker"`). All images, volumes, and container data live on E:\ to save C:\ space. Data survives `docker stop` / `docker start`.
+Docker's data lives on E:\ — the WSL2 `docker-desktop` distro was exported and reimported to `E:\Docker\wsl\data` so the virtual disk (`.vhdx`) is physically on E:\. This keeps C:\ free. Do **not** set `"data-root"` in `daemon.json` — that forces Docker to use the slow `vfs` storage driver instead of `overlay2`. Data survives `docker stop` / `docker start`.
 
 **To wipe everything:**
 ```bash
