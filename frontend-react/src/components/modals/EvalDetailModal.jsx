@@ -45,10 +45,24 @@ export default function EvalDetailModal({ candidate, allCandidates, isOpen, onCl
           <div style={{ fontSize: '13px', color: 'var(--gray-500)' }}>Email</div>
           <div style={{ fontSize: '15px' }}>{c.email || '\u2014'}</div>
         </div>
-        <div style={{ textAlign: 'center' }}>
-          <div style={{ fontSize: '13px', color: 'var(--gray-500)' }}>Submitted</div>
-          <div style={{ fontSize: '15px' }}>{new Date(c.submitted_at).toLocaleDateString()}</div>
-        </div>
+        {c.submitted_at && (
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ fontSize: '13px', color: 'var(--gray-500)' }}>Submitted</div>
+            <div style={{ fontSize: '15px' }}>{new Date(c.submitted_at).toLocaleDateString()}</div>
+          </div>
+        )}
+        {c.shortlisted_at && !c.submitted_at && (
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ fontSize: '13px', color: 'var(--gray-500)' }}>Shortlisted</div>
+            <div style={{ fontSize: '15px' }}>{new Date(c.shortlisted_at).toLocaleDateString()}</div>
+          </div>
+        )}
+        {c.status && (
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ fontSize: '13px', color: 'var(--gray-500)' }}>Status</div>
+            <div style={{ fontSize: '15px', fontWeight: 600, textTransform: 'capitalize' }}>{c.status}</div>
+          </div>
+        )}
         {hasEval && (
           <div style={{ textAlign: 'right' }}>
             <div style={{ fontSize: '13px', color: 'var(--gray-500)' }}>Rank</div>
@@ -86,7 +100,7 @@ export default function EvalDetailModal({ candidate, allCandidates, isOpen, onCl
           <div className="eval-detail-section">
             <h4 style={{ fontSize: '13px', fontWeight: 700, color: 'var(--gray-700)' }}>Evaluation Method</h4>
             <p style={{ fontSize: '14px', color: 'var(--gray-600)', marginTop: '4px' }}>{c.reasoning || 'Keyword-based analysis'}</p>
-            <p style={{ fontSize: '12px', color: 'var(--gray-400)', marginTop: '4px' }}>Evaluated: {new Date(c.evaluated_at).toLocaleString()}</p>
+            {c.evaluated_at && <p style={{ fontSize: '12px', color: 'var(--gray-400)', marginTop: '4px' }}>Evaluated: {new Date(c.evaluated_at).toLocaleString()}</p>}
           </div>
         </>
       ) : (

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { apiGet } from '../services/api';
 import { useSelectedJob } from '../state/selectedJob';
@@ -7,9 +7,10 @@ import StatCard from '../components/common/StatCard';
 import Badge from '../components/common/Badge';
 import Loading from '../components/common/Loading';
 import { relativeTime } from '../utils/helpers';
-import { Chart, ArcElement, DoughnutController, Legend, Tooltip } from 'chart.js';
+import { Chart as ChartJS, ArcElement, DoughnutController, Legend, Tooltip } from 'chart.js';
+import { Doughnut } from 'react-chartjs-2';
 
-Chart.register(ArcElement, DoughnutController, Legend, Tooltip);
+ChartJS.register(ArcElement, DoughnutController, Legend, Tooltip);
 
 export default function Dashboard() {
   const { selectedJob, setSelectedJob } = useSelectedJob();
@@ -20,8 +21,6 @@ export default function Dashboard() {
   const [shortlist, setShortlist] = useState([]);
   const [filterJobId, setFilterJobId] = useState('');
   const [loading, setLoading] = useState(true);
-  const chartRef = useRef(null);
-  const chartInstance = useRef(null);
 
   useEffect(() => {
     loadDashboard();
@@ -85,22 +84,13 @@ export default function Dashboard() {
     { label: 'Rejected', count: rejected, color: '#dc2626' },
   ];
 
-  // Chart
-  useEffect(() => {
-    if (!chartRef.current) return;
-    const total = shortlisted + interviewed + hiredCount + rejected;
-    if (chartInstance.current) chartInstance.current.destroy();
-    if (total === 0) return;
-    chartInstance.current = new Chart(chartRef.current, {
-      type: 'doughnut',
-      data: {
-        labels: ['Shortlisted', 'Interviewed', 'Hired', 'Rejected'],
-        datasets: [{ data: [shortlisted, interviewed, hiredCount, rejected], backgroundColor: ['#06b6d4', '#f59e0b', '#16a34a', '#dc2626'], borderWidth: 0 }],
-      },
-      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { font: { size: 12 }, padding: 10 } } }, cutout: '65%' },
-    });
-    return () => { if (chartInstance.current) chartInstance.current.destroy(); };
-  }, [shortlisted, interviewed, hiredCount, rejected]);
+  // Chart data
+  const chartTotal = shortlisted + interviewed + hiredCount + rejected;
+  const chartData = {
+    labels: ['Shortlisted', 'Interviewed', 'Hired', 'Rejected'],
+    datasets: [{ data: [shortlisted, interviewed, hiredCount, rejected], backgroundColor: ['#06b6d4', '#f59e0b', '#16a34a', '#dc2626'], borderWidth: 0 }],
+  };
+  const chartOptions = { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { font: { size: 12 }, padding: 10 } } }, cutout: '65%' };
 
   // Top jobs
   const jobCounts = {};
@@ -157,8 +147,8 @@ export default function Dashboard() {
         </div>
         <div className="table-wrap" style={{ padding: '20px' }}>
           <h3 style={{ fontSize: '14px', fontWeight: 700, marginBottom: '12px' }}>Candidates by Status</h3>
-          {shortlisted + interviewed + hiredCount + rejected > 0
-            ? <canvas ref={chartRef} style={{ maxHeight: '240px' }}></canvas>
+          {chartTotal > 0
+            ? <div style={{ position: 'relative', height: '240px' }}><Doughnut data={chartData} options={chartOptions} /></div>
             : <div className="empty-state" style={{ padding: '40px 0' }}><p>No candidates on the shortlist yet.</p></div>
           }
         </div>

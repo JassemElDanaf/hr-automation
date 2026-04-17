@@ -8,6 +8,7 @@ import ScoreBadge from '../components/common/ScoreBadge';
 import EmptyState from '../components/common/EmptyState';
 import Loading from '../components/common/Loading';
 import { sendEmailRequest, getShortlistTemplate, getInterviewTemplate, getOfferTemplate } from '../services/email';
+import EvalDetailModal from '../components/modals/EvalDetailModal';
 
 export default function Shortlist() {
   const { selectedJob, setSelectedJob } = useSelectedJob();
@@ -24,6 +25,7 @@ export default function Shortlist() {
   const slArchiveTimerRef = useRef(null);
   const [emailMap, setEmailMap] = useState({}); // candidate_id -> [{ email_type, status, sent_at, subject, body, recipient_email, error_message }, ...]
   const [expandedEmail, setExpandedEmail] = useState({}); // candidate_id -> true if email details expanded
+  const [profileCandidate, setProfileCandidate] = useState(null); // candidate for detail modal
   const [transitioning, setTransitioning] = useState({}); // id -> true while animation plays
   const [retainedInView, setRetainedInView] = useState(new Set()); // keep card visible after state change
 
@@ -272,7 +274,10 @@ export default function Shortlist() {
                     <Badge type={s.status}>{s.status}</Badge>
                     {hasEmailSent && <span className="card-notified-chip">{'\u2709'} Notified</span>}
                   </div>
-                  <span className={`score-badge ${scoreClsName}`}>{score}</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <button className="btn btn-sm btn-secondary" onClick={() => setProfileCandidate(s)}>View Profile</button>
+                    <span className={`score-badge ${scoreClsName}`}>{score}</span>
+                  </div>
                 </div>
                 <div className="candidate-meta">
                   {s.email || '\u2014'} &middot; Shortlisted {new Date(s.shortlisted_at).toLocaleDateString()}
@@ -365,6 +370,13 @@ export default function Shortlist() {
           })}
         </div>
       )}
+
+      <EvalDetailModal
+        candidate={profileCandidate}
+        allCandidates={data}
+        isOpen={!!profileCandidate}
+        onClose={() => setProfileCandidate(null)}
+      />
     </div>
   );
 }
