@@ -1,5 +1,7 @@
 # Troubleshooting
 
+> **Project status:** Proof of concept, pre-finalization. Known issues listed here are the ones encountered during build-out; production hardening will add more. See `report/report.pdf` for the stakeholder progress report.
+
 Symptom-first index. Each entry: what you'll see, why it happens, exact fix.
 
 ---
@@ -219,3 +221,75 @@ docker exec -i hr-postgres psql -U hr_admin -d hr_automation < db/migrations/005
 
 ### Completely fresh machine — `.env` doesn't exist
 **Fix:** `cp .env.example .env` and fill in the SMTP values.
+
+---
+
+## React Frontend (`frontend-react/`)
+
+### `npm run dev` fails with "port 3001 already in use"
+**Cause:** another process is on port 3001.
+**Fix:** kill it, or let Vite auto-select the next free port (it will print the actual URL).
+```bash
+# find what's using 3001
+netstat -ano | findstr :3001
+# kill by PID
+taskkill /PID <pid> /F
+```
+
+### React app loads but API calls fail (CORS or connection refused)
+**Cause:** n8n is not running, or `VITE_API_URL` is wrong.
+**Fix:**
+1. Confirm n8n is up: `curl http://localhost:5678/healthz`
+2. Check `frontend-react/.env` contains `VITE_API_URL=http://localhost:5678/webhook`
+3. Restart the dev server after editing `.env` (Vite only reads env at startup)
+
+### React app shows blank page / white screen
+**Cause:** JS error during render.
+**Fix:** open browser DevTools → Console, read the error. Common causes:
+- Missing dependency → run `npm install` in `frontend-react/`
+- API returning unexpected shape → check n8n workflow is active
+
+### Charts don't render on Dashboard
+**Cause:** `chart.js` or `react-chartjs-2` not installed.
+**Fix:**
+```bash
+cd frontend-react && npm install chart.js react-chartjs-2
+```
+
+### PDF upload / extraction doesn't work
+**Cause:** `pdfjs-dist` not installed or worker misconfigured.
+**Fix:**
+```bash
+cd frontend-react && npm install pdfjs-dist
+```
+Check `src/utils/pdf.js` points to the correct worker path.
+
+### Build produces "chunk size > 500 kB" warning
+**Not a bug.** Vite warns when output chunks are large. The app works fine. To suppress or split:
+```js
+// vite.config.js
+build: {
+  rollupOptions: {
+    output: { manualChunks: { vendor: ['react', 'react-dom'] } }
+  }
+}
+```
+
+---
+
+## Report (LaTeX / MiKTeX)
+
+### `pdflatex` not found
+**Cause:** MiKTeX not installed or not on PATH.
+**Fix:** call the binary directly:
+```bash
+"C:/Users/Jasse/AppData/Local/Programs/MiKTeX/miktex/bin/x64/pdflatex.exe" report.tex
+```
+
+### TOC or page numbers look wrong after compile
+**Cause:** LaTeX needs a second pass to resolve forward references.
+**Fix:** run `pdflatex report.tex` twice.
+
+### "File `images/xxx.png' not found"
+**Cause:** screenshot filename does not match what `report.tex` expects.
+**Fix:** check `report/images/` — filenames are lowercase, hyphen-separated, no spaces (`dashboard.png`, `criteria-ai.png`, `n8n-workflows.png`, etc.). Rename on copy rather than editing the `.tex`.

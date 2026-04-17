@@ -1,5 +1,7 @@
 # Architecture
 
+> **Project status:** Proof of concept, pre-finalization. The compiled progress report sent to Diyar management lives at `report/report.pdf`.
+
 Full system design. For the quick tour, read `claude.md` first.
 
 ---
@@ -168,6 +170,9 @@ Contract:
 - `POST /` with `{to, subject, body, from?}` — sends via `smtplib`, returns `{status, error?}`
 
 Reads `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM` from env vars.
+
+### Stakeholder report — `report/`
+LaTeX progress report packaged separately from the running system. `report.tex` uses `mathptmx` for 12pt Times New Roman, `graphicx` with `\graphicspath{{images/}}` so all screenshots/logo resolve locally, and a custom cover page. Compiled with MiKTeX (`pdflatex` run twice for TOC). Not wired into the runtime — it is documentation artifact, not code.
 
 ---
 

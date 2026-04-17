@@ -2,6 +2,8 @@
 
 Persistent source of truth for the project. Read this before making changes.
 
+> **Project status (April 2026):** Proof of concept, pre-finalization. All five phases are functional end to end but work remains before production rollout. A progress report for Diyar management lives at `report/report.pdf` (LaTeX source at `report/report.tex`, compiled with MiKTeX).
+
 ---
 
 ## 1. Project Overview
@@ -12,7 +14,8 @@ Persistent source of truth for the project. Read this before making changes.
 
 | Module | Job |
 |--------|-----|
-| Frontend (`frontend/index.html`) | Single HTML+JS file. All pages, wizards, and tables live here. No build step. |
+| Frontend — React (`frontend-react/`) | React + Vite app. 5 pages, shared state via Context, react-router. Primary frontend. |
+| Frontend — Legacy (`frontend/index.html`) | Single HTML+JS file. Reference/fallback. No build step. |
 | n8n workflows (`workflows/`) | One JSON per phase. Webhook-based HTTP API. Talks to PostgreSQL + Ollama + SMTP sidecar. |
 | PostgreSQL (Docker) | `hr_automation` database. Schema in `db/schema.sql`, migrations in `db/migrations/`. |
 | Ollama (local, port 11434) | Runs `qwen3:4b`. Used for JD generation, criteria generation, CV scoring. |
@@ -49,9 +52,20 @@ Workflow files on disk still use their original folder names (`phase1-job-openin
 
 ## 3. Architecture
 
-### Frontend
-- `frontend/index.html` — everything: HTML, CSS, JS, all pages
-- `frontend/server.js` — optional Node server (normally served via `npx serve`)
+### Frontend (React — primary)
+- `frontend-react/` — React + Vite app, replaces the legacy monolith
+- 5 page components: Dashboard, JobOpenings, CVEvaluation, Shortlist, Emails
+- State: React Context API (`selectedJob` + `uiState`), localStorage persistence for selected job
+- Routing: react-router-dom with URL paths (`/`, `/job-openings`, `/cv-evaluation`, `/shortlist`, `/emails`)
+- API: `services/api.js` reads `VITE_API_URL` from `.env` → n8n webhooks
+- PDF parsing: `pdfjs-dist` (bundled, not CDN)
+- Charts: `chart.js` + `react-chartjs-2`
+- Dev server: `npm run dev` on port 3001
+- Full architecture: `docs/frontend-architecture.md`
+
+### Frontend (Legacy — reference/fallback)
+- `frontend/index.html` — 3526-line monolithic SPA (HTML + CSS + JS)
+- `frontend/server.js` — optional Node server (normally served via `npx serve` on port 3000)
 - State lives in module-level JS variables (`evalSelectedJob`, `evalCriteria`, `allJobs`, etc.)
 - Talks to n8n via `const API = 'http://localhost:5678/webhook';`
 - PDF parsing uses `pdf.js` loaded from CDN
@@ -81,6 +95,12 @@ Full table map is in `docs/database.md`.
 ### Docker
 The only container is PostgreSQL (`hr-postgres`). There is **no `docker-compose.yml`** — the container is created with a single `docker run` command documented in `start.sh` line 54 and in `docs/docker.md`.
 
+### Report (`report/`)
+- `report.tex` — LaTeX source of the stakeholder progress report (12pt Times New Roman via `mathptmx`, cover page with Diyar logo).
+- `report.pdf` — compiled output sent to Diyar management.
+- `images/` — screenshots (Dashboard, Jobs, Criteria, Upload, Results, Shortlist, Emails, Docker Desktop, n8n) and `diyar-logo.jpg`, all with clean filenames so LaTeX handles them without space-escaping issues.
+- Compiled with MiKTeX on `C:\Users\Jasse\AppData\Local\Programs\MiKTeX\miktex\bin\x64\pdflatex.exe`. Run `pdflatex` twice after TOC or label changes.
+
 ### Environment / Config
 - `.env` (gitignored) holds SMTP credentials + any overrides. Loaded by `start.sh`.
 - `.env.example` is the template — copy to `.env` and fill in real values.
@@ -102,10 +122,20 @@ These rules are **load-bearing**. Breaking them has caused real bugs.
 4. **Criteria generation is a manual trigger only.** Never auto-generate on page load, job selection, tab switch, or weight change. The user clicks "Generate Criteria" explicitly.
 5. **Generation flow is input → generate → edit.** The "Additional Context" textarea collects HR intent, the button runs Ollama with current weights, the output appears in an editable textarea.
 6. **Generate Criteria button lives AFTER the scoring weights.** The button reads the current weights to inform the prompt.
-7. **Candidate actions are Details / Shortlist / Reject, plus Run Evaluation when unevaluated.** Actions are always rendered in a `<div class="actions-container">` inside a `<td class="actions-cell">` — never `display:flex` directly on a `td`.
-8. **Reject is candidate-level, not evaluation-level.** Every candidate row has a Reject button regardless of whether they've been scored.
-9. **Results table is summary-only.** Columns are fixed at: **Candidate | Email | Submitted | Overall | Actions**. Per-dimension scores (Skills / Experience / Education), strengths, weaknesses, reasoning, and CV text belong in the **Details modal**, never in the table. This keeps the table narrow enough to fit without horizontal scroll and keeps the Actions column (Details / Shortlist / Reject) fully visible on every row. Default sort is Overall score descending; unevaluated rows fall to the bottom.
-10. **Set Criteria is a three-section, two-column page.** Left column: (A) **Criteria Source** — saved-set dropdown, three tiles (Write / Paste · AI Generate · Upload File), and source-specific inputs (Additional Context for AI, file input for Upload). (B) **Scoring Preferences** — compact weight sliders with running total (must equal 100%). (C) When AI source is active, a **Generate with AI** card appears below weights so the model reads the current weights. Right column: a single **Criteria Draft** textarea (`#criteria-text`) that every source populates — there's **one** draft, not a separate AI output. An amber "Unsaved criteria" warning card appears when the draft has text but "Save this criteria set" is unchecked, and disappears once the user opts to save or clears the draft. The flow reads Source → (optional Context) → Weights → Generate → Editor → Save + Continue. Responsive: stacks to single column under 900px. Never rebuild Step 2 as a linear vertical stack or add a second "Generated Criteria" textarea — both fight the editable-draft invariant.
+7. **Candidate row actions are state-dependent.** The actions column shows different content based on the candidate's shortlist status:
+   - **Pending** (no shortlist entry): `Run Evaluation` (if unevaluated) · `Details` / `View CV` · `Shortlist` · `Reject`
+   - **Shortlisted** (or interviewed/hired): a centered green pill badge showing the status (e.g. "\u2713 Shortlisted") + an Archive button.
+   - **Rejected**: a centered red pill badge "\u2717 Rejected" + an Archive button.
+   Status is fetched from `/shortlist?job_id=N` on Step 4 load, so it persists across page refreshes. On shortlist/reject, the local `shortlistMap` state is updated immediately (no full reload needed) and the candidate is added to `retainedInView` so the row stays visible in the current filter until the user switches filters or reloads — status changes feel like updates, not instant disappearances. A pop animation plays on the badge when the state first changes. Rows also get a subtle tint: light red for rejected, light green for shortlisted. Status badges are centered horizontally in the Actions column via `.actions-container:has(.status-action-badge) { justify-content: center }`. Actions are always rendered in a `<div class="actions-container">` inside a `<td class="actions-cell">`. **Toast styling:** shortlist uses green (`success`), reject uses red (`error`), archive uses blue (`info`). Positive and destructive actions must be visually distinct.
+   **Run Evaluation button:** pre-checks for unevaluated candidates before calling the backend. If all candidates are already evaluated, the button is disabled and shows "\u2713 All Evaluated". Otherwise it shows the unevaluated count. Error messages are actionable: "no candidates uploaded", "all already evaluated", "Ollama may not have responded", "cannot reach n8n", etc.
+8. **Reject is candidate-level, not evaluation-level.** Every pending candidate row has a Reject button regardless of whether they've been scored.
+9. **Results table is summary-only.** Columns are fixed at: **Candidate | Email | Submitted | Overall | Actions**. Per-dimension scores (Skills / Experience / Education), strengths, weaknesses, reasoning, and CV text belong in the **Details modal**, never in the table. This keeps the table narrow enough to fit without horizontal scroll and keeps the Actions column (Details / Shortlist / Reject) fully visible on every row. **Sort order:** unevaluated/new candidates first, then evaluated-pending, then shortlisted, then rejected. Within each group: newest submission first. **Filter bar** above the table with pill buttons: Active (default), Shortlisted, Rejected, Duplicates, Archived, All. Each button shows a count badge. **Candidates stat card** shows unique count (total minus duplicates). **Archive flow:** finalized candidates (shortlisted/rejected) and duplicates have an Archive button. On click: row fades out (0.35s), toast shows "Candidate archived — Undo" for 5s. Undo restores immediately; after 5s the archive commits to `localStorage` (`hr_archived_candidates_v2`, object mapping candidateId → previousStatus). Archived candidates appear in the Archived filter tab with muted styling (greyed rows) and a Restore button. No database records are deleted. **Duplicate detection:** candidates sharing the same email (case-insensitive, trimmed) are grouped. Within each group: the primary is the evaluated candidate (or newest if none evaluated); all others are marked as duplicates. Duplicate rows show a yellow "Duplicate" badge next to the name, amber row tint, and "Archive Duplicate" instead of Shortlist/Reject. A warning banner appears above the table when duplicates exist (hidden when viewing the Duplicates filter). Active filter excludes duplicates by default.
+10. **Set Criteria is a 3-row stacked layout.** Row 1 is a 2-column grid (`.criteria-grid`), rows 2–3 are full-width cards below it:
+    - **Row 1 left — Criteria Source:** saved-set dropdown (or empty-state message if none exist; default reads "Create new criteria (from scratch)"). No action buttons here.
+    - **Row 1 right — Scoring Preferences:** compact weight sliders with running total (must equal 100%). Both cards match height within the row via grid default stretch.
+    - **Row 2 — Action Panel** (`.criteria-actions-card`, full width): titled "Choose How to Create Criteria" with three action buttons (Write / Paste · AI Generate · Upload File) and a `.criteria-action-content` area for source-specific controls. All dynamic content stays inside this card.
+    - **Row 3 — Criteria Draft** (`.criteria-draft-section`, full width): textarea that every source populates, plus unsaved-criteria warning and save checkbox.
+    **Save logic:** when the save checkbox is checked, the user must provide a criteria set name (prompted on Continue if not already entered); saved sets appear immediately in the dropdown. Responsive: grid stacks to single column under 900px. Never put action buttons inside the Criteria Source card, never let dynamic content float outside the action card, and never add a second "Generated Criteria" textarea.
 
 ### Emails (Phase 5)
 9. **SMTP status must be real, not "unknown".** Four states: `not_configured`, `configured_not_tested`, `healthy`, `failing`. The Emails page surfaces the live status with a colored badge.
@@ -226,6 +256,10 @@ Major bugs + how they were fixed. Use this to avoid re-introducing them.
 | 2026-04 | Candidate emails not editable before send — subject locked, body preview-only | Reject modal used `<span>`/`<pre>` read-only elements; shortlist flow passed `custom_*` only when `email_type === 'custom'` | Replaced modal with editable `<input>` + `<textarea>`. All flows now route through a shared `openEmailComposer()` helper. Every send passes `custom_subject`/`custom_body` verbatim to `/send-email`. Added validation (non-empty subject/body, valid email) and a "Reset to default template" button |
 | 2026-04 | Selecting a job in one tab didn't carry over to other tabs — user had to reselect on every tab | Each tab had its own state (`evalSelectedJob`, `#shortlist-job-select`, `#email-job-filter`, `#dash-job-filter`) with no shared source of truth | Introduced `globalSelectedJob` (module-level + `localStorage` under `hr_selected_job`). Every per-tab selector mirrors it via `syncSelectorsToGlobal()`, every selection calls `setGlobalSelectedJob()`. Header renders a "Current Job" badge. CV Eval Step 1 auto-selects the matching card on entry. Dashboard "All Jobs" doesn't clear global (view-only mode) |
 | 2026-04 | Set Criteria page was a long vertical stack — saved sets → tabs → manual textarea → AI block with its own textarea → upload block → giant weights → generate block → save checkbox → footer. Users couldn't tell what order to do things in, weights dominated the page, and two textareas (`#criteria-text` + `#criteria-text-ai`) fought for the "real" criteria | Grew organically across three features (manual, AI, upload) with each adding its own panel | Rebuilt as a 3-section, 2-column layout: left = (A) Source + source-specific inputs + (B) compact weight sliders + (C) optional AI Generate block; right = single **Criteria Draft** textarea + unsaved-criteria warning + save checkbox. Removed `#criteria-text-ai` and `syncAICriteriaText()` — generation now writes to the one draft. Added `onCriteriaDraftInput` / `onSaveCriteriaToggle` / `updateUnsavedWarning` helpers. Responsive below 900px |
+| 2026-04 | "Use custom criteria" wording was vague; AI Generate mode pushed Criteria Draft box downward; no empty state for saved criteria; save didn't prompt for name | AI Generate block rendered as a separate section between left column and right column, causing layout shift. Dropdown always showed even when no saved sets existed | Renamed to "Create new criteria (from scratch)". Added empty-state message when no saved sets. Moved AI Generate button into source card. Save logic prompts for name if not provided. Saved sets refresh after save |
+| 2026-04 | Set Criteria draft squeezed on the right next to config panels — cramped editor, awkward layout | Two-column layout put config (left) beside draft (right), giving the editor less than half the width | Restructured to two-row layout: Row 1 = Criteria Source + Scoring Preferences side by side; Row 2 = full-width Criteria Draft below. Draft now has full content width. CSS class changed from `.criteria-grid`/`.criteria-col` to `.criteria-top-row` |
+| 2026-04 | Rejecting or shortlisting a candidate only showed a toast — row actions didn't change, status wasn't visible after refresh | No shortlist status was fetched on Step 4 load; actions were always the same pending set regardless of actual status | Step 4 now fetches `/shortlist?job_id=N` and builds a `shortlistMap`. Rows render state-dependent actions: pending shows buttons, shortlisted shows centered green badge, rejected shows centered red badge. Status updates in-place with pop animation (`statusPop` keyframe). Rows get tinted backgrounds. State persists across refresh |
+| 2026-04 | "Run Evaluation" showed generic "Evaluation failed" with no useful info; also failed silently when all candidates were already evaluated (n8n returned empty body) | `apiPost` crashed on empty response body (`res.json()` on empty string); `runEvaluation` catch block had no detail; no pre-check for unevaluated candidates | Fixed `apiPost` to handle empty/malformed response bodies. `runEvaluation` pre-checks candidate state: blocks with clear message if no candidates or all evaluated. Button shows unevaluated count and disables with "\u2713 All Evaluated" when done. Error messages are actionable (network, Ollama, backend, HTTP status) |
 
 ---
 

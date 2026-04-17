@@ -1,0 +1,18 @@
+\contentsline {section}{\numberline {1}Executive Summary}{2}{section.1}%
+\contentsline {section}{\numberline {2}System Architecture}{2}{section.2}%
+\contentsline {section}{\numberline {3}Infrastructure Layer}{2}{section.3}%
+\contentsline {subsection}{\numberline {3.1}Docker and PostgreSQL}{2}{subsection.3.1}%
+\contentsline {subsection}{\numberline {3.2}n8n as the Orchestration Layer}{3}{subsection.3.2}%
+\contentsline {section}{\numberline {4}Frontend Functionalities}{4}{section.4}%
+\contentsline {subsection}{\numberline {4.1}Dashboard}{4}{subsection.4.1}%
+\contentsline {subsection}{\numberline {4.2}Job Openings}{5}{subsection.4.2}%
+\contentsline {subsection}{\numberline {4.3}CV Evaluation Wizard}{6}{subsection.4.3}%
+\contentsline {subsection}{\numberline {4.4}Shortlist and Interview Tracking}{8}{subsection.4.4}%
+\contentsline {subsection}{\numberline {4.5}Emails}{8}{subsection.4.5}%
+\contentsline {section}{\numberline {5}What Has Been Delivered}{9}{section.5}%
+\contentsline {section}{\numberline {6}Planned Work Before Finalization}{9}{section.6}%
+\contentsline {subsection}{\numberline {6.1}Reliability and Polish}{10}{subsection.6.1}%
+\contentsline {subsection}{\numberline {6.2}Feature Completion}{10}{subsection.6.2}%
+\contentsline {subsection}{\numberline {6.3}Quality and Scoring Improvements}{10}{subsection.6.3}%
+\contentsline {subsection}{\numberline {6.4}Handover Readiness}{10}{subsection.6.4}%
+\contentsline {section}{\numberline {7}Closing Note}{10}{section.7}%

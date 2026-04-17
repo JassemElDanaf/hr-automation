@@ -1,5 +1,7 @@
 # Database
 
+> **Project status:** Proof of concept, pre-finalization. Schema is stable for the current feature set; new migrations will be added as finalization work lands. See `report/report.pdf` for the stakeholder progress report.
+
 PostgreSQL 16 running inside the `hr-postgres` Docker container.
 
 ---

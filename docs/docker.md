@@ -1,5 +1,7 @@
 # Docker Usage
 
+> **Project status:** Proof of concept, pre-finalization. The PostgreSQL container below is the only service that runs under Docker today; other services may be containerized during finalization. See `report/report.pdf` for the stakeholder progress report.
+
 ## TL;DR
 
 The only Docker container in this project is **PostgreSQL**. There is **no `docker-compose.yml`** — the container is created and managed with plain `docker` commands. Docker Desktop must be running for the container to start.
@@ -133,6 +135,30 @@ Most common: wrong environment variables or password rules violated. Delete the 
 
 ### `docker: Error response from daemon: Conflict. The container name "hr-postgres" is already in use`
 You already have a container with this name (running or stopped). Either `docker start hr-postgres` to reuse it, or `docker rm hr-postgres` to delete it and recreate.
+
+---
+
+## Memory Limits (WSL2 / Docker Desktop)
+
+Docker Desktop on Windows runs inside WSL2. By default it can consume all available RAM. To cap it:
+
+**Config file:** `C:\Users\Jasse\.wslconfig`
+
+```ini
+[wsl2]
+memory=4GB
+swap=2GB
+```
+
+After creating or editing this file:
+```bash
+wsl --shutdown
+# then restart Docker Desktop
+```
+
+Docker Desktop will now be limited to 4 GB of RAM. This is the current setting on this machine.
+
+> **Note:** `.wslconfig` must live under `C:\Users\<username>\` — it cannot be relocated to E:\.
 
 ---
 

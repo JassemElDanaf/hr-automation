@@ -1,5 +1,7 @@
 # n8n — Setup, Workflows, and Operations
 
+> **Project status:** Proof of concept, pre-finalization. All five workflows are imported, active, and responding to the frontend; further tightening and a few new endpoints are planned before handoff. See `report/report.pdf` for the stakeholder progress report.
+
 n8n is the project's API gateway and business-logic engine. All browser requests land on n8n webhooks.
 
 ---

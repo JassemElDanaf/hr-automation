@@ -1,5 +1,7 @@
 # Runbook — Local Setup and Operations
 
+> **Project status:** Proof of concept, pre-finalization. See `report/report.pdf` for the stakeholder progress report.
+
 Step-by-step instructions to bring up, operate, and shut down every service in the HR Automation stack on a Windows workstation.
 
 ---
@@ -41,8 +43,18 @@ E:/OneDrive - American University of Beirut/Diyar/hr-automation/
   .env.example                 ← template
   .gitignore
   frontend/
-    index.html                 ← the entire SPA
+    index.html                 ← legacy SPA (single HTML file)
     server.js                  ← optional Node server (normally unused)
+  frontend-react/              ← NEW: React + Vite frontend
+    src/
+      pages/                   ← Dashboard, JobOpenings, CVEvaluation, Shortlist, Emails
+      components/              ← layout, common, modals, forms, tables
+      state/                   ← selectedJob, uiState (React Context)
+      services/                ← api.js, email.js
+      styles/                  ← global.css
+      utils/                   ← helpers.js, pdf.js
+    .env                       ← VITE_API_URL
+    vite.config.js
   workflows/
     phase1-job-opening/        ← now "Phase 2 - Job Openings" internally
     phase2-cv-evaluation/      ← now "Phase 3 - CV Evaluation"
@@ -62,6 +74,10 @@ E:/OneDrive - American University of Beirut/Diyar/hr-automation/
   data/
     samples/                   ← sample JSON request bodies
   docs/                        ← this folder
+  report/                      ← LaTeX progress report + compiled PDF for stakeholders
+    report.tex
+    report.pdf
+    images/                    ← screenshots and logo used by the report
   future/                      ← notes / drafts not part of the running system
 ```
 
@@ -155,8 +171,27 @@ bash start.sh
 3. **Ollama** — `/e/ollama/program/ollama.exe serve` in background
 4. **SMTP sidecar** — `python scripts/smtp_server.py` in background, listens on `127.0.0.1:8901`
 5. **n8n** — `npx n8n start` in background, listens on `:5678`
-6. **Frontend** — `npx serve -l 3000 -s frontend` in background
+6. **Legacy Frontend** — `npx serve -l 3000 -s frontend` in background
 7. **Browser** — opens `http://localhost:3000`
+
+### React Frontend (alternative)
+
+The React app in `frontend-react/` replaces the legacy `frontend/index.html`. To use it instead:
+
+```bash
+cd frontend-react
+npm install          # first time only
+npm run dev          # starts Vite dev server on http://localhost:3001
+```
+
+Or build and serve statically:
+```bash
+cd frontend-react
+npm run build        # outputs to frontend-react/dist/
+npx serve -l 3001 -s dist
+```
+
+> **Note:** The React frontend uses `VITE_API_URL=http://localhost:5678/webhook` from `frontend-react/.env`. All other backend services (n8n, Postgres, Ollama, SMTP sidecar) remain the same.
 
 ---
 
@@ -271,3 +306,18 @@ curl "http://localhost:5678/webhook/email-history?job_id=1"
 ## 9. Troubleshooting
 
 See [`troubleshooting.md`](troubleshooting.md) for symptom-by-symptom fixes.
+
+---
+
+## 10. Rebuilding the Progress Report
+
+The stakeholder PDF in `report/report.pdf` is generated from `report/report.tex` using MiKTeX.
+
+```bash
+cd report
+"C:/Users/Jasse/AppData/Local/Programs/MiKTeX/miktex/bin/x64/pdflatex.exe" report.tex
+# run again if the TOC, section numbering, or labels changed
+"C:/Users/Jasse/AppData/Local/Programs/MiKTeX/miktex/bin/x64/pdflatex.exe" report.tex
+```
+
+To swap a screenshot, drop a new PNG into `report/images/` with the matching filename (e.g., `dashboard.png`, `results.png`) and recompile. The file list is documented at the top of `report.tex`.

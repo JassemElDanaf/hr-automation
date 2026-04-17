@@ -1,5 +1,7 @@
 # Diyar HR Automation
 
+> **Status:** Proof of concept, pre-finalization. The full pipeline works end to end but polish, two or three feature gaps, and handover work remain. See [`report/report.pdf`](report/report.pdf) for the current progress report.
+
 Local-first HR automation built with **n8n**, **PostgreSQL**, and **Ollama**. Every component runs on the HR user's laptop — no cloud services, no external dependencies beyond SMTP for outbound email.
 
 One-line pitch: an HR user lands on a dashboard, creates a job opening, evaluates submitted CVs against AI-generated criteria, shortlists the best candidates, and sends rejection / interview emails — all from a single browser tab.
@@ -91,6 +93,10 @@ hr-automation/
     n8n.md                       Workflow map + webhook reference
     database.md                  Schema + inspection queries
     troubleshooting.md           Symptom → fix index
+  report/
+    report.tex                   LaTeX source of the progress report
+    report.pdf                   Compiled PDF sent to stakeholders
+    images/                      Screenshots + logo used by report.tex
   data/
     samples/ uploads/            Example CVs + file staging
 ```
@@ -180,6 +186,7 @@ Common issues:
 | [`docs/n8n.md`](docs/n8n.md) | Workflow ↔ phase mapping, webhook reference |
 | [`docs/database.md`](docs/database.md) | Schema, migrations, useful queries |
 | [`docs/troubleshooting.md`](docs/troubleshooting.md) | Symptom-first fix index |
+| [`report/report.pdf`](report/report.pdf) | Progress report for Diyar management (compiled from `report/report.tex` via MiKTeX) |
 
 ---
 

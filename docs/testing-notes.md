@@ -1,5 +1,7 @@
 # Testing Notes
 
+> **Project status:** Proof of concept, pre-finalization. Automated coverage is limited to the Phase 1 smoke script; the rest is manual. A broader automated suite is on the finalization list. See `report/report.pdf` for the stakeholder progress report.
+
 ## Test Script
 
 Run the automated test suite:
