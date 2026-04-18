@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { apiGet, apiPost } from '../services/api';
 import { useSelectedJob } from '../state/selectedJob';
 import { useUI } from '../state/uiState';
@@ -20,6 +20,25 @@ export default function JobOpenings() {
   const [createStep, setCreateStep] = useState(1);
   const [creating, setCreating] = useState(false);
   const [descSource, setDescSource] = useState('manual');
+  const [createProgress, setCreateProgress] = useState(0);
+  const progressTimerRef = useRef(null);
+
+  useEffect(() => {
+    if (!creating) {
+      if (progressTimerRef.current) { clearInterval(progressTimerRef.current); progressTimerRef.current = null; }
+      return;
+    }
+    // Asymptotic progress: approaches 95% over expected duration (~45s for AI, ~3s for manual).
+    const tau = descSource === 'ai_generate' ? 15000 : 1000;
+    const started = Date.now();
+    setCreateProgress(0);
+    progressTimerRef.current = setInterval(() => {
+      const elapsed = Date.now() - started;
+      const pct = 95 * (1 - Math.exp(-elapsed / tau));
+      setCreateProgress(pct);
+    }, 150);
+    return () => { if (progressTimerRef.current) { clearInterval(progressTimerRef.current); progressTimerRef.current = null; } };
+  }, [creating, descSource]);
 
   // Form state
   const [form, setForm] = useState({
@@ -77,7 +96,8 @@ export default function JobOpenings() {
         showToast(res.data.error || 'Failed to create', 'error');
       }
     } catch (err) { showToast('Request failed: ' + err.message, 'error'); }
-    setCreating(false);
+    setCreateProgress(100);
+    setTimeout(() => { setCreating(false); setCreateProgress(0); }, 250);
   }
 
   function resetForm() {
@@ -237,21 +257,28 @@ export default function JobOpenings() {
                 </div>
               )}
             </div>
-            <div className="modal-footer">
-              <div className="step-info">Step {createStep} of 2</div>
-              <div style={{ display: 'flex', gap: '12px' }}>
-                {createStep === 2 && <button className="btn btn-secondary" onClick={() => setCreateStep(1)}>&larr; Back</button>}
-                {createStep === 1 && (
-                  <button className="btn btn-primary" onClick={() => {
-                    if (!form.title.trim()) { showToast('Job title is required', 'error'); return; }
-                    setCreateStep(2);
-                  }}>Continue &rarr;</button>
-                )}
-                {createStep === 2 && (
-                  <button className="btn btn-primary" onClick={createJob} disabled={creating}>
-                    {creating ? 'Creating...' : 'Create Job Opening'}
-                  </button>
-                )}
+            <div className="modal-footer" style={{ flexDirection: 'column', alignItems: 'stretch', gap: '10px' }}>
+              {creating && (
+                <div className="progress-bar" aria-label="Creating job opening">
+                  <div className="progress-fill" style={{ width: createProgress + '%', background: 'var(--primary, #3b82f6)' }} />
+                </div>
+              )}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div className="step-info">Step {createStep} of 2</div>
+                <div style={{ display: 'flex', gap: '12px' }}>
+                  {createStep === 2 && <button className="btn btn-secondary" onClick={() => setCreateStep(1)} disabled={creating}>&larr; Back</button>}
+                  {createStep === 1 && (
+                    <button className="btn btn-primary" onClick={() => {
+                      if (!form.title.trim()) { showToast('Job title is required', 'error'); return; }
+                      setCreateStep(2);
+                    }}>Continue &rarr;</button>
+                  )}
+                  {createStep === 2 && (
+                    <button className="btn btn-primary" onClick={createJob} disabled={creating}>
+                      {creating ? (descSource === 'ai_generate' ? `Generating\u2026 ${Math.round(createProgress)}%` : 'Creating\u2026') : 'Create Job Opening'}
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
           </div>
