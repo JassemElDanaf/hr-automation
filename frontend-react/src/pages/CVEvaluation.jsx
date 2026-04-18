@@ -41,6 +41,10 @@ export default function CVEvaluation() {
   const [candidates, setCandidates] = useState([]);
   const [evaluations, setEvaluations] = useState([]);
   const [evaluating, setEvaluating] = useState(false);
+  const [evaluatingOneId, setEvaluatingOneId] = useState(null);
+  const [evalProgress, setEvalProgress] = useState(0);
+  const [evalBatchCount, setEvalBatchCount] = useState(1);
+  const evalTimerRef = useRef(null);
   const [detailCandidate, setDetailCandidate] = useState(null);
   const [shortlistMap, setShortlistMap] = useState({}); // candidateId -> status string
   const [recentlyChanged, setRecentlyChanged] = useState({}); // candidateId -> true (for animation)
@@ -225,6 +229,23 @@ export default function CVEvaluation() {
     } catch (err) { showToast('Failed to load results', 'error'); }
   }
 
+  // Drive the asymptotic progress bar while an evaluation is in flight.
+  // qwen3:4b on the GTX 1650 runs ~10-15s per CV.
+  useEffect(() => {
+    if (!evaluating && evaluatingOneId == null) {
+      if (evalTimerRef.current) { clearInterval(evalTimerRef.current); evalTimerRef.current = null; }
+      return;
+    }
+    const tau = Math.max(6000, evalBatchCount * 4500);
+    const started = Date.now();
+    setEvalProgress(0);
+    evalTimerRef.current = setInterval(() => {
+      const elapsed = Date.now() - started;
+      setEvalProgress(95 * (1 - Math.exp(-elapsed / tau)));
+    }, 150);
+    return () => { if (evalTimerRef.current) { clearInterval(evalTimerRef.current); evalTimerRef.current = null; } };
+  }, [evaluating, evaluatingOneId, evalBatchCount]);
+
   async function runEvaluation() {
     if (!evalJobId) return;
     // Pre-check: are there unevaluated candidates?
@@ -237,6 +258,7 @@ export default function CVEvaluation() {
       showToast('All candidates are already evaluated — upload new CVs to evaluate more', 'error');
       return;
     }
+    setEvalBatchCount(unevaluated.length);
     setEvaluating(true);
     try {
       const payload = { job_opening_id: evalJobId, skills_weight: weights.skills, experience_weight: weights.experience, education_weight: weights.education };
@@ -253,17 +275,33 @@ export default function CVEvaluation() {
       else
         showToast(`Evaluation failed: ${err.message || 'unknown error'}`, 'error');
     }
-    finally { setEvaluating(false); loadEvalResults(); }
+    finally {
+      setEvalProgress(100);
+      setTimeout(() => { setEvaluating(false); setEvalProgress(0); }, 300);
+      loadEvalResults();
+    }
   }
 
   async function evaluateOne(candidateId) {
+    if (evaluating || evaluatingOneId != null) return;
+    setEvalBatchCount(1);
+    setEvaluatingOneId(candidateId);
+    showToast('AI evaluating candidate\u2026 (~15s on GPU)', 'info');
     try {
       const payload = { job_opening_id: evalJobId, candidate_id: candidateId, skills_weight: weights.skills, experience_weight: weights.experience, education_weight: weights.education };
       if (criteriaText) payload.criteria_text = criteriaText;
       const res = await apiPost('/cv-evaluate', payload);
       if (res.data.success) { showToast('AI evaluation complete!', 'success'); loadEvalResults(); }
       else showToast(`Evaluation failed: ${res.data.error || 'Ollama may not have responded'}`, 'error');
-    } catch (err) { showToast(`Evaluation failed: ${err.message || 'network error'}`, 'error'); }
+    } catch (err) {
+      if (err.message?.includes('Failed to fetch') || err.message?.includes('NetworkError'))
+        showToast('Evaluation failed: cannot reach n8n \u2014 is it running?', 'error');
+      else
+        showToast(`Evaluation failed: ${err.message || 'network error'}`, 'error');
+    } finally {
+      setEvalProgress(100);
+      setTimeout(() => { setEvaluatingOneId(null); setEvalProgress(0); }, 300);
+    }
   }
 
   async function addToShortlist(candidateId) {
@@ -699,15 +737,28 @@ export default function CVEvaluation() {
                 {(() => {
                   const unevalCount = candidates.filter(c => !evalMap[c.id]).length;
                   const allDone = candidates.length > 0 && unevalCount === 0;
+                  const busy = evaluating || evaluatingOneId != null;
                   return (
-                    <button className="btn btn-primary" onClick={runEvaluation} disabled={evaluating || allDone}
+                    <button className="btn btn-primary" onClick={runEvaluation} disabled={busy || allDone}
                       title={allDone ? 'All candidates are already evaluated' : ''}>
-                      {evaluating ? 'AI evaluating...' : allDone ? '\u2713 All Evaluated' : `\u2728 Run Evaluation${unevalCount ? ` (${unevalCount})` : ''}`}
+                      {evaluating ? `AI evaluating\u2026 ${Math.round(evalProgress)}%` : allDone ? '\u2713 All Evaluated' : `\u2728 Run Evaluation${unevalCount ? ` (${unevalCount})` : ''}`}
                     </button>
                   );
                 })()}
               </div>
             </div>
+            {(evaluating || evaluatingOneId != null) && (
+              <div style={{ padding: '8px 16px 12px' }}>
+                <div className="progress-bar" aria-label="AI evaluation in progress">
+                  <div className="progress-fill" style={{ width: evalProgress + '%', background: 'var(--primary, #3b82f6)' }} />
+                </div>
+                <div style={{ fontSize: '12px', color: 'var(--gray-600)', marginTop: '6px' }}>
+                  {evaluating
+                    ? `Scoring ${evalBatchCount} candidate${evalBatchCount > 1 ? 's' : ''} on GTX 1650 \u2014 ~${Math.max(5, Math.round(evalBatchCount * 12))}s total`
+                    : 'Scoring candidate on GTX 1650 \u2014 ~15s'}
+                </div>
+              </div>
+            )}
             {/* Duplicate warning banner */}
             {activeDuplicateCount > 0 && resultsFilter !== 'duplicates' && !dupBannerDismissed && (
               <div className="dup-warning-banner">
@@ -781,7 +832,12 @@ export default function CVEvaluation() {
                               </>
                             ) : (
                               <>
-                                {!e && <button className="btn btn-sm btn-purple" onClick={() => evaluateOne(c.id)}>Run Evaluation</button>}
+                                {!e && (
+                                  <button className="btn btn-sm btn-purple" onClick={() => evaluateOne(c.id)}
+                                    disabled={evaluating || (evaluatingOneId != null && evaluatingOneId !== c.id)}>
+                                    {evaluatingOneId === c.id ? `Evaluating\u2026 ${Math.round(evalProgress)}%` : 'Run Evaluation'}
+                                  </button>
+                                )}
                                 <button className="btn btn-sm btn-secondary" onClick={() => setDetailCandidate(c)}>{e ? 'Details' : 'View CV'}</button>
                                 {dup ? (
                                   <button className="btn btn-sm btn-ghost" onClick={() => archiveCandidate(c.id)}>Archive Duplicate</button>
