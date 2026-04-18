@@ -20,7 +20,7 @@ Persistent source of truth for the project. Read this before making changes.
 | PostgreSQL (Docker) | `hr_automation` database. Schema in `db/schema.sql`, migrations in `db/migrations/`. |
 | Ollama (local, port 11434) | Runs `qwen3:4b`. Used for JD generation, criteria generation, CV scoring. |
 | SMTP sidecar (`scripts/smtp_server.py`) | Tiny Python HTTP server on `127.0.0.1:8901`. n8n POSTs here, it relays via `smtplib`. |
-| Launcher (`start.sh` / `launch.bat`) | Brings up everything in the right order (Docker → Postgres → Ollama → SMTP → n8n → legacy frontend → React frontend) and opens http://localhost:3001. n8n auth is disabled via env vars. All data lives on E:\ (Docker WSL2 distro reimported to `E:\Docker\wsl\data`, n8n data in `E:\n8n`, Ollama models+program in `E:\ollama`). |
+| Launcher (`start.sh` / `launch.bat`) | Brings up everything in the right order (Docker → Postgres → Ollama → SMTP → n8n → legacy frontend → React frontend) and opens http://localhost:3001. n8n auth is disabled via env vars. All data lives on D:\ (Docker WSL2 distro reimported to `D:\Docker\wsl\data`, n8n data in `D:\n8n`, Ollama models+program in `D:\ollama`). |
 
 **How the pieces fit**
 
@@ -104,7 +104,7 @@ The only container is PostgreSQL (`hr-postgres`). There is **no `docker-compose.
 ### Environment / Config
 - `.env` (gitignored) holds SMTP credentials + any overrides. Loaded by `start.sh`.
 - `.env.example` is the template — copy to `.env` and fill in real values.
-- n8n's own DB (`E:\n8n\database.sqlite`) stores imported workflow state separately. Set via `N8N_USER_FOLDER=/e/n8n` in `start.sh`.
+- n8n's own DB (`D:\n8n\database.sqlite`) stores imported workflow state separately. Set via `N8N_USER_FOLDER=/d/n8n` in `start.sh`.
 
 ---
 

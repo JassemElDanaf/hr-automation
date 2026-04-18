@@ -2,13 +2,13 @@
 # HR Automation - Start All Services
 # Run this script to start all required services
 
-export PATH="/e/NodeJS:/e/n8n/node_modules/.bin:/c/Users/Jasse/AppData/Roaming/npm:$PATH"
+export PATH="/d/NodeJS:/d/n8n/node_modules/.bin:/c/Users/Jasse/AppData/Roaming/npm:$PATH"
 export N8N_USER_MANAGEMENT_DISABLED=true
 export N8N_BASIC_AUTH_ACTIVE=false
 export N8N_AUTH_EXCLUDE_ENDPOINTS="*"
-export N8N_USER_FOLDER=/e/n8n
-export OLLAMA_MODELS=/e/ollama
-export OLLAMA_HOME=/e/ollama
+export N8N_USER_FOLDER=/d/n8n
+export OLLAMA_MODELS=/d/ollama
+export OLLAMA_HOME=/d/ollama
 
 # Load local config (.env) — holds SMTP creds, any local overrides.
 # Keeps secrets out of this script and out of git.
@@ -63,7 +63,7 @@ echo "[2/5] Starting Ollama (qwen3:4b)..."
 if curl -s http://localhost:11434/api/tags > /dev/null 2>&1; then
   echo "  Ollama already running."
 else
-  /e/ollama/program/ollama.exe serve > /dev/null 2>&1 &
+  /d/ollama/program/ollama.exe serve > /dev/null 2>&1 &
   sleep 3
   if curl -s http://localhost:11434/api/tags > /dev/null 2>&1; then
     echo "  Ollama started."
@@ -104,24 +104,12 @@ else
   fi
 fi
 
-# 5. Start legacy frontend server
-echo "[5/6] Starting legacy frontend (port 3000)..."
-if curl -s http://localhost:3000 > /dev/null 2>&1; then
-  echo "  Legacy frontend already running."
-else
-  cd "$(dirname "$0")/frontend"
-  npx serve -l 3000 -s . > /dev/null 2>&1 &
-  sleep 2
-  echo "  Legacy frontend started."
-fi
-
-# 6. Start React frontend (primary)
-echo "[6/6] Starting React frontend (port 3001)..."
+# 5. Start React frontend (the app)
+echo "[5/5] Starting React frontend (port 3001)..."
 if curl -s http://localhost:3001 > /dev/null 2>&1; then
   echo "  React frontend already running."
 else
-  cd "$(dirname "$0")/frontend-react"
-  npx vite --port 3001 > /dev/null 2>&1 &
+  (cd "$SCRIPT_DIR/frontend-react" && npx vite --port 3001 > /dev/null 2>&1 &)
   sleep 3
   if curl -s http://localhost:3001 > /dev/null 2>&1; then
     echo "  React frontend started."
@@ -132,8 +120,7 @@ fi
 
 echo ""
 echo "All services started!"
-echo "  React App:   http://localhost:3001  (primary)"
-echo "  Legacy App:  http://localhost:3000  (fallback)"
+echo "  React App:   http://localhost:3001"
 echo "  n8n:         http://localhost:5678"
 echo "  Ollama:      http://localhost:11434"
 echo "  PostgreSQL:  localhost:5432"

@@ -160,30 +160,30 @@ Double-click `launch.bat` in the project root. It calls `start.sh` inside Git Ba
 **Manual equivalent** (for debugging):
 
 ```bash
-cd "E:/OneDrive - American University of Beirut/Diyar/hr-automation"
+cd "D:/Diyar/hr-automation"
 bash start.sh
 ```
 
 `start.sh` enforces this startup order (see `start.sh` in the project root for the authoritative version):
 
-1. **Docker Desktop** — launched if not already running (waits up to 2 min). WSL distro on `E:\Docker\wsl\data`
+1. **Docker Desktop** — launched if not already running (waits up to 2 min). WSL distro on `D:\Docker\wsl\data`
 2. **hr-postgres** — `docker start hr-postgres`
-3. **Ollama** — `/e/ollama/program/ollama.exe serve` in background. Models on `E:\ollama`
+3. **Ollama** — `/d/ollama/program/ollama.exe serve` in background. Models on `D:\ollama`
 4. **SMTP sidecar** — `python scripts/smtp_server.py` in background, listens on `127.0.0.1:8901`
-5. **n8n** — `npx n8n start` in background, listens on `:5678`. Data in `E:\n8n` (via `N8N_USER_FOLDER`)
+5. **n8n** — `npx n8n start` in background, listens on `:5678`. Data in `D:\n8n` (via `N8N_USER_FOLDER`)
 6. **Legacy Frontend** — `npx serve -l 3000 -s frontend` in background (fallback)
 7. **React Frontend** — `npx vite --port 3001` in background (primary)
 8. **Browser** — opens `http://localhost:3001`
 
 > **Note:** The React frontend uses `VITE_API_URL=http://localhost:5678/webhook` from `frontend-react/.env`. All other backend services (n8n, Postgres, Ollama, SMTP sidecar) remain the same.
 
-### Data locations (all on E:\)
+### Data locations (all on D:\)
 
 | Service | Data path | How |
 |---------|-----------|-----|
-| Docker | `E:\Docker\wsl\data` | WSL2 distro reimported to E:\ (do NOT set `data-root` in daemon.json) |
-| n8n | `E:\n8n` | `N8N_USER_FOLDER=/e/n8n` in `start.sh` |
-| Ollama | `E:\ollama` | `OLLAMA_MODELS=/e/ollama` + `OLLAMA_HOME=/e/ollama` in `start.sh` |
+| Docker | `D:\Docker\wsl\data` | WSL2 distro registered in place on D:\ (do NOT set `data-root` in daemon.json) |
+| n8n | `D:\n8n` | `N8N_USER_FOLDER=/d/n8n` in `start.sh` |
+| Ollama | `D:\ollama` | `OLLAMA_MODELS=/d/ollama` + `OLLAMA_HOME=/d/ollama` in `start.sh` |
 
 ---
 

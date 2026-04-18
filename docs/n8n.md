@@ -10,7 +10,7 @@ n8n is the project's API gateway and business-logic engine. All browser requests
 
 - Installed globally via npm (`npm install -g n8n`) or invoked via `npx n8n start`
 - Listens on port **5678** (UI + webhook API)
-- Data directory: `E:\n8n\` — contains `database.sqlite` with workflow definitions, credentials, executions. Redirected from default `%USERPROFILE%\.n8n\` via `N8N_USER_FOLDER=/e/n8n` in `start.sh`
+- Data directory: `D:\n8n\` — contains `database.sqlite` with workflow definitions, credentials, executions. Redirected from default `%USERPROFILE%\.n8n\` via `N8N_USER_FOLDER=/d/n8n` in `start.sh`
 - `start.sh` exports `N8N_USER_MANAGEMENT_DISABLED=true` and `N8N_AUTH_EXCLUDE_ENDPOINTS=*` to skip the login screen
 
 ---
@@ -160,7 +160,7 @@ Known n8n bug: the `activeVersionId` column is sometimes not set. Fix via SQLite
 pkill -f "npx n8n start"
 
 # locate the DB
-cd /e/n8n
+cd /d/n8n
 
 # update
 sqlite3 database.sqlite <<'SQL'
@@ -190,7 +190,7 @@ All workflows reference a credential named exactly **`HR PostgreSQL`**. Configur
 | Password | `hr_pass` |
 | SSL | disable |
 
-Credentials live in `E:\n8n\database.sqlite` (encrypted). They are **not** exported with workflow JSON.
+Credentials live in `D:\n8n\database.sqlite` (encrypted). They are **not** exported with workflow JSON.
 
 ### SMTP
 This project **does not use n8n's SMTP credential**. Emails go through the Python sidecar on port 8901, which reads SMTP env vars from `.env`.

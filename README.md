@@ -28,12 +28,12 @@ Full product + UX rules are in [`claude.md`](claude.md). Detailed operational do
 |-----------|------|------|---------------|
 | React Frontend (`frontend-react/`) | React + Vite app (primary) | 3001 | — |
 | Legacy Frontend (`frontend/index.html`) | Single-file SPA (fallback) | 3000 | — |
-| n8n | Workflow engine + webhook API | 5678 | `E:\n8n` |
-| PostgreSQL (Docker) | Persistent storage | 5432 | `E:\Docker` |
-| Ollama | Local AI (`qwen3:4b`) for JD, criteria, CV scoring | 11434 | `E:\ollama` |
+| n8n | Workflow engine + webhook API | 5678 | `D:\n8n` |
+| PostgreSQL (Docker) | Persistent storage | 5432 | `D:\Docker` |
+| Ollama | Local AI (`qwen3:4b`) for JD, criteria, CV scoring | 11434 | `D:\ollama` |
 | SMTP sidecar (`scripts/smtp_server.py`) | Python relay for outbound email | 8901 | — |
 
-Nothing runs in the cloud. Nothing phones home. All data lives on E:\ drive.
+Nothing runs in the cloud. Nothing phones home. All data lives on D:\ drive.
 
 ---
 

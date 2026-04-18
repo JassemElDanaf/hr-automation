@@ -143,10 +143,10 @@ More complex flows add:
 - Set node to rename / restructure fields
 
 ### PostgreSQL — `hr-postgres` container
-Docker container built from `postgres:16`. Single database `hr_automation`. Schema grows additively via numbered migrations. Docker WSL2 distro lives on `E:\Docker\wsl\data` (reimported from C:\ to save space).
+Docker container built from `postgres:16`. Single database `hr_automation`. Schema grows additively via numbered migrations. Docker WSL2 distro lives on `D:\Docker\wsl\data` (reimported from C:\ to save space).
 
-### Ollama — local process (`E:\ollama`)
-Program at `E:\ollama\program\ollama.exe`. Models stored at `E:\ollama` (set via `OLLAMA_MODELS` and `OLLAMA_HOME` env vars). Model: `qwen3:4b` (~2.5 GB, runs fine on CPU). Invoked with:
+### Ollama — local process (`D:\ollama`)
+Program at `D:\ollama\program\ollama.exe`. Models stored at `D:\ollama` (set via `OLLAMA_MODELS` and `OLLAMA_HOME` env vars). Model: `qwen3:4b` (~2.5 GB, runs fine on CPU). Invoked with:
 ```json
 POST http://localhost:11434/api/generate
 {
@@ -217,10 +217,10 @@ LaTeX progress report packaged separately from the running system. `report.tex` 
 |------|---------|-------|
 | 3000 | Legacy Frontend | `npx serve -l 3000 -s frontend` (fallback) |
 | 3001 | React Frontend | `npx vite --port 3001` (primary) |
-| 5432 | PostgreSQL | `hr-postgres` container (Docker WSL distro on `E:\Docker\wsl\data`) |
-| 5678 | n8n | web UI + `/webhook/*` API (data in `E:\n8n`) |
+| 5432 | PostgreSQL | `hr-postgres` container (Docker WSL distro on `D:\Docker\wsl\data`) |
+| 5678 | n8n | web UI + `/webhook/*` API (data in `D:\n8n`) |
 | 8901 | SMTP sidecar | loopback only (`127.0.0.1`) |
-| 11434 | Ollama | loopback (program + models on `E:\ollama`) |
+| 11434 | Ollama | loopback (program + models on `D:\ollama`) |
 
 ---
 
