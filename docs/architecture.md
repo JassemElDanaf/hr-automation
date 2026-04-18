@@ -146,7 +146,11 @@ More complex flows add:
 Docker container built from `postgres:16`. Single database `hr_automation`. Schema grows additively via numbered migrations. Docker WSL2 distro lives on `D:\Docker\wsl\data` (reimported from C:\ to save space).
 
 ### Ollama — local process (`D:\ollama`)
-Program at `D:\ollama\program\ollama.exe`. Models stored at `D:\ollama` (set via `OLLAMA_MODELS` and `OLLAMA_HOME` env vars). Model: `qwen3:4b` (~2.5 GB, runs fine on CPU). Invoked with:
+Program at `D:\ollama\program\ollama.exe`. Models stored at `D:\ollama` (set via `OLLAMA_MODELS` and `OLLAMA_HOME` env vars). Model: `qwen3:4b` (~2.5 GB).
+
+**GPU acceleration:** on this host Ollama runs on the NVIDIA GTX 1650 (4 GB VRAM) via CUDA — the Q4_K_M model fits in ~2.8 GB VRAM. CV scoring takes ~10–15 s per CV on GPU vs ~100 s on CPU. To force the discrete GPU on Optimus laptops, set the per-app preference under `HKCU\Software\Microsoft\DirectX\UserGpuPreferences` (value name = full path to `ollama.exe`, data = `GpuPreference=2;`). Verify with `nvidia-smi --query-compute-apps=pid,process_name,used_memory --format=csv` and `curl http://localhost:11434/api/ps` (look for `size_vram > 0`).
+
+Invoked with:
 ```json
 POST http://localhost:11434/api/generate
 {

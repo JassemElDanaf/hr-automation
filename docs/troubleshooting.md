@@ -100,6 +100,32 @@ npx n8n start > /dev/null 2>&1 &
 **Cause:** n8n credential wasn't created, or was named differently.
 **Fix:** n8n → Settings → Credentials → Add Postgres → name it **exactly** `HR PostgreSQL` with the params in `docs/database.md`.
 
+### CV evaluation workflow execution fails with `null value in column "candidate_id"`
+**Symptom:** Phase 3 CV Evaluation workflow (`wf=2`) shows `status=error` in the execution list and the browser shows a generic evaluation failure.
+**Cause:** the request reached the workflow when all candidates for that job were already scored. "Eval - Prepare Prompts" emits a single no-candidates marker item (`error:true`, no `candidate_id`), which earlier fell through "Call Ollama" → "Score Candidates" → "Save Evaluations" and tried to INSERT with a null candidate_id.
+**Fix:** already shipped — "Eval - Score Candidates" now has an early guard that filters prompt items and returns `{error:true,message:'No unevaluated candidates to score'}` when there's nothing to score. If it happens again, confirm the workflow JSON in `workflows/phase2-cv-evaluation/` contains the guard block at the top of the `Eval - Score Candidates` node's `jsCode`.
+
+### Ollama appears to run on integrated GPU, not the dGPU
+**Symptom:** Task Manager → Performance shows Ollama activity on the integrated GPU, inference feels slow.
+**Cause:** Windows Optimus hides per-process GPU assignment behind the default "GPU 0" view. Most of the time Ollama is already on the NVIDIA dGPU but Task Manager just shows the iGPU.
+**Fix (verify first):**
+```powershell
+nvidia-smi --query-compute-apps=pid,process_name,used_memory --format=csv
+curl http://localhost:11434/api/ps
+# size_vram > 0 means model is on the dGPU
+```
+If the NVIDIA GPU genuinely isn't being used, force it per-app (no admin needed):
+```powershell
+$k = 'HKCU:\Software\Microsoft\DirectX\UserGpuPreferences'
+if (-not (Test-Path $k)) { New-Item -Path $k -Force | Out-Null }
+Set-ItemProperty -Path $k -Name 'D:\ollama\program\ollama.exe' -Value 'GpuPreference=2;' -Type String
+```
+Then restart Ollama.
+
+### Per-row "Run Evaluation" button in CV Evaluation seems to do nothing
+**Symptom:** clicking the purple "Run Evaluation" button on a single candidate row produces no visible feedback; ~15 s later a toast fires (or not).
+**Cause / fix:** already shipped — `evaluateOne` now shows `Evaluating… NN%` on the clicked row with a progress bar above the table, disables other rows, and fires an immediate info toast so you know the click registered. If you're still seeing no response at all, it's a backend issue — check `/healthz`, `ollama ps`, and the n8n execution list for an `error` status.
+
 ### Execution fails at an HTTP Request node calling Ollama
 **Cause:** Ollama not running, or model not pulled.
 **Fix:**
@@ -141,7 +167,7 @@ npx serve -l 3000 -s . > /dev/null 2>&1 &
 ## Ollama
 
 ### CV evaluation takes 100+ seconds per candidate
-**Not a bug.** `qwen3:4b` on CPU processes roughly that fast. Keep the number of CVs in a single run small (<10) for demos.
+**Not a bug.** `qwen3:4b` on CPU processes roughly that fast (~100 s per CV). On this host Ollama runs on the NVIDIA GTX 1650 via CUDA (~10-15 s per CV). For demos, still keep batches under ~10 CVs so the progress bar stays snappy.
 
 ### Ollama returns `{"error": "model 'qwen3:4b' not found"}`
 **Fix:**
