@@ -73,7 +73,7 @@ All paths are prefixed with `http://localhost:5678/webhook`.
 ### Phase 2 — Job Openings
 | Method | Path | Purpose |
 |--------|------|---------|
-| GET | `/job-openings` | List (query: `is_active`, `status`) |
+| GET | `/job-openings` | List (query: `is_active`, `status`). Returns all displayed columns **including `job_description`** so the CV Evaluation "From Job Description" action can populate without a second fetch. |
 | POST | `/job-openings` | Create |
 | GET | `/job-opening?id=N` | Get one |
 | POST | `/job-opening-toggle?id=N` | Toggle `is_active` |
