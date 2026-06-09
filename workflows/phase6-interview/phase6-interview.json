@@ -1,0 +1,747 @@
+{
+  "id": "6",
+  "name": "Phase 6 - Live Interview",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "interview/jobs",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "wh-intv-jobs",
+      "name": "IntJob - Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        250,
+        100
+      ],
+      "webhookId": "interview-jobs"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT DISTINCT jo.id AS \"JobId\", jo.job_title, jo.department FROM job_openings jo JOIN shortlist s ON jo.id = s.job_opening_id WHERE s.status IN ('shortlisted', 'interviewed') AND jo.is_active = true ORDER BY jo.job_title",
+        "options": {}
+      },
+      "id": "fetch-intv-jobs",
+      "name": "IntJob - Query",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        480,
+        100
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "postgres": {
+          "id": "1",
+          "name": "HR PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($input.all().map(i => i.json).filter(i => i.JobId)) }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "resp-intv-jobs",
+      "name": "IntJob - Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        700,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "interview/candidates",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "wh-intv-cands",
+      "name": "IntCand - Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        250,
+        300
+      ],
+      "webhookId": "interview-candidates"
+    },
+    {
+      "parameters": {
+        "jsCode": "const jobId = parseInt($input.first().json.query?.jobId) || 0;\nif (!jobId) return [{ json: { jobId: 0 } }];\nreturn [{ json: { jobId } }];"
+      },
+      "id": "prep-intv-cands",
+      "name": "IntCand - Validate",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        480,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT COALESCE(e.id, 0) AS \"EvaluationId\", c.candidate_name AS \"FullName\", c.email AS \"Email\", ROUND(COALESCE(e.overall_score, 0)) AS \"OverallScore\", c.id AS \"CandidateId\" FROM shortlist s JOIN candidates c ON c.id = s.candidate_id LEFT JOIN evaluations e ON e.candidate_id = s.candidate_id AND e.job_opening_id = s.job_opening_id WHERE s.job_opening_id = {{ $json.jobId }}::integer AND s.status IN ('shortlisted', 'interviewed') ORDER BY COALESCE(e.overall_score, 0) DESC NULLS LAST",
+        "options": {}
+      },
+      "id": "fetch-intv-cands",
+      "name": "IntCand - Query",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        710,
+        300
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "postgres": {
+          "id": "1",
+          "name": "HR PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($input.all().map(i => i.json)) }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "resp-intv-cands",
+      "name": "IntCand - Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        940,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "interview/saved-questions",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "wh-intv-sq",
+      "name": "IntSQ - Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        250,
+        500
+      ],
+      "webhookId": "interview-saved-questions"
+    },
+    {
+      "parameters": {
+        "jsCode": "const evalId = parseInt($input.first().json.query?.evaluationId) || 0;\nreturn [{ json: { evalId } }];"
+      },
+      "id": "prep-intv-sq",
+      "name": "IntSQ - Validate",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        480,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT question_number, category AS \"Category\", question AS \"Question\", hints FROM interview_questions WHERE evaluation_id = {{ $json.evalId }}::integer ORDER BY question_number",
+        "options": {}
+      },
+      "id": "fetch-intv-sq",
+      "name": "IntSQ - Query",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        710,
+        500
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "postgres": {
+          "id": "1",
+          "name": "HR PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($input.all().map(i => i.json).filter(i => i.Question)) }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "resp-intv-sq",
+      "name": "IntSQ - Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        940,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "interview/next-question",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "wh-intv-nextq",
+      "name": "IntNextQ - Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        250,
+        700
+      ],
+      "webhookId": "interview-next-question"
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $input.first().json.body || $input.first().json || {};\nconst jobTitle = (body.jobTitle || 'the position').substring(0, 100);\nconst candidateName = (body.candidateName || 'the candidate').substring(0, 100);\nconst questionNumber = parseInt(body.questionNumber) || 1;\nconst totalQuestions = parseInt(body.totalQuestions) || 10;\nconst language = body.language === 'ar' ? 'Arabic' : 'English';\nconst isFirst = !!body.isFirst;\nconst transcript = Array.isArray(body.transcript) ? body.transcript.slice(-4) : [];\nconst recentLines = transcript.map(t => `[${t.time||''}] ${t.speaker}: ${t.text}`).join('\\n');\nconst contextBlock = recentLines ? `\\nRecent conversation:\\n${recentLines}\\n` : '';\nconst prompt = `You are an AI interviewer conducting a structured job interview for the position of ${jobTitle} at Diyar United Company.\\nCandidate: ${candidateName}${contextBlock}\\n\\nGenerate interview question ${questionNumber} of ${totalQuestions}.\\n${isFirst ? 'This is the opening question \u2014 start with something to put the candidate at ease, like about their background or motivation.' : 'Build naturally on the conversation so far.'}\\nLanguage: ${language}\\n\\nReturn ONLY valid JSON:\\n{\\\"question\\\": \\\"Your interview question here\\\"}`;\nreturn [{ json: { requestBody: { model: 'qwen3:4b', prompt, think: false, stream: false, format: 'json', options: { temperature: 0.7, num_predict: 300 } } } }];"
+      },
+      "id": "build-intv-nextq",
+      "name": "IntNextQ - Build Prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        480,
+        700
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://127.0.0.1:11434/api/generate",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.requestBody }}",
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "id": "call-intv-nextq",
+      "name": "IntNextQ - Call Ollama",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        710,
+        700
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $input.first().json;\nlet text = (raw.response || '').trim();\ntext = text.replace(/<think>[\\s\\S]*?<\\/think>/gi, '').replace(/^```json\\s*/i, '').replace(/```\\s*$/i, '').trim();\nlet parsed = null;\ntry { parsed = JSON.parse(text); } catch(e) {\n  const s = text.indexOf('{');\n  const e2 = text.lastIndexOf('}');\n  if (s >= 0 && e2 > s) try { parsed = JSON.parse(text.slice(s, e2+1)); } catch {}\n}\nconst question = parsed?.question || parsed?.text || 'Could you tell me more about your relevant experience for this role?';\nreturn [{ json: { question } }];"
+      },
+      "id": "parse-intv-nextq",
+      "name": "IntNextQ - Parse",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        940,
+        700
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ question: $json.question }) }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "resp-intv-nextq",
+      "name": "IntNextQ - Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1170,
+        700
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "interview/evaluate",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "wh-intv-eval",
+      "name": "IntEval - Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        250,
+        900
+      ],
+      "webhookId": "interview-evaluate"
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $input.first().json.body || $input.first().json || {};\nconst jobTitle = (body.jobTitle || 'the position').substring(0, 100);\nconst candidateName = (body.candidateName || 'the candidate').substring(0, 100);\nconst duration = parseInt(body.duration) || 0;\nconst minutes = Math.floor(duration/60);\nconst qaPairs = Array.isArray(body.qaPairs) ? body.qaPairs : (Array.isArray(body.transcript) ? body.transcript : []);\nconst customQuestions = Array.isArray(body.customQuestions) ? body.customQuestions : [];\nconst modelAnswerMap = {};\ncustomQuestions.forEach((q, i) => { if (q.modelAnswer && q.modelAnswer.trim()) modelAnswerMap[i] = q.modelAnswer.trim(); });\nconst hasRubric = Object.keys(modelAnswerMap).length > 0;\nconst qText = qaPairs.map((p, i) => { const ma = modelAnswerMap[i]; const rubricLine = ma ? '\\nExpected answer: ' + ma : ''; return 'Q' + (i+1) + '. ' + (p.question||'') + rubricLine + '\\nCandidate\\'s answer: ' + ((p.answer||'(no answer captured)').substring(0,500)); }).join('\\n\\n');\nconst rubricInstruction = hasRubric ? '\\nFor questions with an \"Expected answer\", score the candidate primarily based on how well their answer aligns with that rubric.' : '';\nconst prompt = 'You are an expert HR evaluator assessing a completed AI-conducted job interview.\\n\\nPosition: ' + jobTitle + '\\nCandidate: ' + candidateName + '\\nDuration: ' + minutes + ' minute(s), ' + qaPairs.length + ' questions asked\\n\\nQuestions and Answers:\\n' + (qText||'No Q&A captured.') + rubricInstruction + '\\n\\nRate the candidate 1-10 on:\\n- communication: clarity, articulation, listening\\n- technical: knowledge and skills for the role\\n- confidence: delivery and conviction\\n- cultureFit: professional values alignment\\n\\nReturn ONLY valid JSON (no extra text):\\n{\\n  \\\"communication\\\": 7,\\n  \\\"technical\\\": 7,\\n  \\\"confidence\\\": 6,\\n  \\\"cultureFit\\\": 7,\\n  \\\"overall\\\": 7,\\n  \\\"summary\\\": \\\"2-3 sentence performance summary\\\",\\n  \\\"recommendation\\\": \\\"Hire / Consider / Don\\'t Recommend \u2014 1-2 sentence justification\\\",\\n  \\\"perQuestion\\\": [{\\\"index\\\": 1, \\\"score\\\": 7, \\\"feedback\\\": \\\"one sentence feedback\\\"}]\\n}';\nreturn [{ json: { requestBody: { model: 'qwen3:4b', prompt, think: false, stream: false, format: 'json', options: { temperature: 0.2, num_predict: 2000 } } } }];"
+      },
+      "id": "build-intv-eval",
+      "name": "IntEval - Build Prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        480,
+        900
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://127.0.0.1:11434/api/generate",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.requestBody }}",
+        "options": {
+          "timeout": 300000
+        }
+      },
+      "id": "call-intv-eval",
+      "name": "IntEval - Call Ollama",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        710,
+        900
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $input.first().json;\nlet text = (raw.response || '').trim();\ntext = text.replace(/<think>[\\s\\S]*?<\\/think>/gi,'').replace(/^```json\\s*/i,'').replace(/```\\s*$/i,'').trim();\nfunction ex(t) { try { return JSON.parse(t); } catch {} const s=t.indexOf('{'),e=t.lastIndexOf('}'); if(s<0||e<s) return null; try { return JSON.parse(t.slice(s,e+1)); } catch { return null; } }\nfunction c(v) { const n=parseFloat(v); return isNaN(n)?0:Math.min(10,Math.max(0,Math.round(n*10)/10)); }\nconst p = ex(text);\nreturn [{ json: { communication: p?c(p.communication):0, technical: p?c(p.technical):0, confidence: p?c(p.confidence):0, cultureFit: p?c(p.cultureFit):0, overall: p?c(p.overall):0, summary: p?.summary||'Evaluation could not be generated. Please check the n8n workflow.', recommendation: p?.recommendation||'', perQuestion: p?.perQuestion||[] } }];"
+      },
+      "id": "parse-intv-eval",
+      "name": "IntEval - Parse",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        940,
+        900
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "resp-intv-eval",
+      "name": "IntEval - Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1170,
+        900
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "interview/save-transcript",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "wh-intv-tx",
+      "name": "IntTx - Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        250,
+        1100
+      ],
+      "webhookId": "interview-save-transcript"
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $input.first().json.body;\nconst scores = body.scores || {};\nconst evalId = parseInt(body.evaluationId) || 0;\nreturn [{\n  json: {\n    jobId: parseInt(body.jobId) || 0,\n    candidateId: parseInt(body.candidateId) || 0,\n    evaluationId: evalId > 0 ? evalId : null,\n    candidateName: (body.candidateName || '').replace(/'/g, \"''\"),\n    durationSeconds: parseInt(body.durationSeconds) || 0,\n    transcript: JSON.stringify(body.transcript || []).replace(/'/g, \"''\"),\n    qaPairs: JSON.stringify(body.transcript || []).replace(/'/g, \"''\"),\n    communication: parseFloat(scores.communication) || 0,\n    technical: parseFloat(scores.technical) || 0,\n    confidence: parseFloat(scores.confidence) || 0,\n    cultureFit: parseFloat(scores.cultureFit) || 0,\n    overall: parseFloat(scores.overall) || 0,\n    summary: (scores.summary || '').replace(/'/g, \"''\"),\n    recommendation: (scores.recommendation || '').replace(/'/g, \"''\"),\n    perQuestion: JSON.stringify(scores.perQuestion || []).replace(/'/g, \"''\")\n  }\n}];"
+      },
+      "id": "prep-intv-tx",
+      "name": "IntTx - Prep",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        480,
+        1100
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO interview_sessions (\n  job_opening_id, candidate_id, evaluation_id, candidate_name,\n  duration_seconds, transcript, qa_pairs,\n  score_communication, score_technical, score_confidence, score_culture_fit, score_overall,\n  summary, recommendation, per_question\n) VALUES (\n  {{ $json.jobId }}, {{ $json.candidateId }},\n  {{ $json.evaluationId !== null && $json.evaluationId !== undefined ? $json.evaluationId : 'NULL' }},\n  '{{ $json.candidateName }}',\n  {{ $json.durationSeconds }}, '{{ $json.transcript }}'::jsonb, '{{ $json.qaPairs }}'::jsonb,\n  {{ $json.communication }}, {{ $json.technical }}, {{ $json.confidence }}, {{ $json.cultureFit }}, {{ $json.overall }},\n  '{{ $json.summary }}', '{{ $json.recommendation }}', '{{ $json.perQuestion }}'::jsonb\n)\nON CONFLICT (candidate_id, job_opening_id) DO UPDATE SET\n  duration_seconds     = EXCLUDED.duration_seconds,\n  transcript           = EXCLUDED.transcript,\n  qa_pairs             = EXCLUDED.qa_pairs,\n  score_communication  = EXCLUDED.score_communication,\n  score_technical      = EXCLUDED.score_technical,\n  score_confidence     = EXCLUDED.score_confidence,\n  score_culture_fit    = EXCLUDED.score_culture_fit,\n  score_overall        = EXCLUDED.score_overall,\n  summary              = EXCLUDED.summary,\n  recommendation       = EXCLUDED.recommendation,\n  per_question         = EXCLUDED.per_question\nRETURNING id",
+        "options": {}
+      },
+      "id": "save-intv-tx",
+      "name": "IntTx - Save",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        710,
+        1100
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "1",
+          "name": "HR PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ success: true, message: 'Transcript received', id: $json.id }) }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "resp-intv-tx",
+      "name": "IntTx - Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        940,
+        1100
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "interview/sessions",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "wh-intv-sessions",
+      "name": "IntSess - Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        250,
+        1300
+      ],
+      "webhookId": "interview-sessions"
+    },
+    {
+      "parameters": {
+        "jsCode": "const qs = $input.first().json.query || {};\nconst jobId = parseInt(qs.jobId) || 0;\nif (!jobId) throw new Error('jobId required');\nreturn [{ json: { jobId } }];"
+      },
+      "id": "prep-intv-sessions",
+      "name": "IntSess - Prep",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        480,
+        1300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT \n  s.id,\n  s.candidate_id AS \"candidateId\",\n  s.evaluation_id AS \"evaluationId\",\n  s.job_opening_id AS \"jobOpeningId\",\n  s.candidate_name AS \"candidateName\",\n  s.duration_seconds AS \"durationSeconds\",\n  s.score_communication AS \"scoreComm\",\n  s.score_technical AS \"scoreTech\",\n  s.score_confidence AS \"scoreConf\",\n  s.score_culture_fit AS \"scoreCulture\",\n  s.score_overall AS \"scoreOverall\",\n  s.summary,\n  s.recommendation,\n  s.per_question AS \"perQuestion\",\n  s.qa_pairs AS \"qaPairs\",\n  s.created_at AS \"completedAt\",\n  c.email AS \"candidateEmail\"\nFROM interview_sessions s\nJOIN candidates c ON c.id = s.candidate_id\nWHERE s.job_opening_id = {{ $json.jobId }}::integer\nORDER BY s.created_at DESC",
+        "options": {}
+      },
+      "id": "fetch-intv-sessions",
+      "name": "IntSess - Query",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        710,
+        1300
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "postgres": {
+          "id": "1",
+          "name": "HR PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($input.all().map(i => i.json)) }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "resp-intv-sessions",
+      "name": "IntSess - Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        940,
+        1300
+      ]
+    }
+  ],
+  "connections": {
+    "IntJob - Webhook": {
+      "main": [
+        [
+          {
+            "node": "IntJob - Query",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IntJob - Query": {
+      "main": [
+        [
+          {
+            "node": "IntJob - Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IntCand - Webhook": {
+      "main": [
+        [
+          {
+            "node": "IntCand - Validate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IntCand - Validate": {
+      "main": [
+        [
+          {
+            "node": "IntCand - Query",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IntCand - Query": {
+      "main": [
+        [
+          {
+            "node": "IntCand - Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IntSQ - Webhook": {
+      "main": [
+        [
+          {
+            "node": "IntSQ - Validate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IntSQ - Validate": {
+      "main": [
+        [
+          {
+            "node": "IntSQ - Query",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IntSQ - Query": {
+      "main": [
+        [
+          {
+            "node": "IntSQ - Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IntNextQ - Webhook": {
+      "main": [
+        [
+          {
+            "node": "IntNextQ - Build Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IntNextQ - Build Prompt": {
+      "main": [
+        [
+          {
+            "node": "IntNextQ - Call Ollama",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IntNextQ - Call Ollama": {
+      "main": [
+        [
+          {
+            "node": "IntNextQ - Parse",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IntNextQ - Parse": {
+      "main": [
+        [
+          {
+            "node": "IntNextQ - Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IntEval - Webhook": {
+      "main": [
+        [
+          {
+            "node": "IntEval - Build Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IntEval - Build Prompt": {
+      "main": [
+        [
+          {
+            "node": "IntEval - Call Ollama",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IntEval - Call Ollama": {
+      "main": [
+        [
+          {
+            "node": "IntEval - Parse",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IntEval - Parse": {
+      "main": [
+        [
+          {
+            "node": "IntEval - Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IntTx - Webhook": {
+      "main": [
+        [
+          {
+            "node": "IntTx - Prep",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IntTx - Prep": {
+      "main": [
+        [
+          {
+            "node": "IntTx - Save",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IntTx - Save": {
+      "main": [
+        [
+          {
+            "node": "IntTx - Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IntSess - Webhook": {
+      "main": [
+        [
+          {
+            "node": "IntSess - Prep",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IntSess - Prep": {
+      "main": [
+        [
+          {
+            "node": "IntSess - Query",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IntSess - Query": {
+      "main": [
+        [
+          {
+            "node": "IntSess - Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": []
+}

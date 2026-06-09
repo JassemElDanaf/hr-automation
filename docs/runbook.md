@@ -1,7 +1,5 @@
 # Runbook — Local Setup and Operations
 
-> **Project status:** Proof of concept, pre-finalization. See `report/report.pdf` for the stakeholder progress report.
-
 Step-by-step instructions to bring up, operate, and shut down every service in the HR Automation stack on a Windows workstation.
 
 ---
@@ -13,97 +11,106 @@ Install these once on the host machine:
 | Tool | Version | Install from | Why |
 |------|---------|--------------|-----|
 | **Docker Desktop** | Any modern | <https://www.docker.com/products/docker-desktop/> | Runs PostgreSQL |
-| **Node.js** | ≥ 18 | <https://nodejs.org/> | Runs n8n and the static frontend server |
-| **Python** | ≥ 3.9 | <https://www.python.org/downloads/> | Runs the SMTP sidecar |
-| **Ollama** | Latest | <https://ollama.com/> | Local AI (JD + criteria + scoring) |
+| **Node.js** | >= 18 | Installed at `D:\NodeJS\` | Runs n8n and the React frontend |
+| **Python** | >= 3.9 | <https://www.python.org/downloads/> | Runs the SMTP and IMAP sidecars |
+| **Ollama** | Latest | Installed at `D:\ollama\` | Local AI (JD generation, criteria, CV scoring) |
 | **Git for Windows** | Latest | <https://git-scm.com/download/win> | Git Bash (used by `launch.bat`) |
-| **qwen3:4b model** | — | `ollama pull qwen3:4b` | Model used by the pipeline |
+| **qwen3:4b model** | — | `ollama pull qwen3:4b` | Model used by all AI pipeline steps |
 
 Verify each install:
 ```bash
 docker --version
 node --version
 python --version
-ollama --version
+"D:/ollama/program/ollama.exe" --version
 ```
 
 ---
 
-## 2. Project Layout
+## 2. Machine and Drive Layout
 
-Everything is under one folder. Default location on this machine:
+All runtime data lives on D:\. Do not look at E:\ for any of this.
+
+| What | Path |
+|------|------|
+| Project source code | `D:\OneDrive\Desktop\Diyar\hr-automation\` |
+| n8n install + node_modules | `D:\n8n\` |
+| n8n runtime data | `D:\n8n\.n8n\` |
+| n8n SQLite database | `D:\n8n\.n8n\database.sqlite` |
+| Node.js runtime | `D:\NodeJS\` |
+| Ollama program | `D:\ollama\program\ollama.exe` |
+| Ollama models | `D:\ollama\` |
+| Docker | Managed by Docker Desktop (WSL2 default location) |
+
+### Project folder structure
 
 ```
-E:/OneDrive - American University of Beirut/Diyar/hr-automation/
-  claude.md                    ← project memory, READ FIRST
-  README.md
-  launch.bat                   ← double-click to start everything
-  start.sh                     ← called by launch.bat; also usable standalone
-  .env                         ← local secrets (SMTP)        — gitignored
-  .env.example                 ← template
-  .gitignore
-  frontend/
-    index.html                 ← legacy SPA (single HTML file)
-    server.js                  ← optional Node server (normally unused)
-  frontend-react/              ← NEW: React + Vite frontend
+D:\OneDrive\Desktop\Diyar\hr-automation\
+  launch.bat                   <- double-click to start everything
+  start.sh                     <- called by launch.bat; also usable standalone
+  .env                         <- local secrets (SMTP, IMAP)       gitignored
+  .env.example                 <- template
+  frontend-react/              <- React + Vite frontend (the only frontend)
     src/
-      pages/                   ← Dashboard, JobOpenings, CVEvaluation, Shortlist, Emails
-      components/              ← layout, common, modals, forms, tables
-      state/                   ← selectedJob, uiState (React Context)
-      services/                ← api.js, email.js
-      styles/                  ← global.css
-      utils/                   ← helpers.js, pdf.js
-    .env                       ← VITE_API_URL
+      pages/                   <- Dashboard, JobOpenings, CVEvaluation, Shortlist, Emails
+      components/              <- layout, common, modals, forms, tables
+      state/                   <- selectedJob, uiState (React Context)
+      services/                <- api.js, email.js
+      styles/                  <- global.css
+      utils/                   <- helpers.js, pdf.js
+    .env                       <- VITE_API_URL
     vite.config.js
   workflows/
-    phase1-job-opening/        ← now "Phase 2 - Job Openings" internally
-    phase2-cv-evaluation/      ← now "Phase 3 - CV Evaluation"
-    phase3-shortlist/          ← now "Phase 4 - Shortlist"
-    phase4-email/              ← now "Phase 5 - Emails"
-    phase5-dashboard/          ← now "Phase 1 - Dashboard"
+    phase5-dashboard/          <- Phase 1 - Dashboard
+    phase1-job-opening/        <- Phase 2 - Job Openings
+    phase2-cv-evaluation/      <- Phase 3 - CV Evaluation
+    phase3-shortlist/          <- Phase 4 - Shortlist
+    phase4-email/              <- Phase 5 - Emails
   db/
     schema.sql
-    seed.sql
-    migrations/                ← numbered SQL files, run in order
+    migrations/                <- numbered SQL files, run in order
   scripts/
-    setup-db.sh                ← creates the Postgres container
-    seed-db.sh                 ← loads sample data
-    import-workflows.sh        ← bulk imports workflow JSONs
-    smtp_server.py             ← SMTP sidecar
-    test-phase1.sh             ← smoke test for the Job Openings API
-  data/
-    samples/                   ← sample JSON request bodies
-  docs/                        ← this folder
-  report/                      ← LaTeX progress report + compiled PDF for stakeholders
+    smtp_server.py             <- SMTP sidecar (port 8901)
+    imap_server.py             <- IMAP polling sidecar (port 8902)
+    recording_server.py        <- recording server (port 8903)
+    patch_ollama_thinking.py   <- patches n8n workflow nodes in sqlite
+  docs/                        <- this folder
+  report/
     report.tex
     report.pdf
-    images/                    ← screenshots and logo used by the report
-  future/                      ← notes / drafts not part of the running system
+    images/
 ```
 
 ---
 
 ## 3. First-Time Setup
 
-Run these once on a fresh machine. Skip to [Daily Startup](#4-daily-startup) afterward.
+Run these steps once on a fresh machine. Skip to [Daily Startup](#4-daily-startup) afterward.
 
 ### 3.1 Create `.env`
+
 ```bash
 cp .env.example .env
-# then edit .env and fill in SMTP_USER / SMTP_PASS
 ```
 
+Open `.env` and fill in SMTP credentials. The following variables control email sending:
+
+| Variable | Required | Notes |
+|----------|----------|-------|
+| `SMTP_HOST` | No | Without it, emails are logged but not sent |
+| `SMTP_PORT` | No | Defaults to 587 |
+| `SMTP_USER` | No | Gmail address |
+| `SMTP_PASS` | No | Gmail App Password (not your account password) |
+| `SMTP_FROM` | No | Display name + address for outbound mail |
+
 ### 3.2 Pull the Ollama model
+
 ```bash
-ollama pull qwen3:4b
+"D:/ollama/program/ollama.exe" pull qwen3:4b
 ```
 
 ### 3.3 Create the Postgres container
-```bash
-bash scripts/setup-db.sh
-```
 
-This runs:
 ```bash
 docker run -d --name hr-postgres \
   -e POSTGRES_USER=hr_admin \
@@ -113,83 +120,83 @@ docker run -d --name hr-postgres \
   postgres:16
 ```
 
-### 3.4 Load schema + migrations
+### 3.4 Apply schema and all migrations
+
 ```bash
-# schema
 docker exec -i hr-postgres psql -U hr_admin -d hr_automation < db/schema.sql
 
-# migrations in order
 for f in db/migrations/*.sql; do
   docker exec -i hr-postgres psql -U hr_admin -d hr_automation < "$f"
 done
 ```
 
-### 3.5 Import n8n workflows
-Start n8n first (skip ahead to Daily Startup for the command), then:
+### 3.5 Import n8n workflows and activate them
+
+Import each workflow JSON via the n8n UI (Settings > Import Workflow) or use the CLI:
+
 ```bash
-bash scripts/import-workflows.sh
+npx n8n import:workflow --input=workflows/phase1-job-opening/phase1-job-opening.json
+# repeat for each workflow
 ```
-Or import each JSON manually in the n8n UI.
 
-### 3.6 Activate workflows in n8n
-1. Open <http://localhost:5678>
-2. For each workflow, toggle "Active" in the top-right
-3. **Known gotcha:** if webhooks return 404 after activation, open the n8n SQLite DB and run:
-   ```sql
-   UPDATE workflow_entity SET active=1, activeVersionId=versionId WHERE id='N';
-   ```
-   (one row per workflow id 1..5). Restart n8n after.
+Then activate all 6 workflows in the n8n UI (toggle "Active" in the top-right of each workflow editor).
 
-### 3.7 Configure n8n PostgreSQL credential
-In n8n → Settings → Credentials → Add "Postgres":
-- Host: `localhost`
-- Port: `5432`
-- Database: `hr_automation`
-- User: `hr_admin`
-- Password: `hr_pass`
-- **Name: `HR PostgreSQL`** (workflows reference this exact name)
+### 3.6 Configure the n8n PostgreSQL credential
+
+In n8n: Settings > Credentials > Add Credential > Postgres
+
+| Field | Value |
+|-------|-------|
+| Name | `HR PostgreSQL` (must be exact — workflows reference this name) |
+| Host | `localhost` |
+| Port | `5432` |
+| Database | `hr_automation` |
+| User | `hr_admin` |
+| Password | `hr_pass` |
 
 ---
 
 ## 4. Daily Startup
 
-**The one-click way** (recommended):
+**Recommended:** double-click `launch.bat` in the project root.
 
-Double-click `launch.bat` in the project root. It calls `start.sh` inside Git Bash, which starts everything in dependency order and opens <http://localhost:3001> (React app) in your browser.
+It invokes `start.sh` inside Git Bash, starts all services in dependency order, and opens <http://localhost:3001> automatically.
 
-**Manual equivalent** (for debugging):
+**Manual equivalent:**
 
 ```bash
-cd "D:/Diyar/hr-automation"
-bash start.sh
+bash "D:/OneDrive/Desktop/Diyar/hr-automation/start.sh"
 ```
 
-`start.sh` enforces this startup order (see `start.sh` in the project root for the authoritative version):
+### Startup order enforced by `start.sh`
 
-1. **Docker Desktop** — launched if not already running (waits up to 2 min). WSL distro on `D:\Docker\wsl\data`
-2. **hr-postgres** — `docker start hr-postgres`
-3. **Ollama** — `/d/ollama/program/ollama.exe serve` in background. Models on `D:\ollama`
-4. **SMTP sidecar** — `python scripts/smtp_server.py` in background, listens on `127.0.0.1:8901`
-5. **n8n** — `npx n8n start` in background, listens on `:5678`. Data in `D:\n8n` (via `N8N_USER_FOLDER`)
-6. **Legacy Frontend** — `npx serve -l 3000 -s frontend` in background (fallback)
-7. **React Frontend** — `npx vite --port 3001` in background (primary)
-8. **Browser** — opens `http://localhost:3001`
+| Step | Service | Detail |
+|------|---------|--------|
+| 1 | Docker Desktop | Waits up to 2 minutes if not already running |
+| 2 | hr-postgres | `docker start hr-postgres` |
+| 3 | Ollama | `D:\ollama\program\ollama.exe serve` in background |
+| 4 | SMTP sidecar | `python scripts/smtp_server.py`, port 8901 |
+| 5 | IMAP sidecar | `python scripts/imap_server.py`, port 8902 |
+| 6 | Recording server | `python scripts/recording_server.py`, port 8903 |
+| 7 | n8n | port 5678; data in `D:\n8n\` via `N8N_USER_FOLDER=/d/n8n` |
+| 8 | DB migrations | Runs all `db/migrations/0*.sql` idempotently |
+| 9 | React frontend | `npx vite --port 3001` in background |
+| 10 | Browser | Opens <http://localhost:3001> |
 
-> **Note:** The React frontend uses `VITE_API_URL=http://localhost:5678/webhook` from `frontend-react/.env`. All other backend services (n8n, Postgres, Ollama, SMTP sidecar) remain the same.
+### Environment variables set by `start.sh`
 
-### Data locations (all on D:\)
-
-| Service | Data path | How |
-|---------|-----------|-----|
-| Docker | `D:\Docker\wsl\data` | WSL2 distro registered in place on D:\ (do NOT set `data-root` in daemon.json) |
-| n8n | `D:\n8n` | `N8N_USER_FOLDER=/d/n8n` in `start.sh` |
-| Ollama | `D:\ollama` | `OLLAMA_MODELS=/d/ollama` + `OLLAMA_HOME=/d/ollama` in `start.sh` |
+```bash
+export PATH="/d/NodeJS:/d/n8n/node_modules/.bin:/c/Users/Jasse/AppData/Roaming/npm:$PATH"
+export N8N_USER_FOLDER=/d/n8n
+export OLLAMA_MODELS=/d/ollama
+export OLLAMA_HOME=/d/ollama
+```
 
 ---
 
 ## 5. Verify Services Are Up
 
-Run each check and confirm a healthy response:
+Run each check and confirm the expected response:
 
 ```bash
 # Docker daemon
@@ -200,121 +207,190 @@ docker exec hr-postgres pg_isready -U hr_admin
 # expected: "localhost:5432 - accepting connections"
 
 # Ollama
-curl -s http://localhost:11434/api/tags | head -c 200
+curl -s http://localhost:11434/api/tags
 # expected: JSON with "models" array including qwen3:4b
 
 # SMTP sidecar
 curl -s http://127.0.0.1:8901/
-# expected: {"status":"ok","smtp_configured":true,"smtp_host":"smtp.gmail.com"}
+# expected: {"status":"ok","smtp_configured":true,...}
 
-# n8n
-curl -s http://localhost:5678/healthz
-# expected: {"status":"ok"}
+# IMAP sidecar
+curl -s http://127.0.0.1:8902/
 
-# Legacy Frontend
-curl -I -s http://localhost:3000 | head -1
-# expected: HTTP/1.1 200 OK
+# n8n (use a webhook endpoint — /healthz has no CORS headers and cannot be used from the browser)
+curl -s http://localhost:5678/webhook/interview/jobs
+# expected: any valid JSON response (not connection refused)
 
-# React Frontend (primary)
-curl -I -s http://localhost:3001 | head -1
+# React frontend
+curl -I http://localhost:3001
 # expected: HTTP/1.1 200 OK
 ```
 
-Then visit <http://localhost:3001> (React app) and walk through:
-- [ ] Dashboard loads, shows job + candidate counts
-- [ ] Phase 2 → Job Openings lists existing jobs
-- [ ] Phase 2 → Create Job completes 2-step wizard
-- [ ] Phase 3 → CV Evaluation: select a job, stepper reacts to state
-- [ ] Phase 4 → Shortlist loads
-- [ ] Phase 5 → Emails shows SMTP status banner
+### Post-startup checklist
+
+- [ ] Dashboard loads; shows job and candidate counts and charts
+- [ ] Job Openings: create, edit, toggle active/inactive all work
+- [ ] CV Evaluation: select job, upload CV, run evaluation (Ollama), view scores
+- [ ] Shortlist: candidate cards visible, status transitions work, emails send
+- [ ] Emails: history loads, SMTP badge shows configured
+- [ ] Live Interview: QBank loads, generate link works
 
 ---
 
 ## 6. Shutdown
 
-`start.sh` does not stop services; they keep running in the background. To fully stop:
+`start.sh` does not stop services; they keep running in the background. To stop everything on Windows:
 
 ```bash
-docker stop hr-postgres                # stop DB
-pkill -f "npx n8n start"               # stop n8n
-pkill -f "smtp_server.py"              # stop sidecar
-pkill -f "ollama.exe serve"            # stop Ollama
-pkill -f "serve -l 3000"               # stop legacy frontend
-pkill -f "vite --port 3001"            # stop React frontend
+taskkill /f /im node.exe      # stops n8n and the React dev server
+taskkill /f /im python.exe    # stops all Python sidecars
+taskkill /f /im ollama.exe    # stops Ollama
+docker stop hr-postgres
 ```
 
-On Windows native, use Task Manager to end `node.exe`, `python.exe`, `ollama.exe`.
+Alternatively, use Task Manager to end the `node.exe`, `python.exe`, and `ollama.exe` processes.
 
 ---
 
-## 7. Common Operations
+## 7. n8n Workflow Patching Protocol
 
-### Re-import a single workflow
-```bash
-cd workflows/phase2-cv-evaluation
-npx n8n import:workflow --input=phase2-cv-evaluation.json
-# then re-run the activeVersionId UPDATE in sqlite and restart n8n
+When you need to fix a node's code directly in sqlite (bypassing the UI), you must patch **both** `workflow_entity` and the matching `workflow_history` row. Patching only `workflow_entity` has no effect at runtime — n8n executes the snapshot stored in `workflow_history` indexed by `activeVersionId`.
+
+```python
+import sqlite3, json
+
+DB = 'D:/n8n/.n8n/database.sqlite'
+db = sqlite3.connect(DB)
+
+# Read current nodes
+wf_id = 'N'   # replace with actual workflow ID (1-6)
+ver = db.execute(
+    "SELECT activeVersionId FROM workflow_entity WHERE id=?", (wf_id,)
+).fetchone()[0]
+
+nodes = json.loads(
+    db.execute("SELECT nodes FROM workflow_entity WHERE id=?", (wf_id,)).fetchone()[0]
+)
+
+# --- make changes to nodes here ---
+
+db.execute(
+    "UPDATE workflow_entity SET nodes=? WHERE id=?",
+    (json.dumps(nodes), wf_id)
+)
+db.execute(
+    "UPDATE workflow_history SET nodes=? WHERE versionId=?",
+    (json.dumps(nodes), ver)
+)
+db.commit()
+db.close()
+
+# Then restart n8n:
+# taskkill /f /im node.exe
+# (then run start.sh or start n8n manually)
 ```
 
+After any REST API deactivate/activate cycle, `activeVersionId` is cleared by n8n. Re-patch the DB with `active=1, activeVersionId=<ver>` before calling activate again.
+
+### n8n workflow IDs
+
+| ID | Workflow name |
+|----|---------------|
+| 1 | Phase 2 - Job Openings |
+| 2 | Phase 3 - CV Evaluation |
+| 3 | Phase 4 - Shortlist |
+| 4 | Phase 5 - Emails |
+| 5 | Phase 1 - Dashboard |
+| 6 | Phase 6 - Live Interview |
+
+### n8n REST API authentication
+
+```bash
+# Login — saves session cookie to /tmp/n8n.txt
+curl -c /tmp/n8n.txt http://localhost:5678/rest/login -X POST \
+  -H "Content-Type: application/json" \
+  -d '{"emailOrLdapLoginId":"j.danaf@diyarme.com","password":"Diyar2024!"}'
+
+# Activate a workflow
+curl -b /tmp/n8n.txt http://localhost:5678/rest/workflows/WF_ID/activate \
+  -X POST -H "Content-Type: application/json" \
+  -d '{"versionId":"VERSION_ID"}'
+```
+
+`VERSION_ID` comes from `workflow_history` (the latest row for the workflow).
+
+---
+
+## 8. Common Operations
+
 ### Reset the database
+
 ```bash
 docker exec -it hr-postgres psql -U hr_admin -d hr_automation \
   -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public;"
-# then re-run schema.sql + migrations (see §3.4)
+
+docker exec -i hr-postgres psql -U hr_admin -d hr_automation < db/schema.sql
+
+for f in db/migrations/*.sql; do
+  docker exec -i hr-postgres psql -U hr_admin -d hr_automation < "$f"
+done
 ```
 
-### Tail n8n logs
-n8n prints to the terminal it was started from. If launched via `start.sh` it's redirected to `/dev/null`. For verbose logs, run manually:
-```bash
-npx n8n start
-```
+### Restart only the SMTP sidecar
 
-### Tail SMTP sidecar logs
-Same — stop the background process and run manually:
 ```bash
+taskkill /f /im python.exe
 python scripts/smtp_server.py
 ```
 
+### Tail n8n logs
+
+n8n output is redirected to `/dev/null` when launched via `start.sh`. For verbose logs, stop n8n and run it manually:
+
+```bash
+taskkill /f /im node.exe
+npx n8n start
+```
+
+### Rebuild the progress report
+
+The stakeholder PDF in `report/report.pdf` is compiled from `report/report.tex` using MiKTeX. Run `pdflatex` twice so the TOC and section numbering resolve correctly:
+
+```bash
+cd "D:/OneDrive/Desktop/Diyar/hr-automation/report"
+"C:/Users/Jasse/AppData/Local/Programs/MiKTeX/miktex/bin/x64/pdflatex.exe" report.tex
+"C:/Users/Jasse/AppData/Local/Programs/MiKTeX/miktex/bin/x64/pdflatex.exe" report.tex
+```
+
+To swap a screenshot, drop a new PNG into `report/images/` with the matching filename (lowercase, hyphen-separated, e.g. `dashboard.png`) and recompile.
+
 ---
 
-## 8. API Endpoints Quick Reference
+## 9. API Endpoints Quick Reference
 
 Full mapping in [`n8n.md`](n8n.md). Commonly used:
 
 ```bash
-# Phase 2 — Job Openings
+# Phase 2 - Job Openings
 curl http://localhost:5678/webhook/job-openings
-curl -X POST http://localhost:5678/webhook/job-openings -H 'Content-Type: application/json' -d '{...}'
+curl -X POST http://localhost:5678/webhook/job-openings \
+  -H 'Content-Type: application/json' -d '{...}'
 
-# Phase 3 — CV Evaluation
+# Phase 3 - CV Evaluation
 curl "http://localhost:5678/webhook/candidates?job_id=1"
 curl "http://localhost:5678/webhook/evaluations?job_id=1"
-curl -X POST http://localhost:5678/webhook/cv-evaluate -H 'Content-Type: application/json' -d '{"job_id":1}'
+curl -X POST http://localhost:5678/webhook/cv-evaluate \
+  -H 'Content-Type: application/json' -d '{"job_id":1}'
 
-# Phase 4 — Shortlist
+# Phase 4 - Shortlist
 curl "http://localhost:5678/webhook/shortlist?job_id=1"
 
-# Phase 5 — Emails
+# Phase 5 - Emails
 curl "http://localhost:5678/webhook/email-history?job_id=1"
 ```
 
 ---
 
-## 9. Troubleshooting
+## 10. Troubleshooting
 
 See [`troubleshooting.md`](troubleshooting.md) for symptom-by-symptom fixes.
-
----
-
-## 10. Rebuilding the Progress Report
-
-The stakeholder PDF in `report/report.pdf` is generated from `report/report.tex` using MiKTeX.
-
-```bash
-cd report
-"C:/Users/Jasse/AppData/Local/Programs/MiKTeX/miktex/bin/x64/pdflatex.exe" report.tex
-# run again if the TOC, section numbering, or labels changed
-"C:/Users/Jasse/AppData/Local/Programs/MiKTeX/miktex/bin/x64/pdflatex.exe" report.tex
-```
-
-To swap a screenshot, drop a new PNG into `report/images/` with the matching filename (e.g., `dashboard.png`, `results.png`) and recompile. The file list is documented at the top of `report.tex`.

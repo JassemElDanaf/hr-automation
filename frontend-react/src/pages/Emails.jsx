@@ -7,7 +7,10 @@ import Badge from '../components/common/Badge';
 import EmptyState from '../components/common/EmptyState';
 import Loading from '../components/common/Loading';
 import Modal from '../components/modals/Modal';
-import { formatDate } from '../utils/helpers';
+import { formatDate, emailTypeLabel as baseEmailTypeLabel } from '../utils/helpers';
+
+// Emails tab uses a shorter label for the recommendation/handoff type.
+const emailTypeLabel = (t) => t === 'recommendation' ? 'Handed to HM' : baseEmailTypeLabel(t);
 
 export default function Emails() {
   const { selectedJob, setSelectedJob } = useSelectedJob();
@@ -68,14 +71,24 @@ export default function Emails() {
     } catch {}
   }
 
-  const filtered = statusFilter === 'all' ? emailData : emailData.filter(e => e.status === statusFilter);
-  const sentCount = emailData.filter(e => e.status === 'sent').length;
-  const failedCount = emailData.filter(e => e.status === 'failed').length;
+  // Filter pills now include 'inbound' (replies pulled by the IMAP poller).
+  // 'all' shows both directions; 'sent'/'failed' only show outbound rows
+  // because direction='inbound' rows are always status='sent' but mean
+  // something different — we don't want them mixed into the outbound view.
+  const filtered = statusFilter === 'all'
+    ? emailData
+    : statusFilter === 'inbound'
+      ? emailData.filter(e => e.direction === 'inbound')
+      : emailData.filter(e => e.direction !== 'inbound' && e.status === statusFilter);
+  const outboundOnly = emailData.filter(e => e.direction !== 'inbound');
+  const sentCount = outboundOnly.filter(e => e.status === 'sent').length;
+  const failedCount = outboundOnly.filter(e => e.status === 'failed').length;
+  const inboundCount = emailData.filter(e => e.direction === 'inbound').length;
   const oneWeek = Date.now() - 7 * 86400000;
   const weekCount = emailData.filter(e => new Date(e.sent_at).getTime() > oneWeek).length;
 
-  // SMTP status from recent emails
-  const recent = emailData.slice(0, 10);
+  // SMTP status from recent emails (outbound only — inbound rows are unrelated to SMTP health)
+  const recent = outboundOnly.slice(0, 10);
   let smtpIcon = '\u2709', smtpText = 'SMTP status unknown', smtpHint = 'Send an email to check.';
   if (recent.length > 0) {
     const recentSent = recent.filter(e => e.status === 'sent').length;
@@ -110,7 +123,7 @@ export default function Emails() {
           {jobs.map(j => <option key={j.id} value={j.id}>{j.job_title}</option>)}
         </select>
         <div className="filter-tabs">
-          {['all', 'sent', 'failed'].map(f => (
+          {['all', 'sent', 'failed', 'inbound'].map(f => (
             <button key={f} className={`filter-tab ${statusFilter === f ? 'active' : ''}`} onClick={() => setStatusFilter(f)}>
               {f.charAt(0).toUpperCase() + f.slice(1)}
             </button>
@@ -122,6 +135,7 @@ export default function Emails() {
         <StatCard label="Total" value={emailData.length || '-'} />
         <StatCard label="Sent" value={sentCount || '-'} style={{ color: 'var(--success)' }} />
         <StatCard label="Failed" value={failedCount || '-'} style={{ color: 'var(--danger)' }} />
+        <StatCard label="Inbound" value={inboundCount || '-'} />
         <StatCard label="This Week" value={weekCount || '-'} />
       </div>
 
@@ -130,21 +144,35 @@ export default function Emails() {
           <table>
             <thead><tr><th>Date</th><th>Candidate</th><th>Type</th><th>Recipient</th><th>Subject</th><th>Status</th><th style={{ width: '28px' }}></th></tr></thead>
             <tbody>
-              {filtered.map(e => (
+              {filtered.map(e => {
+                const inbound = e.direction === 'inbound';
+                const rowBg = inbound ? { background: '#faf5ff' } : (e.status === 'failed' ? { background: '#fef2f2' } : {});
+                return (
                 <React.Fragment key={e.id}>
                   <tr
                     className="email-row-clickable"
                     onClick={() => setExpandedRow(expandedRow === e.id ? null : e.id)}
-                    style={e.status === 'failed' ? { background: '#fef2f2' } : {}}
+                    style={rowBg}
                   >
                     <td style={{ fontSize: '13px', color: 'var(--gray-500)' }}>{new Date(e.sent_at).toLocaleDateString()} {new Date(e.sent_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</td>
                     <td><strong>{e.candidate_name || '\u2014'}</strong></td>
-                    <td><Badge type="shortlisted">{(e.email_type || '').replace('_', ' ')}</Badge></td>
-                    <td style={{ fontSize: '13px' }}>{e.recipient_email}</td>
+                    <td>
+                      {inbound
+                        ? <span className="badge" style={{ background: '#ede9fe', color: '#6b21a8', border: '1px solid #e9d5ff' }}>{'\u{1F4E5}'} Reply</span>
+                        : <Badge type={e.email_type === 'recommendation' ? 'interviewed' : 'shortlisted'}>{emailTypeLabel(e.email_type)}</Badge>}
+                    </td>
+                    <td style={{ fontSize: '13px' }}>
+                      {inbound && <span style={{ color: 'var(--gray-400)', marginRight: '4px' }}>from</span>}
+                      {e.recipient_email}
+                    </td>
                     <td style={{ fontSize: '13px', color: 'var(--gray-700)', maxWidth: '280px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                       {e.subject}
                     </td>
-                    <td><Badge type={e.status === 'sent' ? 'hired' : e.status === 'failed' ? 'rejected' : 'draft'}>{e.status}</Badge></td>
+                    <td>
+                      {inbound
+                        ? <span className="badge" style={{ background: '#ede9fe', color: '#6b21a8', border: '1px solid #e9d5ff' }}>inbound</span>
+                        : <Badge type={e.status === 'sent' ? 'hired' : e.status === 'failed' ? 'rejected' : 'draft'}>{e.status}</Badge>}
+                    </td>
                     <td style={{ textAlign: 'center' }}><span className="email-row-toggle">{expandedRow === e.id ? '\u25B2' : '\u25BC'}</span></td>
                   </tr>
                   {expandedRow === e.id && (
@@ -152,13 +180,13 @@ export default function Emails() {
                       <td colSpan={7}>
                         <div className="email-detail-panel">
                           <div className="email-detail-grid">
-                            <div className="email-detail-field"><span className="email-detail-label">To:</span> {e.recipient_email}</div>
-                            <div className="email-detail-field"><span className="email-detail-label">Type:</span> {(e.email_type || '').replace('_', ' ')}</div>
+                            <div className="email-detail-field"><span className="email-detail-label">{inbound ? 'From:' : 'To:'}</span> {e.recipient_email}</div>
+                            <div className="email-detail-field"><span className="email-detail-label">Type:</span> {inbound ? 'Inbound reply' : emailTypeLabel(e.email_type)}</div>
                             <div className="email-detail-field"><span className="email-detail-label">Date:</span> {new Date(e.sent_at).toLocaleString()}</div>
                             <div className="email-detail-field">
                               <span className="email-detail-label">Status:</span>{' '}
-                              <span className={`sl-email-detail-badge sl-email-detail-badge--${e.status}`}>
-                                {e.status === 'sent' ? '\u2713 Delivered to mail server' : e.status === 'failed' ? '\u2717 Failed' : e.status === 'logged' ? '\u26A0 Logged only (SMTP not configured)' : e.status}
+                              <span className={`sl-email-detail-badge sl-email-detail-badge--${inbound ? 'inbound' : e.status}`}>
+                                {inbound ? '\u{1F4E5} Inbound — pulled by IMAP poller' : e.status === 'sent' ? '\u2713 Delivered to mail server' : e.status === 'failed' ? '\u2717 Failed' : e.status === 'logged' ? '\u26A0 Logged only (SMTP not configured)' : e.status}
                               </span>
                             </div>
                           </div>
@@ -179,7 +207,8 @@ export default function Emails() {
                     </tr>
                   )}
                 </React.Fragment>
-              ))}
+                );
+              })}
             </tbody>
           </table>
         )}

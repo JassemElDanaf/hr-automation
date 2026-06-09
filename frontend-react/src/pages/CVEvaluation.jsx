@@ -7,8 +7,21 @@ import ScoreBadge from '../components/common/ScoreBadge';
 import Loading from '../components/common/Loading';
 import EmptyState from '../components/common/EmptyState';
 import EvalDetailModal from '../components/modals/EvalDetailModal';
-import { formatDate, nameFromFilename, extractEmail } from '../utils/helpers';
-import { extractTextFromFile } from '../utils/pdf';
+import { formatDate, nameFromFilename, extractNameFromCV, extractEmail } from '../utils/helpers';
+import { extractTextFromFile, base64ToBlobUrl } from '../utils/pdf';
+
+function readFileAsBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result || '';
+      const comma = String(result).indexOf(',');
+      resolve(comma >= 0 ? String(result).slice(comma + 1) : String(result));
+    };
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
+}
 import { sendEmailRequest, getRejectionTemplate } from '../services/email';
 
 export default function CVEvaluation() {
@@ -32,6 +45,9 @@ export default function CVEvaluation() {
   const [aiContext, setAiContext] = useState('');
   const [generating, setGenerating] = useState(false);
   const [genStatus, setGenStatus] = useState('Select a job to enable generation.');
+  const [criteriaItems, setCriteriaItems] = useState([]); // [{id, text, required}]
+  const [criteriaNameError, setCriteriaNameError] = useState(false);
+  const criteriaNameRef = useRef(null);
 
   // Step 3 state
   const [uploadedFiles, setUploadedFiles] = useState([]);
@@ -48,7 +64,7 @@ export default function CVEvaluation() {
   const [detailCandidate, setDetailCandidate] = useState(null);
   const [shortlistMap, setShortlistMap] = useState({}); // candidateId -> status string
   const [recentlyChanged, setRecentlyChanged] = useState({}); // candidateId -> true (for animation)
-  const [resultsFilter, setResultsFilter] = useState('all'); // 'active' | 'shortlisted' | 'rejected' | 'archived' | 'all'
+  const [resultsFilter, setResultsFilter] = useState('active'); // 'active' | 'shortlisted' | 'rejected' | 'archived' | 'all'
   const [dupBannerDismissed, setDupBannerDismissed] = useState(false);
   const [archivedMap, setArchivedMap] = useState(() => { // candidateId -> previousStatus
     try { return JSON.parse(localStorage.getItem('hr_archived_candidates_v2') || '{}'); } catch { return {}; }
@@ -97,7 +113,11 @@ export default function CVEvaluation() {
     setEvalSelectedJob(job);
     setEvalJobId(job.id);
     setSelectedJob(job);
-    const state = await fetchJobState(job.id);
+    const [full, state] = await Promise.all([
+      apiGet(`/job-opening?id=${job.id}`).catch(() => null),
+      fetchJobState(job.id),
+    ]);
+    if (full?.data) setEvalSelectedJob(prev => ({ ...prev, ...full.data }));
     setJobState(state);
   }
 
@@ -107,16 +127,18 @@ export default function CVEvaluation() {
       const total = weights.skills + weights.experience + weights.education;
       if (total !== 100) { showToast(`Weights must sum to 100% (currently ${total}%)`, 'error'); return; }
       if (saveCriteria) {
-        let name = saveCriteriaName.trim();
+        const name = saveCriteriaName.trim();
         if (!name) {
-          name = prompt('Enter a name for this criteria set:');
-          if (!name || !name.trim()) { showToast('Criteria set name is required to save', 'error'); return; }
-          name = name.trim();
-          setSaveCriteriaName(name);
+          setCriteriaNameError(true);
+          showToast('Enter a name for this criteria set first', 'error');
+          setTimeout(() => criteriaNameRef.current?.focus(), 0);
+          return;
         }
+        setCriteriaNameError(false);
         apiPost('/criteria-sets', {
           name, job_opening_id: evalJobId, criteria_text: criteriaText,
           skills_weight: weights.skills, experience_weight: weights.experience, education_weight: weights.education,
+          criteria_items: criteriaItems.filter(it => it.text.trim()).map(({ text, required, importance }) => ({ text: text.trim(), required, importance: clampImportance(importance) })),
         }).then(() => {
           showToast('Criteria set saved!', 'success');
           loadCriteriaSets(); // refresh the saved sets list
@@ -144,7 +166,25 @@ export default function CVEvaluation() {
     if (!cs) return;
     setCriteriaText(cs.criteria_text || '');
     setWeights({ skills: cs.skills_weight || 40, experience: cs.experience_weight || 35, education: cs.education_weight || 25 });
+    const items = Array.isArray(cs.criteria_items) ? cs.criteria_items : [];
+    setCriteriaItems(items.map((it, idx) => ({ id: Date.now() + idx, text: it.text || '', required: !!it.required, importance: clampImportance(it.importance) })));
     setSelectedSetId(setId);
+  }
+
+  function clampImportance(v) {
+    const n = parseInt(v, 10);
+    if (isNaN(n)) return 5;
+    return Math.max(1, Math.min(10, n));
+  }
+
+  function addCriteriaItem() {
+    setCriteriaItems(prev => [...prev, { id: Date.now() + Math.random(), text: '', required: false, importance: 5 }]);
+  }
+  function updateCriteriaItem(id, patch) {
+    setCriteriaItems(prev => prev.map(it => it.id === id ? { ...it, ...patch } : it));
+  }
+  function removeCriteriaItem(id) {
+    setCriteriaItems(prev => prev.filter(it => it.id !== id));
   }
 
   async function generateAICriteria() {
@@ -187,7 +227,10 @@ export default function CVEvaluation() {
       if (file.size > 10 * 1024 * 1024) { newFiles.push({ fileName: file.name, name: file.name, email: '', text: '', error: 'File too large' }); continue; }
       try {
         const text = await extractTextFromFile(file);
-        newFiles.push({ fileName: file.name, name: nameFromFilename(file.name), email: extractEmail(text), text, error: text.length < 10 ? 'Very little text' : '' });
+        const fileData = await readFileAsBase64(file);
+        const mime = ext === 'pdf' ? 'application/pdf' : 'text/plain';
+        const extractedName = extractNameFromCV(text) || nameFromFilename(file.name);
+        newFiles.push({ fileName: file.name, name: extractedName, email: extractEmail(text), text, fileData, mime, error: text.length < 10 ? 'Very little text' : '' });
       } catch (err) { newFiles.push({ fileName: file.name, name: file.name, email: '', text: '', error: 'Read failed' }); }
     }
     setUploadedFiles(prev => [...prev, ...newFiles]);
@@ -200,7 +243,7 @@ export default function CVEvaluation() {
     let submitted = 0;
     for (const f of valid) {
       try {
-        const res = await apiPost('/cv-submit', { job_opening_id: evalJobId, candidate_name: f.name, email: f.email, cv_text: f.text });
+        const res = await apiPost('/cv-submit', { job_opening_id: evalJobId, candidate_name: f.name, email: f.email, cv_text: f.text, cv_file_name: f.fileName, cv_file_data: f.fileData || null, cv_file_mime: f.mime || null });
         if (res.data.success) submitted++;
       } catch {}
     }
@@ -263,6 +306,8 @@ export default function CVEvaluation() {
     try {
       const payload = { job_opening_id: evalJobId, skills_weight: weights.skills, experience_weight: weights.experience, education_weight: weights.education };
       if (criteriaText) payload.criteria_text = criteriaText;
+      const cleanItems = criteriaItems.filter(it => it.text.trim()).map(({ text, required, importance }) => ({ text: text.trim(), required, importance: clampImportance(importance) }));
+      if (cleanItems.length > 0) payload.criteria_items = cleanItems;
       const res = await apiPost('/cv-evaluate', payload);
       if (res.data.success) showToast(res.data.message || 'Evaluation complete', 'success');
       else if (res.data.error) showToast(`Evaluation failed: ${res.data.error}`, 'error');
@@ -290,6 +335,8 @@ export default function CVEvaluation() {
     try {
       const payload = { job_opening_id: evalJobId, candidate_id: candidateId, skills_weight: weights.skills, experience_weight: weights.experience, education_weight: weights.education };
       if (criteriaText) payload.criteria_text = criteriaText;
+      const cleanItems = criteriaItems.filter(it => it.text.trim()).map(({ text, required, importance }) => ({ text: text.trim(), required, importance: clampImportance(importance) }));
+      if (cleanItems.length > 0) payload.criteria_items = cleanItems;
       const res = await apiPost('/cv-evaluate', payload);
       if (res.data.success) { showToast('AI evaluation complete!', 'success'); loadEvalResults(); }
       else showToast(`Evaluation failed: ${res.data.error || 'Ollama may not have responded'}`, 'error');
@@ -304,6 +351,35 @@ export default function CVEvaluation() {
     }
   }
 
+  async function viewCV(candidateId, candidateName) {
+    // Open the tab synchronously inside the click handler so the popup blocker
+    // treats it as a user-initiated navigation. We then redirect it once the
+    // base64 data arrives.
+    const win = window.open('about:blank', '_blank');
+    try {
+      const res = await apiGet(`/cv-file?candidate_id=${candidateId}`);
+      const d = res?.data?.data || res?.data || {};
+      if (!d.cv_file_data) {
+        if (win) win.close();
+        showToast('Original PDF not stored for this candidate (uploaded before PDF storage was added)', 'error');
+        return;
+      }
+      const url = base64ToBlobUrl(d.cv_file_data, d.cv_file_mime || 'application/pdf');
+      if (win) {
+        win.location.href = url;
+      } else {
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = d.cv_file_name || (candidateName + '.pdf');
+        document.body.appendChild(a); a.click(); a.remove();
+      }
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
+    } catch {
+      if (win) win.close();
+      showToast('Failed to load CV file', 'error');
+    }
+  }
+
   async function addToShortlist(candidateId) {
     try {
       const res = await apiPost('/add-to-shortlist', { candidate_id: candidateId, job_opening_id: evalJobId });
@@ -313,6 +389,24 @@ export default function CVEvaluation() {
         setRecentlyChanged(prev => ({ ...prev, [candidateId]: true }));
         setTimeout(() => setRecentlyChanged(prev => { const n = { ...prev }; delete n[candidateId]; return n; }), 600);
         showToast('Shortlisted!', 'success');
+      } else showToast(res.data.error || 'Failed', 'error');
+    } catch (err) { showToast('Failed', 'error'); }
+  }
+
+  async function revertDecision(candidateId, kind /* 'shortlist' | 'reject' */) {
+    const isReject = kind === 'reject';
+    const confirmMsg = isReject
+      ? 'Revert the rejection? The candidate will return to pending and can be re-evaluated, shortlisted, or rejected again.'
+      : 'Remove this candidate from the shortlist? They will return to pending.';
+    if (!confirm(confirmMsg)) return;
+    try {
+      const res = await apiPost('/remove-from-shortlist', { candidate_id: candidateId, job_opening_id: evalJobId });
+      if (res.data.success) {
+        setShortlistMap(prev => { const n = { ...prev }; delete n[candidateId]; return n; });
+        setRetainedInView(prev => new Set(prev).add(candidateId));
+        setRecentlyChanged(prev => ({ ...prev, [candidateId]: true }));
+        setTimeout(() => setRecentlyChanged(prev => { const n = { ...prev }; delete n[candidateId]; return n; }), 600);
+        showToast(isReject ? 'Rejection reverted — candidate is pending' : 'Candidate unshortlisted', 'info');
       } else showToast(res.data.error || 'Failed', 'error');
     } catch (err) { showToast('Failed', 'error'); }
   }
@@ -377,18 +471,9 @@ export default function CVEvaluation() {
   const activeDuplicateCount = candidates.filter(c => isDuplicate(c.id) && !isArchived(c.id)).length;
   const uniqueCount = candidates.length - candidates.filter(c => isDuplicate(c.id)).length;
 
-  // Sort: unevaluated first, then pending (evaluated, no action), then shortlisted, then rejected. Newest first within each group.
-  const statusOrder = (id) => {
-    const s = shortlistMap[id];
-    if (!evalMap[id]) return 0; // unevaluated
-    if (!s) return 1; // evaluated, pending
-    if (s === 'shortlisted' || s === 'interviewed' || s === 'hired') return 2;
-    if (s === 'rejected') return 3;
-    return 1;
-  };
+  // Sort: most recently submitted first (newly uploaded CVs always at the top).
+  // Status pills above let HR narrow to shortlisted/rejected/etc — sort itself doesn't group by status.
   const sorted = [...candidates].sort((a, b) => {
-    const oa = statusOrder(a.id), ob = statusOrder(b.id);
-    if (oa !== ob) return oa - ob;
     return new Date(b.submitted_at || 0) - new Date(a.submitted_at || 0);
   });
 
@@ -470,7 +555,6 @@ export default function CVEvaluation() {
   return (
     <div className="container">
       <div style={{ textAlign: 'center', marginBottom: 0 }}>
-        <span style={{ fontSize: '10px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--primary)' }}>CV Evaluator Agent</span>
         <h2 style={{ fontSize: '18px', fontWeight: 700, marginTop: '2px' }}>AI-Powered CV Evaluation</h2>
         <p style={{ fontSize: '13px', color: 'var(--gray-500)', marginTop: '2px' }}>Select a job, define criteria, upload CVs, and get an instant AI evaluation report.</p>
       </div>
@@ -651,6 +735,46 @@ export default function CVEvaluation() {
               <span className="criteria-section-hint">Edit criteria before continuing. All sources populate this editor.</span>
             </div>
             <textarea className="criteria-draft" value={criteriaText} onChange={e => setCriteriaText(e.target.value)} placeholder="Your criteria will appear here. You can always edit before continuing." />
+
+            {/* Structured criteria items — required/optional + per-item weight */}
+            <div style={{ marginTop: '16px', paddingTop: '16px', borderTop: '1px solid var(--gray-200)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                <div>
+                  <h5 style={{ margin: 0, fontSize: '13px', fontWeight: 700 }}>Criteria Items <span style={{ fontWeight: 400, color: 'var(--gray-400)' }}>(optional)</span></h5>
+                  <span style={{ fontSize: '12px', color: 'var(--gray-500)' }}>
+                    Break your criteria into items. Mark items as required so the AI penalizes candidates who don't meet them.
+                  </span>
+                </div>
+                <button type="button" className="btn btn-sm btn-secondary" onClick={addCriteriaItem}>+ Add Item</button>
+              </div>
+              {criteriaItems.length === 0 ? (
+                <div style={{ padding: '12px', background: 'var(--gray-50)', border: '1px dashed var(--gray-200)', borderRadius: 'var(--radius)', fontSize: '12px', color: 'var(--gray-500)', textAlign: 'center' }}>
+                  No items yet. Add items for fine-grained, per-item evaluation.
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  {criteriaItems.map((it) => (
+                    <div key={it.id} style={{ display: 'grid', gridTemplateColumns: '1fr auto auto auto', gap: '8px', alignItems: 'center', padding: '8px', background: it.required ? '#fef3c7' : 'var(--gray-50)', border: '1px solid ' + (it.required ? '#fcd34d' : 'var(--gray-200)'), borderRadius: 'var(--radius)' }}>
+                      <input type="text" value={it.text} onChange={e => updateCriteriaItem(it.id, { text: e.target.value })} placeholder="e.g. 5+ years of Python experience" style={{ fontSize: '13px' }} />
+                      <label style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '12px', fontWeight: 600, color: it.required ? '#92400e' : 'var(--gray-500)', whiteSpace: 'nowrap', cursor: 'pointer' }}>
+                        <input type="checkbox" checked={it.required} onChange={e => updateCriteriaItem(it.id, { required: e.target.checked })} />
+                        Required
+                      </label>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '12px', fontWeight: 600, color: 'var(--gray-600)', whiteSpace: 'nowrap' }} title="How much this item should weigh in scoring (1 = nice-to-have, 10 = critical)">
+                        Importance
+                        <select value={it.importance ?? 5} onChange={e => updateCriteriaItem(it.id, { importance: clampImportance(e.target.value) })} style={{ fontSize: '12px', padding: '2px 4px' }}>
+                          {[1,2,3,4,5,6,7,8,9,10].map(n => <option key={n} value={n}>{n}</option>)}
+                        </select>
+                      </label>
+                      <button type="button" onClick={() => removeCriteriaItem(it.id)} className="btn btn-sm btn-ghost" style={{ padding: '4px 8px' }} title="Remove">&times;</button>
+                    </div>
+                  ))}
+                  <div style={{ fontSize: '11px', color: 'var(--gray-500)', marginTop: '4px' }}>
+                    {criteriaItems.filter(i => i.required).length} required &middot; {criteriaItems.filter(i => !i.required).length} optional
+                  </div>
+                </div>
+              )}
+            </div>
             {criteriaText && !saveCriteria && (
               <div className="unsaved-warning-card">
                 <span className="warn-ico">{'\u26A0'}</span>
@@ -665,7 +789,19 @@ export default function CVEvaluation() {
                 <input type="checkbox" checked={saveCriteria} onChange={e => setSaveCriteria(e.target.checked)} />
                 <span>Save this criteria set for future evaluations</span>
               </label>
-              {saveCriteria && <input type="text" value={saveCriteriaName} onChange={e => setSaveCriteriaName(e.target.value)} placeholder='Criteria set name (e.g. "Senior Backend 2026")' style={{ marginTop: '8px', width: '100%' }} />}
+              {saveCriteria && (
+                <>
+                  <input
+                    ref={criteriaNameRef}
+                    type="text"
+                    value={saveCriteriaName}
+                    onChange={e => { setSaveCriteriaName(e.target.value); if (criteriaNameError && e.target.value.trim()) setCriteriaNameError(false); }}
+                    placeholder='Criteria set name (e.g. "Senior Backend 2026")'
+                    style={{ marginTop: '8px', width: '100%', borderColor: criteriaNameError ? '#dc2626' : undefined, outline: criteriaNameError ? '1px solid #dc2626' : undefined }}
+                  />
+                  {criteriaNameError && <div style={{ marginTop: '4px', fontSize: '12px', color: '#dc2626' }}>Required when "Save this criteria set" is checked.</div>}
+                </>
+              )}
             </div>
           </div>
           <div className="wizard-footer">
@@ -815,19 +951,29 @@ export default function CVEvaluation() {
                           <div className="actions-container">
                             {archived ? (
                               <>
-                                <span className={`status-action-badge ${archivedMap[c.id] === 'rejected' ? 'status-rejected' : 'status-shortlisted'}`}>
-                                  {archivedMap[c.id] === 'rejected' ? '\u2717 Rejected' : '\u2713 ' + (archivedMap[c.id] || 'Shortlisted').charAt(0).toUpperCase() + (archivedMap[c.id] || 'shortlisted').slice(1)}
-                                </span>
+                                {(() => {
+                                  const prev = archivedMap[c.id];
+                                  if (prev === 'rejected') return <span className="status-action-badge status-rejected">{'\u2717'} Rejected</span>;
+                                  if (!prev || prev === 'pending') return <span className="status-action-badge status-archived">{'\u{1F4E6}'} Archived</span>;
+                                  return <span className="status-action-badge status-shortlisted">{'\u2713'} {prev.charAt(0).toUpperCase() + prev.slice(1)}</span>;
+                                })()}
+                                {c.cv_file_available && <button className="btn btn-sm btn-ghost" onClick={() => viewCV(c.id, c.candidate_name)} title="Open original PDF">View CV</button>}
                                 <button className="btn btn-sm btn-ghost" onClick={() => restoreCandidate(c.id)}>Restore</button>
                               </>
                             ) : status === 'rejected' ? (
                               <>
                                 <span className={`status-action-badge status-rejected${justChanged ? ' status-pop' : ''}`}>{'\u2717'} Rejected</span>
+                                {c.cv_file_available && <button className="btn btn-sm btn-ghost" onClick={() => viewCV(c.id, c.candidate_name)} title="Open original PDF">View CV</button>}
+                                <button className="btn btn-sm btn-ghost" onClick={() => revertDecision(c.id, 'reject')} title="Revert this rejection — candidate returns to pending">Unreject</button>
                                 <button className="btn btn-sm btn-ghost" onClick={() => archiveCandidate(c.id)}>Archive</button>
                               </>
                             ) : status === 'shortlisted' || status === 'interviewed' || status === 'hired' ? (
                               <>
                                 <span className={`status-action-badge status-shortlisted${justChanged ? ' status-pop' : ''}`}>{'\u2713'} {status.charAt(0).toUpperCase() + status.slice(1)}</span>
+                                {c.cv_file_available && <button className="btn btn-sm btn-ghost" onClick={() => viewCV(c.id, c.candidate_name)} title="Open original PDF">View CV</button>}
+                                {status === 'shortlisted' && (
+                                  <button className="btn btn-sm btn-ghost" onClick={() => revertDecision(c.id, 'shortlist')}>Unshortlist</button>
+                                )}
                                 <button className="btn btn-sm btn-ghost" onClick={() => archiveCandidate(c.id)}>Archive</button>
                               </>
                             ) : (
@@ -838,13 +984,15 @@ export default function CVEvaluation() {
                                     {evaluatingOneId === c.id ? `Evaluating\u2026 ${Math.round(evalProgress)}%` : 'Run Evaluation'}
                                   </button>
                                 )}
-                                <button className="btn btn-sm btn-secondary" onClick={() => setDetailCandidate(c)}>{e ? 'Details' : 'View CV'}</button>
+                                <button className="btn btn-sm btn-secondary" onClick={() => setDetailCandidate(c)}>{e ? 'Details' : 'View Text'}</button>
+                                {c.cv_file_available && <button className="btn btn-sm btn-secondary" onClick={() => viewCV(c.id, c.candidate_name)} title="Open original PDF">View CV</button>}
                                 {dup ? (
                                   <button className="btn btn-sm btn-ghost" onClick={() => archiveCandidate(c.id)}>Archive Duplicate</button>
                                 ) : (
                                   <>
                                     <button className="btn btn-sm btn-success" onClick={() => addToShortlist(c.id)}>Shortlist</button>
                                     <button className="btn btn-sm btn-danger" onClick={() => rejectCandidate(c.id, c.candidate_name, c.email)}>Reject</button>
+                                    <button className="btn btn-sm btn-ghost" onClick={() => archiveCandidate(c.id)}>Archive</button>
                                   </>
                                 )}
                               </>
@@ -865,7 +1013,7 @@ export default function CVEvaluation() {
         </div>
       )}
 
-      <EvalDetailModal candidate={detailCandidate} allCandidates={candidates} isOpen={!!detailCandidate} onClose={() => setDetailCandidate(null)} />
+      <EvalDetailModal candidate={detailCandidate} allCandidates={candidates} job={evalSelectedJob} isOpen={!!detailCandidate} onClose={() => setDetailCandidate(null)} />
     </div>
   );
 }

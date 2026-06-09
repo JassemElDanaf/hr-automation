@@ -5,6 +5,7 @@ export default function EmailComposerModal() {
   const { emailComposer, closeEmailComposer, showToast } = useUI();
   const [subject, setSubject] = useState('');
   const [body, setBody] = useState('');
+  const [editedRecipient, setEditedRecipient] = useState(null);
   const [sendEmail, setSendEmail] = useState(true);
   const [working, setWorking] = useState(false);
 
@@ -12,7 +13,17 @@ export default function EmailComposerModal() {
   const cfg = emailComposer;
   if (!cfg) return null;
 
-  const hasEmail = cfg.candidate.email && cfg.candidate.email.includes('@');
+  // Candidate-facing emails fall back to the candidate's address. HM-facing emails
+  // (editableRecipient: true) must NEVER use the candidate's address — the candidate
+  // is the subject of the message, not the recipient.
+  const defaultRecipient = cfg.editableRecipient
+    ? (cfg.recipientEmail || '')
+    : (cfg.recipientEmail || cfg.candidate?.email || '');
+  const recipientEmail = editedRecipient !== null ? editedRecipient : defaultRecipient;
+  const recipientName = cfg.recipientName || cfg.candidate.name;
+  const recipientLabel = cfg.recipientLabel || 'Candidate';
+  const editableRecipient = cfg.editableRecipient === true;
+  const hasEmail = recipientEmail && recipientEmail.includes('@');
   const showToggle = cfg.showSendToggle === true;
 
   // We use key-based re-init via the effect below
@@ -32,15 +43,27 @@ export default function EmailComposerModal() {
 
     setWorking(true);
     try {
-      await cfg.onSend({ subject: subj, body: bod, sendEmail: willSend });
-      closeEmailComposer();
-      setSubject('');
-      setBody('');
+      await cfg.onSend({ subject: subj, body: bod, sendEmail: willSend, recipientEmail });
+      handleClose();
     } catch (err) {
       showToast('Failed: ' + (err.message || err), 'error');
     } finally {
       setWorking(false);
     }
+  };
+
+  // Always reset local edits on close so reopening (e.g. after editing meeting details
+  // and re-clicking Send Pack) doesn't show stale subject/body from the previous attempt.
+  const handleClose = () => {
+    closeEmailComposer();
+    setSubject('');
+    setBody('');
+    setEditedRecipient(null);
+  };
+
+  const handleBack = () => {
+    if (typeof cfg.onBack === 'function') cfg.onBack();
+    handleClose();
   };
 
   const handleReset = () => {
@@ -50,17 +73,32 @@ export default function EmailComposerModal() {
   };
 
   return (
-    <div className="modal-overlay active" onClick={(e) => e.target === e.currentTarget && closeEmailComposer()}>
+    <div className="modal-overlay active" onClick={(e) => e.target === e.currentTarget && handleClose()}>
       <div className="modal" style={{ maxWidth: '640px' }}>
         <div className="modal-header">
           <h3>{cfg.title || 'Compose Email'}</h3>
-          <button className="modal-close" onClick={closeEmailComposer}>&times;</button>
+          <button className="modal-close" onClick={handleClose}>&times;</button>
         </div>
         <div className="modal-body" style={{ padding: '20px' }}>
           <p style={{ marginBottom: '14px', color: 'var(--gray-600)' }}>{cfg.description}</p>
           <div style={{ background: 'var(--gray-50)', border: '1px solid var(--gray-200)', borderRadius: 'var(--radius)', padding: '12px', marginBottom: '14px', fontSize: '13px' }}>
-            <div style={{ marginBottom: '4px' }}><strong>To:</strong> {cfg.candidate.email || 'No email on file'}</div>
-            <div><strong>Candidate:</strong> {cfg.candidate.name || '\u2014'}</div>
+            {editableRecipient ? (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                <strong style={{ flexShrink: 0 }}>To:</strong>
+                <input
+                  type="email"
+                  value={recipientEmail}
+                  onChange={(e) => setEditedRecipient(e.target.value)}
+                  placeholder="hiring.manager@example.com"
+                  style={{ flex: 1, fontSize: '13px', padding: '4px 8px' }}
+                />
+              </div>
+            ) : (
+              <div style={{ marginBottom: '4px' }}><strong>To:</strong> {recipientEmail || 'No email on file'}</div>
+            )}
+            {recipientName && recipientName !== recipientLabel && (
+              <div><strong>{recipientLabel}:</strong> {recipientName}</div>
+            )}
           </div>
 
           {showToggle && hasEmail && (
@@ -100,15 +138,22 @@ export default function EmailComposerModal() {
             </div>
           )}
         </div>
-        <div className="modal-footer" style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
-          <button className="btn btn-secondary" onClick={closeEmailComposer}>Cancel</button>
-          <button
-            className={`btn ${cfg.sendClass || 'btn-primary'}`}
-            onClick={handleSend}
-            disabled={working || (!hasEmail && !showToggle)}
-          >
-            {working ? 'Working...' : (cfg.sendLabel || 'Send Email')}
-          </button>
+        <div className="modal-footer" style={{ display: 'flex', gap: '8px', justifyContent: cfg.onBack ? 'space-between' : 'flex-end' }}>
+          {cfg.onBack && (
+            <button className="btn btn-secondary" onClick={handleBack} disabled={working}>
+              {'\u2190'} {cfg.backLabel || 'Back'}
+            </button>
+          )}
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <button className="btn btn-secondary" onClick={handleClose} disabled={working}>Cancel</button>
+            <button
+              className={`btn ${cfg.sendClass || 'btn-primary'}`}
+              onClick={handleSend}
+              disabled={working || (!hasEmail && !showToggle)}
+            >
+              {working ? 'Working...' : (cfg.sendLabel || 'Send Email')}
+            </button>
+          </div>
         </div>
       </div>
     </div>

@@ -1,134 +1,159 @@
 #!/bin/bash
-# HR Automation - Start All Services
-# Run this script to start all required services
+# HR Automation — Start All Services
+# Usage: ./start.sh [--no-open]
 
 export PATH="/d/NodeJS:/d/n8n/node_modules/.bin:/c/Users/Jasse/AppData/Roaming/npm:$PATH"
+export N8N_USER_FOLDER=/d/n8n
 export N8N_USER_MANAGEMENT_DISABLED=true
 export N8N_BASIC_AUTH_ACTIVE=false
 export N8N_AUTH_EXCLUDE_ENDPOINTS="*"
-export N8N_USER_FOLDER=/d/n8n
+export N8N_DIAGNOSTICS_ENABLED=false
 export OLLAMA_MODELS=/d/ollama
 export OLLAMA_HOME=/d/ollama
+export OLLAMA_ORIGINS="http://localhost:3001,http://127.0.0.1:3001"
 
-# Load local config (.env) — holds SMTP creds, any local overrides.
-# Keeps secrets out of this script and out of git.
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Load .env (SMTP creds, any local overrides)
 if [ -f "$SCRIPT_DIR/.env" ]; then
-  set -a
-  . "$SCRIPT_DIR/.env"
-  set +a
-  echo "  Loaded config from .env"
+  set -a; . "$SCRIPT_DIR/.env"; set +a
+  echo "  Loaded .env"
 fi
 
 echo "Starting HR Automation services..."
 
-# 0. Ensure Docker Desktop is running (launches it if needed, waits up to 2 min for daemon)
-echo "[0/5] Checking Docker Desktop..."
-if docker info > /dev/null 2>&1; then
-  echo "  Docker daemon is ready."
-else
+# ── 1. Docker Desktop + PostgreSQL ───────────────────────────────────────────
+echo "[1/6] Docker + PostgreSQL..."
+if ! docker info > /dev/null 2>&1; then
   DOCKER_DESKTOP="/c/Program Files/Docker/Docker/Docker Desktop.exe"
   if [ -f "$DOCKER_DESKTOP" ]; then
-    echo "  Docker daemon not reachable. Launching Docker Desktop..."
+    echo "  Launching Docker Desktop..."
     "$DOCKER_DESKTOP" > /dev/null 2>&1 &
     disown 2>/dev/null || true
     tries=0
     until docker info > /dev/null 2>&1; do
       tries=$((tries + 1))
-      if [ $tries -gt 60 ]; then
-        echo "  ERROR: Docker daemon didn't come up after 2 minutes."
-        break
-      fi
-      printf "."
-      sleep 2
+      [ $tries -gt 60 ] && echo "  ERROR: Docker didn't start after 2 min." && break
+      printf "."; sleep 2
     done
     echo ""
-    if docker info > /dev/null 2>&1; then echo "  Docker daemon ready."; fi
   else
-    echo "  WARNING: Docker Desktop not found at $DOCKER_DESKTOP — install Docker Desktop or start it manually."
+    echo "  WARNING: Docker Desktop not found — start it manually."
   fi
 fi
 
-# 1. PostgreSQL container
-echo "[1/5] Checking PostgreSQL..."
-if docker ps 2>/dev/null | grep -q hr-postgres; then
-  echo "  PostgreSQL is running."
-else
-  echo "  Starting PostgreSQL..."
-  docker start hr-postgres 2>/dev/null || echo "  WARNING: hr-postgres container not found. Run: docker run -d --name hr-postgres -e POSTGRES_USER=hr_admin -e POSTGRES_PASSWORD=hr_pass -e POSTGRES_DB=hr_automation -p 5432:5432 postgres:16"
+if docker info > /dev/null 2>&1; then
+  if docker ps 2>/dev/null | grep -q hr-postgres; then
+    echo "  PostgreSQL already running."
+  else
+    docker start hr-postgres 2>/dev/null \
+      && echo "  PostgreSQL started." \
+      || echo "  WARNING: hr-postgres not found. Create it with: docker run -d --name hr-postgres -e POSTGRES_USER=hr_admin -e POSTGRES_PASSWORD=hr_pass -e POSTGRES_DB=hr_automation -p 5432:5432 postgres:16"
+  fi
 fi
 
-# 2. Start Ollama
-echo "[2/5] Starting Ollama (qwen3:4b)..."
+# ── 2. Ollama ────────────────────────────────────────────────────────────────
+echo "[2/6] Ollama..."
 if curl -s http://localhost:11434/api/tags > /dev/null 2>&1; then
   echo "  Ollama already running."
 else
   /d/ollama/program/ollama.exe serve > /dev/null 2>&1 &
   sleep 3
-  if curl -s http://localhost:11434/api/tags > /dev/null 2>&1; then
-    echo "  Ollama started."
-  else
-    echo "  WARNING: Ollama failed to start."
-  fi
+  curl -s http://localhost:11434/api/tags > /dev/null 2>&1 \
+    && echo "  Ollama started." \
+    || echo "  WARNING: Ollama failed to start."
 fi
 
-# 3. Start SMTP sidecar
-echo "[3/5] Starting SMTP sidecar..."
+# ── 3. Python sidecars ───────────────────────────────────────────────────────
+echo "[3/6] Python sidecars (SMTP / IMAP / Recording)..."
+
 if curl -s http://127.0.0.1:8901/ > /dev/null 2>&1; then
   echo "  SMTP sidecar already running."
 else
-  # SMTP_HOST etc. can be set in the environment before running start.sh
-  # If unset, sidecar runs in log-only mode
-  python "$(dirname "$0")/scripts/smtp_server.py" > /dev/null 2>&1 &
+  python "$SCRIPT_DIR/scripts/smtp_server.py" > /dev/null 2>&1 &
   sleep 1
-  if curl -s http://127.0.0.1:8901/ > /dev/null 2>&1; then
-    echo "  SMTP sidecar started on port 8901."
-  else
-    echo "  WARNING: SMTP sidecar failed to start."
-  fi
+  curl -s http://127.0.0.1:8901/ > /dev/null 2>&1 \
+    && echo "  SMTP sidecar started (port 8901)." \
+    || echo "  WARNING: SMTP sidecar failed."
 fi
 
-# 4. Start n8n
-echo "[4/5] Starting n8n..."
+if curl -s http://127.0.0.1:8902/ > /dev/null 2>&1; then
+  echo "  IMAP sidecar already running."
+else
+  python "$SCRIPT_DIR/scripts/imap_server.py" > /dev/null 2>&1 &
+  sleep 1
+  curl -s http://127.0.0.1:8902/ > /dev/null 2>&1 \
+    && echo "  IMAP sidecar started (port 8902)." \
+    || echo "  WARNING: IMAP sidecar failed."
+fi
+
+if curl -s http://127.0.0.1:8903/ > /dev/null 2>&1; then
+  echo "  Recording server already running."
+else
+  mkdir -p "$SCRIPT_DIR/logs"
+  python "$SCRIPT_DIR/scripts/recording_server.py" >> "$SCRIPT_DIR/logs/recording_server.log" 2>&1 &
+  sleep 1
+  curl -s http://127.0.0.1:8903/ > /dev/null 2>&1 \
+    && echo "  Recording server started (port 8903)." \
+    || echo "  WARNING: Recording server failed."
+fi
+
+# ── 4. n8n ───────────────────────────────────────────────────────────────────
+echo "[4/6] n8n..."
 if curl -s http://localhost:5678/healthz > /dev/null 2>&1; then
   echo "  n8n already running."
 else
   npx n8n start > /dev/null 2>&1 &
-  sleep 6
+  sleep 8
   if curl -s http://localhost:5678/healthz > /dev/null 2>&1; then
     echo "  n8n started."
   else
-    echo "  WARNING: n8n failed to start. Waiting longer..."
     sleep 5
-    curl -s http://localhost:5678/healthz > /dev/null 2>&1 && echo "  n8n started." || echo "  ERROR: n8n not responding."
+    curl -s http://localhost:5678/healthz > /dev/null 2>&1 \
+      && echo "  n8n started." \
+      || echo "  ERROR: n8n not responding — check logs."
   fi
 fi
 
-# 5. Start React frontend (the app)
-echo "[5/5] Starting React frontend (port 3001)..."
-if curl -s http://localhost:3001 > /dev/null 2>&1; then
-  echo "  React frontend already running."
+# ── 5. DB migrations ─────────────────────────────────────────────────────────
+echo "[5/6] DB migrations..."
+if docker ps 2>/dev/null | grep -q hr-postgres; then
+  for mig in "$SCRIPT_DIR/db/migrations"/0*.sql; do
+    name=$(basename "$mig")
+    docker exec -i hr-postgres psql -U hr_admin -d hr_automation < "$mig" > /dev/null 2>&1 \
+      && echo "  $name — OK" \
+      || echo "  $name — skipped (already applied)"
+  done
 else
-  (cd "$SCRIPT_DIR/frontend-react" && npx vite --port 3001 > /dev/null 2>&1 &)
+  echo "  WARN: PostgreSQL not running — skipping migrations."
+fi
+
+# ── 6. React frontend ────────────────────────────────────────────────────────
+echo "[6/6] React frontend (port 3001)..."
+if curl -s http://localhost:3001 > /dev/null 2>&1; then
+  echo "  Frontend already running."
+else
+  cd "$SCRIPT_DIR/frontend-react"
+  npx vite --port 3001 > /dev/null 2>&1 &
   sleep 3
-  if curl -s http://localhost:3001 > /dev/null 2>&1; then
-    echo "  React frontend started."
-  else
-    echo "  WARNING: React frontend may still be loading — check http://localhost:3001"
-  fi
+  curl -s http://localhost:3001 > /dev/null 2>&1 \
+    && echo "  Frontend started." \
+    || echo "  WARNING: Frontend may still be loading — check http://localhost:3001"
 fi
 
 echo ""
-echo "All services started!"
-echo "  React App:   http://localhost:3001"
-echo "  n8n:         http://localhost:5678"
-echo "  Ollama:      http://localhost:11434"
-echo "  PostgreSQL:  localhost:5432"
-echo "  SMTP bridge: http://127.0.0.1:8901"
+echo "═══════════════════════════════════════════"
+echo "  HR Automation ready!"
+echo "  App:       http://localhost:3001"
+echo "  n8n:       http://localhost:5678"
+echo "  Ollama:    http://localhost:11434"
+echo "  DB:        localhost:5432"
+echo "  SMTP:      http://127.0.0.1:8901"
+echo "  IMAP:      http://127.0.0.1:8902"
+echo "  Recording: http://127.0.0.1:8903"
+echo "═══════════════════════════════════════════"
 
-# Open the React frontend in the default browser (first run after a cold boot).
-# Pass --no-open to skip, e.g. ./start.sh --no-open
 if [ "$1" != "--no-open" ]; then
   sleep 1
-  start "" "http://localhost:3001" 2>/dev/null || cmd.exe /c start "" "http://localhost:3001" 2>/dev/null || true
+  cmd.exe /c start "" "http://localhost:3001" 2>/dev/null || true
 fi

@@ -18,7 +18,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const body = $input.first().json.body || $input.first().json || {};\nconst candidateId = parseInt(body.candidate_id);\nconst jobId = parseInt(body.job_opening_id);\nconst emailType = (body.email_type || '').trim().toLowerCase();\nconst recipientEmail = (body.recipient_email || '').trim();\nconst candidateName = (body.candidate_name || '').trim();\nconst jobTitle = (body.job_title || '').trim();\n\nconst validTypes = ['rejection', 'interview_invite', 'offer', 'custom'];\n\nif (!candidateId || isNaN(candidateId)) {\n  return [{ json: { error: true, message: 'Valid candidate_id required', status: 400 } }];\n}\nif (!jobId || isNaN(jobId)) {\n  return [{ json: { error: true, message: 'Valid job_opening_id required', status: 400 } }];\n}\nif (!validTypes.includes(emailType)) {\n  return [{ json: { error: true, message: 'email_type must be: ' + validTypes.join(', '), status: 400 } }];\n}\nif (!recipientEmail || !recipientEmail.includes('@')) {\n  return [{ json: { error: true, message: 'Valid recipient_email required', status: 400 } }];\n}\nif (emailType !== 'custom' && !candidateName) {\n  return [{ json: { error: true, message: 'candidate_name required for ' + emailType + ' emails', status: 400 } }];\n}\nif (emailType !== 'custom' && !jobTitle) {\n  return [{ json: { error: true, message: 'job_title required for ' + emailType + ' emails', status: 400 } }];\n}\n\nlet subject = '';\nlet emailBody = '';\n\nif (emailType === 'rejection') {\n  subject = 'Application Update - ' + jobTitle;\n  emailBody = 'Dear ' + candidateName + ',\\n\\nThank you for your interest in the ' + jobTitle + ' position and for taking the time to apply.\\n\\nAfter careful review of all applications, we regret to inform you that we have decided to move forward with other candidates whose qualifications more closely match our current requirements.\\n\\nWe appreciate your interest in our organization and encourage you to apply for future openings that match your skills and experience.\\n\\nWe wish you all the best in your job search and future endeavors.\\n\\nBest regards,\\nHR Department';\n} else if (emailType === 'interview_invite') {\n  subject = 'Interview Invitation - ' + jobTitle;\n  emailBody = 'Dear ' + candidateName + ',\\n\\nWe are pleased to inform you that after reviewing your application for the ' + jobTitle + ' position, we would like to invite you for an interview.\\n\\nPlease reply to this email with your availability for the coming week, and we will schedule a convenient time.\\n\\nWe look forward to speaking with you.\\n\\nBest regards,\\nHR Department';\n} else if (emailType === 'offer') {\n  subject = 'Job Offer - ' + jobTitle;\n  emailBody = 'Dear ' + candidateName + ',\\n\\nWe are delighted to extend an offer for the ' + jobTitle + ' position.\\n\\nPlease find the details of the offer attached. We kindly ask you to review and respond within 5 business days.\\n\\nCongratulations, and we look forward to welcoming you to our team!\\n\\nBest regards,\\nHR Department';\n} else {\n  subject = body.custom_subject || 'Regarding Your Application - ' + jobTitle;\n  emailBody = body.custom_body || '';\n}\n\n// Allow overrides\nif (body.custom_subject) subject = body.custom_subject;\nif (body.custom_body) emailBody = body.custom_body;\n\nreturn [{ json: { error: false, candidate_id: candidateId, job_opening_id: jobId, email_type: emailType, recipient_email: recipientEmail, candidate_name: candidateName, job_title: jobTitle, subject: subject, body: emailBody } }];"
+        "jsCode": "const body = $input.first().json.body || $input.first().json || {};\nconst candidateId = parseInt(body.candidate_id);\nconst jobId = parseInt(body.job_opening_id);\nconst emailType = (body.email_type || '').trim().toLowerCase();\nconst recipientEmail = (body.recipient_email || '').trim();\nconst candidateName = (body.candidate_name || '').trim();\nconst jobTitle = (body.job_title || '').trim();\n\nconst validTypes = ['rejection', 'interview_invite', 'offer', 'custom', 'recommendation'];\n\nif (!candidateId || isNaN(candidateId)) {\n  return [{ json: { error: true, message: 'Valid candidate_id required', status: 400 } }];\n}\nif (!jobId || isNaN(jobId)) {\n  return [{ json: { error: true, message: 'Valid job_opening_id required', status: 400 } }];\n}\nif (!validTypes.includes(emailType)) {\n  return [{ json: { error: true, message: 'email_type must be: ' + validTypes.join(', '), status: 400 } }];\n}\nif (!recipientEmail || !recipientEmail.includes('@')) {\n  return [{ json: { error: true, message: 'Valid recipient_email required', status: 400 } }];\n}\nif (emailType !== 'custom' && !candidateName) {\n  return [{ json: { error: true, message: 'candidate_name required for ' + emailType + ' emails', status: 400 } }];\n}\nif (emailType !== 'custom' && !jobTitle) {\n  return [{ json: { error: true, message: 'job_title required for ' + emailType + ' emails', status: 400 } }];\n}\n\nlet subject = '';\nlet emailBody = '';\n\nif (emailType === 'rejection') {\n  subject = 'Application Update - ' + jobTitle;\n  emailBody = 'Dear ' + candidateName + ',\\n\\nThank you for your interest in the ' + jobTitle + ' position and for taking the time to apply.\\n\\nAfter careful review of all applications, we regret to inform you that we have decided to move forward with other candidates whose qualifications more closely match our current requirements.\\n\\nWe appreciate your interest in our organization and encourage you to apply for future openings that match your skills and experience.\\n\\nWe wish you all the best in your job search and future endeavors.\\n\\nBest regards,\\nHR Department';\n} else if (emailType === 'interview_invite') {\n  subject = 'Interview Invitation - ' + jobTitle;\n  emailBody = 'Dear ' + candidateName + ',\\n\\nWe are pleased to inform you that after reviewing your application for the ' + jobTitle + ' position, we would like to invite you for an interview.\\n\\nPlease reply to this email with your availability for the coming week, and we will schedule a convenient time.\\n\\nWe look forward to speaking with you.\\n\\nBest regards,\\nHR Department';\n} else if (emailType === 'offer') {\n  subject = 'Job Offer - ' + jobTitle;\n  emailBody = 'Dear ' + candidateName + ',\\n\\nWe are delighted to extend an offer for the ' + jobTitle + ' position.\\n\\nPlease find the details of the offer attached. We kindly ask you to review and respond within 5 business days.\\n\\nCongratulations, and we look forward to welcoming you to our team!\\n\\nBest regards,\\nHR Department';\n} else {\n  subject = body.custom_subject || 'Regarding Your Application - ' + jobTitle;\n  emailBody = body.custom_body || '';\n}\n\n// Allow overrides\nif (body.custom_subject) subject = body.custom_subject;\nif (body.custom_body) emailBody = body.custom_body;\n\nreturn [{ json: { error: false, candidate_id: candidateId, job_opening_id: jobId, email_type: emailType, recipient_email: recipientEmail, candidate_name: candidateName, job_title: jobTitle, subject: subject, body: emailBody } }];"
       },
       "id": "validate-email",
       "name": "Send - Validate & Build Email",
@@ -90,9 +90,9 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "INSERT INTO email_log (candidate_id, job_opening_id, email_type, recipient_email, subject, body, status, error_message) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *",
+        "query": "INSERT INTO email_log (candidate_id, job_opening_id, email_type, recipient_email, subject, body, status, error_message, direction, message_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'outbound', $9) RETURNING *",
         "options": {
-          "queryReplacement": "={{ [$('Send - Validate & Build Email').item.json.candidate_id, $('Send - Validate & Build Email').item.json.job_opening_id, $('Send - Validate & Build Email').item.json.email_type, $('Send - Validate & Build Email').item.json.recipient_email, $('Send - Validate & Build Email').item.json.subject, $('Send - Validate & Build Email').item.json.body, ($json.status === 'sent' ? 'sent' : ($json.status === 'logged' ? 'logged' : 'failed')), ($json.error || $json.reason || null)] }}"
+          "queryReplacement": "={{ [$('Send - Validate & Build Email').item.json.candidate_id, $('Send - Validate & Build Email').item.json.job_opening_id, $('Send - Validate & Build Email').item.json.email_type, $('Send - Validate & Build Email').item.json.recipient_email, $('Send - Validate & Build Email').item.json.subject, $('Send - Validate & Build Email').item.json.body, ($json.status === 'sent' ? 'sent' : ($json.status === 'logged' ? 'logged' : 'failed')), ($json.error || $json.reason || null), ($json.message_id || null)] }}"
         }
       },
       "id": "log-email",
@@ -111,7 +111,7 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "INSERT INTO email_log (candidate_id, job_opening_id, email_type, recipient_email, subject, body, status, error_message) VALUES ($1, $2, $3, $4, $5, $6, 'failed', $7) RETURNING *",
+        "query": "INSERT INTO email_log (candidate_id, job_opening_id, email_type, recipient_email, subject, body, status, error_message, direction, message_id) VALUES ($1, $2, $3, $4, $5, $6, 'failed', $7, 'outbound', NULL) RETURNING *",
         "options": {
           "queryReplacement": "={{ [$('Send - Validate & Build Email').item.json.candidate_id, $('Send - Validate & Build Email').item.json.job_opening_id, $('Send - Validate & Build Email').item.json.email_type, $('Send - Validate & Build Email').item.json.recipient_email, $('Send - Validate & Build Email').item.json.subject, $('Send - Validate & Build Email').item.json.body, (($json.error && ($json.error.message || $json.error.description)) || 'SMTP bridge unreachable at http://127.0.0.1:8901/ — is scripts/smtp_server.py running?')] }}"
         }
@@ -199,6 +199,225 @@
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
       "position": [920, 800]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "inbound-email",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "wh-inbound-email",
+      "name": "Inbound - Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [250, 1200],
+      "webhookId": "inbound-email"
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $input.first().json.body || $input.first().json || {};\nconst fromAddr = (body.from || '').trim();\nconst toAddr = (body.to || '').trim();\nconst subject = (body.subject || '').trim();\nconst messageId = (body.message_id || '').trim();\nconst inReplyTo = (body.in_reply_to || '').trim();\nconst references = (body.references || '').trim();\nconst emailBody = body.body || '';\n\nif (!fromAddr) {\n  return [{ json: { error: true, message: 'from required', status: 400 } }];\n}\nif (!inReplyTo && !references) {\n  // Cold inbound — nothing to thread to. Drop with 200 so the IMAP sidecar\n  // marks it Seen and stops re-forwarding it on every poll.\n  return [{ json: { error: false, drop: true, reason: 'no In-Reply-To / References — cold inbound, nothing to attach to', from: fromAddr, subject } }];\n}\n\n// In-Reply-To is the strongest signal (one Message-ID). References is space-\n// separated and ordered oldest → newest, so the **last** one is the direct\n// parent. Try In-Reply-To first, fall back to last token of References.\nlet parentMid = inReplyTo;\nif (!parentMid && references) {\n  const tokens = references.split(/\\s+/).filter(Boolean);\n  parentMid = tokens[tokens.length - 1] || '';\n}\n\nreturn [{ json: { error: false, drop: false, from: fromAddr, to: toAddr, subject, message_id: messageId, in_reply_to: inReplyTo, references, parent_message_id: parentMid, body: emailBody } }];"
+      },
+      "id": "inbound-validate",
+      "name": "Inbound - Validate",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [480, 1200]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.error }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "inbound-error-check",
+      "name": "Inbound - Error?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [700, 1200]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ success: false, error: $json.message }) }}",
+        "options": {
+          "responseCode": "={{ $json.status || 400 }}"
+        }
+      },
+      "id": "inbound-error-resp",
+      "name": "Inbound - Error Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [920, 1080]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.drop }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "inbound-drop-check",
+      "name": "Inbound - Drop?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [920, 1280]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ success: true, dropped: true, reason: $json.reason }) }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "inbound-drop-resp",
+      "name": "Inbound - Drop Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1140, 1180]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT id, candidate_id, job_opening_id, recipient_email FROM email_log WHERE direction = 'outbound' AND message_id = $1 ORDER BY sent_at DESC LIMIT 1",
+        "options": {
+          "queryReplacement": "={{ [$json.parent_message_id] }}"
+        }
+      },
+      "id": "inbound-find-parent",
+      "name": "Inbound - Find Parent",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [1140, 1380],
+      "alwaysOutputData": true,
+      "credentials": {
+        "postgres": {
+          "id": "1",
+          "name": "HR PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const inbound = $('Inbound - Validate').item.json;\nconst rows = $input.all().map(i => i.json).filter(r => r && r.candidate_id);\nif (rows.length === 0) {\n  // Reply that we can't thread (sender lost the In-Reply-To, or the parent row\n  // was wiped). Drop with 200 — FK constraints prevent inserting an orphan,\n  // and re-trying won't help.\n  return [{ json: { error: false, orphan: true, reason: 'no outbound row matches parent message_id ' + inbound.parent_message_id } }];\n}\nconst parent = rows[0];\nreturn [{ json: { error: false, orphan: false, candidate_id: parent.candidate_id, job_opening_id: parent.job_opening_id, parent_email_log_id: parent.id, from: inbound.from, to: inbound.to, subject: inbound.subject, message_id: inbound.message_id, in_reply_to: inbound.in_reply_to, body: inbound.body } }];"
+      },
+      "id": "inbound-resolve-parent",
+      "name": "Inbound - Resolve Parent",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1360, 1380]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.orphan }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "inbound-orphan-check",
+      "name": "Inbound - Orphan?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [1580, 1380]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ success: true, orphan: true, reason: $json.reason }) }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "inbound-orphan-resp",
+      "name": "Inbound - Orphan Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1800, 1280]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO email_log (candidate_id, job_opening_id, email_type, recipient_email, subject, body, status, direction, message_id, in_reply_to) VALUES ($1, $2, 'custom', $3, $4, $5, 'sent', 'inbound', NULLIF($6, ''), NULLIF($7, '')) RETURNING *",
+        "options": {
+          "queryReplacement": "={{ [$json.candidate_id, $json.job_opening_id, $json.from, $json.subject, $json.body, $json.message_id, $json.in_reply_to] }}"
+        }
+      },
+      "id": "inbound-insert",
+      "name": "Inbound - Insert Row",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [1800, 1480],
+      "alwaysOutputData": true,
+      "credentials": {
+        "postgres": {
+          "id": "1",
+          "name": "HR PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ success: true, inserted: true, row: $json }) }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "inbound-success-resp",
+      "name": "Inbound - Success Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [2020, 1480]
     }
   ],
   "connections": {
@@ -234,6 +453,39 @@
     },
     "History - Fetch Email History": {
       "main": [[{ "node": "History - History Response", "type": "main", "index": 0 }]]
+    },
+    "Inbound - Webhook": {
+      "main": [[{ "node": "Inbound - Validate", "type": "main", "index": 0 }]]
+    },
+    "Inbound - Validate": {
+      "main": [[{ "node": "Inbound - Error?", "type": "main", "index": 0 }]]
+    },
+    "Inbound - Error?": {
+      "main": [
+        [{ "node": "Inbound - Error Response", "type": "main", "index": 0 }],
+        [{ "node": "Inbound - Drop?", "type": "main", "index": 0 }]
+      ]
+    },
+    "Inbound - Drop?": {
+      "main": [
+        [{ "node": "Inbound - Drop Response", "type": "main", "index": 0 }],
+        [{ "node": "Inbound - Find Parent", "type": "main", "index": 0 }]
+      ]
+    },
+    "Inbound - Find Parent": {
+      "main": [[{ "node": "Inbound - Resolve Parent", "type": "main", "index": 0 }]]
+    },
+    "Inbound - Resolve Parent": {
+      "main": [[{ "node": "Inbound - Orphan?", "type": "main", "index": 0 }]]
+    },
+    "Inbound - Orphan?": {
+      "main": [
+        [{ "node": "Inbound - Orphan Response", "type": "main", "index": 0 }],
+        [{ "node": "Inbound - Insert Row", "type": "main", "index": 0 }]
+      ]
+    },
+    "Inbound - Insert Row": {
+      "main": [[{ "node": "Inbound - Success Response", "type": "main", "index": 0 }]]
     }
   },
   "pinData": {},
@@ -245,5 +497,5 @@
     { "name": "Phase 5" },
     { "name": "Emails" }
   ],
-  "triggerCount": 2
+  "triggerCount": 3
 }

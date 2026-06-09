@@ -168,7 +168,7 @@
         "url": "http://127.0.0.1:11434/api/generate",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ model: 'qwen3:4b', prompt: `Generate a professional, detailed job description for the following position. Include sections: About the Role, Key Responsibilities (5-7 bullet points), Requirements (5-7 bullet points), Nice to Have (3-4 bullet points), and What We Offer (3-4 bullet points).\\n\\nJob Title: ${$json.job_title}\\nDepartment: ${$json.department}\\nEmployment Type: ${$json.employment_type}\\nSeniority Level: ${$json.seniority_level}\\nLocation: ${$json.location_type}${$json.reporting_to ? '\\nReporting To: ' + $json.reporting_to : ''}\\n\\nWrite the job description now:`, stream: false, options: { num_predict: 8000, num_ctx: 4096, temperature: 0.5 } }) }}",
+        "jsonBody": "={{ JSON.stringify({ model: 'qwen3:4b', prompt: `Generate a professional, detailed job description for the following position. Include sections: About the Role, Key Responsibilities (5-7 bullet points), Requirements (5-7 bullet points), Nice to Have (3-4 bullet points), and What We Offer (3-4 bullet points).\\n\\nJob Title: ${$json.job_title}\\nDepartment: ${$json.department}\\nEmployment Type: ${$json.employment_type}\\nSeniority Level: ${$json.seniority_level}\\nLocation: ${$json.location_type}${$json.reporting_to ? '\\nReporting To: ' + $json.reporting_to : ''}\\n\\nSTRICT OUTPUT RULES:\\n- Return ONLY the final job description.\\n- Do NOT include reasoning, analysis, planning, or commentary about the task.\\n- Do NOT include <think> tags or any meta text.\\n- Do NOT start with phrases like \"Okay\", \"Sure\", \"Let me\", \"I need to\", \"The user wants\".\\n- The first line of your response MUST be the heading \"## About the Role\".\\n\\nWrite the job description now (start with \"## About the Role\"):`, stream: false, think: false, options: { num_predict: 8000, num_ctx: 4096, temperature: 0.3 } }) }}",
         "options": {
           "timeout": 300000
         }
@@ -184,7 +184,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Extract AI-generated description from Ollama response\nconst input = $('Create - Route by Source').first().json;\nconst ollamaResponse = $input.first().json;\n\nconst jobDescription = ollamaResponse.response || ollamaResponse.text || '';\n\nif (!jobDescription || jobDescription.trim().length < 50) {\n  // Fallback: generate a template-based description\n  const fallbackJD = `## ${input.job_title}\\n\\n**Department:** ${input.department}\\n**Type:** ${input.employment_type}\\n**Level:** ${input.seniority_level}\\n**Location:** ${input.location_type}\\n${input.reporting_to ? '**Reports to:** ' + input.reporting_to : ''}\\n\\n### About the Role\\nWe are looking for a ${input.seniority_level} ${input.job_title} to join our ${input.department} team.\\n\\n### Key Responsibilities\\n- Define and execute responsibilities aligned with the ${input.job_title} role\\n- Collaborate with cross-functional teams\\n- Drive initiatives within ${input.department}\\n- Contribute to team goals and objectives\\n- Report on progress and outcomes\\n\\n### Requirements\\n- Relevant experience for a ${input.seniority_level} position\\n- Strong communication and collaboration skills\\n- Domain expertise in ${input.department}\\n\\n### Nice to Have\\n- Previous experience in a similar role\\n- Knowledge of industry best practices\\n\\n---\\n*Note: This description was auto-generated as a template. AI generation was unavailable. Please review and customize.*`;\n  \n  return [{ json: { ...input, job_description: fallbackJD, description_source_type: 'ai_generated', ai_fallback: true } }];\n}\n\nreturn [{ json: { ...input, job_description: jobDescription.trim(), description_source_type: 'ai_generated', ai_fallback: false } }];"
+        "jsCode": "function stripLLMPreamble(text) {\n  if (!text) return '';\n  // 1. If the model emitted a closing </think>, take everything after the LAST one.\n  const closeIdx = text.lastIndexOf('</think>');\n  if (closeIdx >= 0) text = text.slice(closeIdx + '</think>'.length);\n  // 2. Drop any unclosed <think>...EOF tail.\n  text = text.replace(/<think>[\\s\\S]*$/i, '');\n  // 3. Drop any remaining stray </think> or <think> tokens.\n  text = text.replace(/<\\/?think>/gi, '');\n  // 4. Strip wrapping markdown code fences.\n  text = text.replace(/^```(?:markdown|md|text)?\\s*\\n?/i, '').replace(/\\n?```\\s*$/i, '');\n  text = text.trim();\n  // 5. Look for the first acceptable starting line (markdown heading, About the Role, Job Title:, **bold field).\n  const startMatch = text.match(/(^|\\n)(#{1,6}\\s+\\S|About the Role\\b|Job Title\\s*:|Department\\s*:|SKILLS\\s*:|\\*\\*[A-Z])/);\n  if (startMatch) {\n    const idx = startMatch.index + (startMatch[1] ? startMatch[1].length : 0);\n    return text.slice(idx).trim();\n  }\n  // 6. Fallback: strip leading reasoning preamble lines. Stops at first non-preamble line.\n  const preambleRe = /^(okay\\b|alright\\b|sure[,!]?\\s|so[,]?\\s|let'?s\\b|let me\\b|first[,]?\\s|to start\\b|i\\b(?:'m|m| am| need| will| think| should| have|'ll)|i'?ll\\b|the user\\b|here'?s\\b|here is\\b|thinking[:\\s]|reasoning[:\\s]|analysis[:\\s]|plan[:\\s]|step \\d|<\\/?think>|the assistant\\b|as an? (?:ai|hr))/i;\n  const lines = text.split('\\n');\n  let start = 0;\n  while (start < lines.length) {\n    const ln = lines[start].trim();\n    if (ln && !preambleRe.test(ln)) break;\n    start++;\n  }\n  return lines.slice(start).join('\\n').trim();\n}\nconst input = $('Create - Route by Source').first().json;\nconst ollamaResponse = $input.first().json;\nlet jobDescription = (ollamaResponse.response || ollamaResponse.text || '').trim();\nif (!jobDescription && ollamaResponse.thinking) jobDescription = ollamaResponse.thinking.trim();\njobDescription = stripLLMPreamble(jobDescription);\nif (!jobDescription || jobDescription.length < 50) {\n  const fallbackJD = `## ${input.job_title}\\n\\n**Department:** ${input.department}\\n**Type:** ${input.employment_type}\\n**Level:** ${input.seniority_level}\\n**Location:** ${input.location_type}\\n${input.reporting_to ? '**Reports to:** ' + input.reporting_to : ''}\\n\\n### About the Role\\nWe are looking for a ${input.seniority_level} ${input.job_title} to join our ${input.department} team.\\n\\n### Key Responsibilities\\n- Define and execute responsibilities aligned with the ${input.job_title} role\\n- Collaborate with cross-functional teams\\n- Drive initiatives within ${input.department}\\n- Contribute to team goals and objectives\\n- Report on progress and outcomes\\n\\n### Requirements\\n- Relevant experience for a ${input.seniority_level} position\\n- Strong communication and collaboration skills\\n- Domain expertise in ${input.department}\\n\\n### Nice to Have\\n- Previous experience in a similar role\\n- Knowledge of industry best practices\\n\\n---\\n*Note: This description was auto-generated as a template. AI generation was unavailable. Please review and customize.*`;\n  return [{ json: { ...input, job_description: fallbackJD, description_source_type: 'ai_generated', ai_fallback: true } }];\n}\nreturn [{ json: { ...input, job_description: jobDescription, description_source_type: 'ai_generated', ai_fallback: false } }];\n"
       },
       "id": "process-ai-response",
       "name": "Create - Process AI Response",
@@ -198,7 +198,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Manual paste path — pass through with validation\nconst input = $('Create - Route by Source').first().json;\nconst description = input.job_description || '';\n\nif (!description || description.trim().length < 20) {\n  return [{ json: { error: true, message: 'Job description must be at least 20 characters', status: 400 } }];\n}\n\nreturn [{ json: { ...input, job_description: description.trim(), description_source_type: 'manual' } }];"
+        "jsCode": "// Manual paste path \u2014 pass through with validation\nconst input = $('Create - Route by Source').first().json;\nconst description = input.job_description || '';\n\nif (!description || description.trim().length < 20) {\n  return [{ json: { error: true, message: 'Job description must be at least 20 characters', status: 400 } }];\n}\n\nreturn [{ json: { ...input, job_description: description.trim(), description_source_type: 'manual' } }];"
       },
       "id": "manual-paste",
       "name": "Create - Manual Paste",
@@ -211,7 +211,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// File upload path — extract text from uploaded content\nconst input = $('Create - Route by Source').first().json;\n\nconst fileContent = input.file_content || input.job_description || '';\nconst fileName = input.file_name || 'unknown';\n\n// Validate file extension\nconst ext = fileName.toLowerCase().split('.').pop();\nconst validExtensions = ['pdf', 'docx', 'txt'];\n\nif (!validExtensions.includes(ext)) {\n  return [{ json: { error: true, message: `Invalid file type '.${ext}'. Accepted: PDF, DOCX, TXT`, status: 400 } }];\n}\n\nif (!fileContent || fileContent.trim().length < 20) {\n  return [{ json: { error: true, message: 'File content is empty or too short. Could not extract text from the uploaded file.', status: 400 } }];\n}\n\nreturn [{ json: { ...input, job_description: fileContent.trim(), description_source_type: 'file_upload', uploaded_file_name: fileName } }];"
+        "jsCode": "// File upload path \u2014 extract text from uploaded content\nconst input = $('Create - Route by Source').first().json;\n\nconst fileContent = input.file_content || input.job_description || '';\nconst fileName = input.file_name || 'unknown';\n\n// Validate file extension\nconst ext = fileName.toLowerCase().split('.').pop();\nconst validExtensions = ['pdf', 'docx', 'txt'];\n\nif (!validExtensions.includes(ext)) {\n  return [{ json: { error: true, message: `Invalid file type '.${ext}'. Accepted: PDF, DOCX, TXT`, status: 400 } }];\n}\n\nif (!fileContent || fileContent.trim().length < 20) {\n  return [{ json: { error: true, message: 'File content is empty or too short. Could not extract text from the uploaded file.', status: 400 } }];\n}\n\nreturn [{ json: { ...input, job_description: fileContent.trim(), description_source_type: 'file_upload', uploaded_file_name: fileName } }];"
       },
       "id": "file-upload",
       "name": "Create - File Upload Extract",
@@ -224,7 +224,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Merge point — check for errors from any path, then prepare DB insert\nconst item = $input.first().json;\n\nif (item.error) {\n  return [{ json: item }];\n}\n\n// Final validation before DB write\nif (!item.job_description || item.job_description.trim().length < 10) {\n  return [{ json: { error: true, message: 'Job description is empty after processing', status: 400 } }];\n}\n\nreturn [{ json: {\n  error: false,\n  job_title: item.job_title,\n  department: item.department,\n  employment_type: item.employment_type,\n  seniority_level: item.seniority_level,\n  location_type: item.location_type,\n  reporting_to: item.reporting_to || null,\n  description_source_type: item.description_source_type,\n  job_description: item.job_description,\n  uploaded_file_name: item.uploaded_file_name || null,\n  status: item.status || 'draft',\n  is_active: item.is_active !== undefined ? item.is_active : true,\n  ai_fallback: item.ai_fallback || false\n} }];"
+        "jsCode": "// Merge point \u2014 check for errors from any path, then prepare DB insert\nconst item = $input.first().json;\n\nif (item.error) {\n  return [{ json: item }];\n}\n\n// Final validation before DB write\nif (!item.job_description || item.job_description.trim().length < 10) {\n  return [{ json: { error: true, message: 'Job description is empty after processing', status: 400 } }];\n}\n\nreturn [{ json: {\n  error: false,\n  job_title: item.job_title,\n  department: item.department,\n  employment_type: item.employment_type,\n  seniority_level: item.seniority_level,\n  location_type: item.location_type,\n  reporting_to: item.reporting_to || null,\n  description_source_type: item.description_source_type,\n  job_description: item.job_description,\n  uploaded_file_name: item.uploaded_file_name || null,\n  status: item.status || 'open',\n  is_active: item.is_active !== undefined ? item.is_active : true,\n  ai_fallback: item.ai_fallback || false\n} }];"
       },
       "id": "prepare-insert",
       "name": "Create - Prepare DB Insert",
@@ -595,7 +595,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const query = $input.first().json.query || {};\nconst body = $input.first().json.body || $input.first().json;\nconst id = parseInt(query.id || body.id);\n\nif (!id || isNaN(id) || id < 1) {\n  return [{ json: { error: true, message: 'Invalid or missing job opening ID. Use ?id=1', status: 400 } }];\n}\n\nreturn [{ json: { id: id, error: false, sql: 'UPDATE job_openings SET is_active = NOT is_active WHERE id = ' + id + ' RETURNING *' } }];"
+        "jsCode": "const query = $input.first().json.query || {};\nconst body = $input.first().json.body || $input.first().json;\nconst id = parseInt(query.id || body.id);\n\nif (!id || isNaN(id) || id < 1) {\n  return [{ json: { error: true, message: 'Invalid or missing job opening ID. Use ?id=1', status: 400 } }];\n}\n\nreturn [{ json: { id: id, error: false, sql: \"UPDATE job_openings SET is_active = NOT is_active, status = CASE WHEN NOT is_active THEN 'open' ELSE 'closed' END WHERE id = \" + id + ' RETURNING *' } }];"
       },
       "id": "validate-toggle-id",
       "name": "Toggle - Validate ID",
@@ -767,7 +767,10 @@
       "name": "Update - Webhook",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "position": [250, 2200],
+      "position": [
+        250,
+        2200
+      ],
       "webhookId": "update-job-opening"
     },
     {
@@ -778,13 +781,30 @@
       "name": "Update - Build Query",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [480, 2200]
+      "position": [
+        480,
+        2200
+      ]
     },
     {
       "parameters": {
         "conditions": {
-          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
-          "conditions": [{ "leftValue": "={{ $json.error }}", "rightValue": true, "operator": { "type": "boolean", "operation": "equals", "singleValue": true } }],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.error }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals",
+                "singleValue": true
+              }
+            }
+          ],
           "combinator": "and"
         },
         "options": {}
@@ -793,19 +813,27 @@
       "name": "Update - Valid?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
-      "position": [700, 2200]
+      "position": [
+        700,
+        2200
+      ]
     },
     {
       "parameters": {
         "respondWith": "json",
         "responseBody": "={{ JSON.stringify({ success: false, error: $json.message }) }}",
-        "options": { "responseCode": "={{ $json.status || 400 }}" }
+        "options": {
+          "responseCode": "={{ $json.status || 400 }}"
+        }
       },
       "id": "update-error-response",
       "name": "Update - Error Response",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
-      "position": [920, 2080]
+      "position": [
+        920,
+        2080
+      ]
     },
     {
       "parameters": {
@@ -817,38 +845,87 @@
       "name": "Update - Execute",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
-      "position": [920, 2320],
+      "position": [
+        920,
+        2320
+      ],
       "alwaysOutputData": true,
-      "credentials": { "postgres": { "id": "1", "name": "HR PostgreSQL" } }
+      "credentials": {
+        "postgres": {
+          "id": "1",
+          "name": "HR PostgreSQL"
+        }
+      }
     },
     {
       "parameters": {
         "respondWith": "json",
         "responseBody": "={{ JSON.stringify({ success: true, data: $input.all().map(i => i.json)[0] || {} }) }}",
-        "options": { "responseCode": 200 }
+        "options": {
+          "responseCode": 200
+        }
       },
       "id": "update-success",
       "name": "Update - Success",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
-      "position": [1140, 2320]
+      "position": [
+        1140,
+        2320
+      ]
     }
   ],
   "connections": {
     "Update - Webhook": {
-      "main": [[{ "node": "Update - Build Query", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Update - Build Query",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Update - Build Query": {
-      "main": [[{ "node": "Update - Valid?", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Update - Valid?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Update - Valid?": {
       "main": [
-        [{ "node": "Update - Error Response", "type": "main", "index": 0 }],
-        [{ "node": "Update - Execute", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "Update - Error Response",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Update - Execute",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Update - Execute": {
-      "main": [[{ "node": "Update - Success", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Update - Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Create - Webhook - Create Job": {
       "main": [

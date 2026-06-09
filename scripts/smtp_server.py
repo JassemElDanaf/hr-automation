@@ -17,6 +17,7 @@ import os
 import smtplib
 import sys
 from email.mime.text import MIMEText
+from email.utils import make_msgid
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 LISTEN_HOST = '127.0.0.1'
@@ -65,11 +66,20 @@ class Handler(BaseHTTPRequestHandler):
         except ValueError:
             return self._respond(200, {'status': 'failed', 'error': f'invalid SMTP_PORT: {port_str}'})
 
+        # Generate our own Message-ID so we can persist it on the outbound row
+        # and later match an inbound reply's In-Reply-To header back to it. The
+        # domain part defaults to the sender's address domain (Gmail rewrites
+        # the localhost domain otherwise — but the unique opaque token survives,
+        # which is what In-Reply-To matching cares about).
+        msgid_domain = from_addr.split('@')[-1].split('>')[0].strip() if '@' in from_addr else 'diyar.local'
+        message_id = make_msgid(domain=msgid_domain)
+
         try:
             msg = MIMEText(text, 'plain', 'utf-8')
             msg['Subject'] = subject
             msg['From'] = from_addr
             msg['To'] = to
+            msg['Message-ID'] = message_id
 
             if port == 465:
                 server = smtplib.SMTP_SSL(host, port, timeout=20)
@@ -84,15 +94,26 @@ class Handler(BaseHTTPRequestHandler):
                 server.login(user, passwd)
             server.send_message(msg)
             server.quit()
-            return self._respond(200, {'status': 'sent', 'to': to, 'from': from_addr})
+            return self._respond(200, {'status': 'sent', 'to': to, 'from': from_addr, 'message_id': message_id})
         except Exception as e:
             return self._respond(200, {'status': 'failed', 'error': f'{type(e).__name__}: {e}'})
+
+    def do_OPTIONS(self):
+        self.send_response(200)
+        self._cors()
+        self.end_headers()
+
+    def _cors(self):
+        self.send_header('Access-Control-Allow-Origin', '*')
+        self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+        self.send_header('Access-Control-Allow-Headers', 'Content-Type')
 
     def _respond(self, code, payload):
         data = json.dumps(payload).encode('utf-8')
         self.send_response(code)
         self.send_header('Content-Type', 'application/json; charset=utf-8')
         self.send_header('Content-Length', str(len(data)))
+        self._cors()
         self.end_headers()
         self.wfile.write(data)
 

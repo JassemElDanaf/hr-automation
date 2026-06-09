@@ -1,65 +1,79 @@
 # Troubleshooting
 
-> **Project status:** Proof of concept, pre-finalization. Known issues listed here are the ones encountered during build-out; production hardening will add more. See `report/report.pdf` for the stakeholder progress report.
-
-Symptom-first index. Each entry: what you'll see, why it happens, exact fix.
+Symptom-first index. Each entry: what you will see, why it happens, and the exact fix.
 
 ---
 
 ## Startup
 
 ### `launch.bat` flashes and closes
+
 **Symptom:** double-clicking `launch.bat` opens a window that closes immediately.
 **Cause:** Git Bash not found at any of the paths probed in `launch.bat`.
-**Fix:** install Git for Windows from <https://git-scm.com/download/win>, or edit `launch.bat` lines 11–13 to point to your `bash.exe`.
+**Fix:** install Git for Windows from <https://git-scm.com/download/win>, or edit `launch.bat` to point to your `bash.exe`.
 
 ### `start.sh` hangs at "Launching Docker Desktop"
+
 **Symptom:** script prints dots for 2+ minutes then errors out.
-**Cause:** Docker Desktop isn't installed, or it's installed but WSL2 isn't set up.
-**Fix:** launch Docker Desktop manually, wait for the whale icon to settle, then re-run `start.sh`. If first-time install, reboot after the Docker install.
+**Cause:** Docker Desktop is not installed, or it is installed but WSL2 is not set up.
+**Fix:** launch Docker Desktop manually, wait for the whale icon to settle, then re-run `start.sh`. On a first-time install, reboot after Docker installs.
+
+### Services appear to start but all status pills stay red
+
+**Symptom:** `start.sh` completes, the React app opens, but every service pill shows red.
+**Cause:** a leftover `node.exe` process from a previous session is holding port 5678. The new n8n process fails silently and the frontend cannot reach the webhooks.
+**Fix:**
+```bash
+taskkill /f /im node.exe
+# then re-run start.sh
+```
 
 ---
 
 ## Docker / PostgreSQL
 
 ### `docker: Cannot connect to the Docker daemon`
-**Cause:** Docker Desktop not running.
+
+**Cause:** Docker Desktop is not running.
 **Fix:**
 ```bash
-# Windows
-"/c/Program Files/Docker/Docker/Docker Desktop.exe" &
-# then wait ~60s
+# Launch Docker Desktop from the Start menu, then wait ~60 s
 docker info
 ```
 
-### `Error response from daemon: port is already allocated`
-**Cause:** another process is using port 5432 (another Postgres, another app).
-**Fix (temporary):** stop the conflicting process. **Fix (permanent):** change host port:
+### Port 5432 already allocated
+
+**Cause:** another process (a second Postgres, another app) is already using port 5432.
+**Fix (temporary):** stop the conflicting process.
+**Fix (permanent):** change the host port:
 ```bash
 docker rm hr-postgres
 docker run -d --name hr-postgres \
   -e POSTGRES_USER=hr_admin -e POSTGRES_PASSWORD=hr_pass \
   -e POSTGRES_DB=hr_automation -p 5433:5432 postgres:16
 ```
-Then update `POSTGRES_PORT=5433` in `.env` and in the n8n credential.
+Then update the host port in the n8n `HR PostgreSQL` credential to match.
 
 ### `hr-postgres` exits immediately after start
-**Cause:** corrupted data volume or bad env var.
+
+**Cause:** corrupted data volume or bad environment variable on creation.
 **Fix:**
 ```bash
 docker logs hr-postgres
-# read the error, then
+# read the error, then:
 docker rm hr-postgres
-bash scripts/setup-db.sh
+# recreate with the docker run command from the runbook
 ```
 
-### Can't connect from n8n: `password authentication failed for user "hr_admin"`
-**Cause:** n8n credential has wrong password.
-**Fix:** open n8n → Settings → Credentials → `HR PostgreSQL` → re-enter password `hr_pass`.
+### Password authentication failed for user "hr_admin"
+
+**Cause:** the n8n credential has the wrong password.
+**Fix:** n8n > Settings > Credentials > `HR PostgreSQL` > re-enter password `hr_pass`.
 
 ### "relation does not exist"
-**Cause:** migration not applied.
-**Fix:**
+
+**Cause:** a migration has not been applied.
+**Fix:** run all migrations:
 ```bash
 for f in db/migrations/*.sql; do
   docker exec -i hr-postgres psql -U hr_admin -d hr_automation < "$f"
@@ -70,252 +84,193 @@ done
 
 ## n8n
 
-### `curl http://localhost:5678/healthz` returns connection refused
-**Cause:** n8n not running.
-**Fix:**
-```bash
-npx n8n start > /dev/null 2>&1 &
-sleep 8
-curl http://localhost:5678/healthz
-```
+### `curl` to `/healthz` returns a CORS error in the browser
 
-### Webhooks return 404 but workflow shows "Active" in UI
-**Cause:** n8n bug — `activeVersionId` not set in sqlite.
-**Fix:**
+**Cause:** the `/healthz` endpoint has no CORS headers and cannot be called from browser JavaScript.
+**Fix:** use a webhook endpoint to verify n8n is up instead:
 ```bash
-pkill -f "npx n8n start"
-cd /d/n8n
-sqlite3 database.sqlite "UPDATE workflow_entity SET active=1, activeVersionId=versionId WHERE id IN ('1','2','3','4','5');"
-npx n8n start > /dev/null 2>&1 &
+curl http://localhost:5678/webhook/interview/jobs
 ```
+Any valid JSON response (not connection refused) means n8n is running.
 
-### Webhooks work but return empty / wrong data
-**Cause:** stale cached workflow after a re-import.
-**Fix:**
-1. Open the workflow in n8n UI
-2. Toggle Active off → on
-3. If that doesn't work: delete from UI, re-import the JSON, re-activate
+### Webhooks return 404 but the workflow shows Active
+
+**Cause:** `activeVersionId` is not set correctly in sqlite — n8n's internal registration did not complete.
+**Fix:** toggle the workflow OFF then ON in the n8n UI. If the issue persists after any REST deactivate/activate cycle, re-patch the DB before calling activate:
+```bash
+# In the n8n sqlite DB (D:\n8n\.n8n\database.sqlite)
+UPDATE workflow_entity SET active=1, activeVersionId=<ver> WHERE id='N';
+```
+Then call the activate endpoint. See runbook section 7 for the full REST auth flow.
+
+### n8n returns HTTP 200 with an empty body when Postgres is unreachable
+
+**Cause:** the n8n webhook responds 200 even when a Code node catches a DB error internally. The failure is not surfaced as a 5xx.
+**Fix:** health checks that inspect n8n DB connectivity must check that the response body is non-empty — HTTP status alone is not sufficient.
+
+### Workflow patch applied but n8n still runs the old behavior
+
+**Cause:** you patched `workflow_entity.nodes` but not `workflow_history`. n8n executes the snapshot in `workflow_history` indexed by `activeVersionId`, not the draft in `workflow_entity`.
+**Fix:** always patch both tables. See the patching protocol in the runbook.
 
 ### "Could not find credential: HR PostgreSQL"
-**Cause:** n8n credential wasn't created, or was named differently.
-**Fix:** n8n → Settings → Credentials → Add Postgres → name it **exactly** `HR PostgreSQL` with the params in `docs/database.md`.
 
-### CV evaluation workflow execution fails with `null value in column "candidate_id"`
-**Symptom:** Phase 3 CV Evaluation workflow (`wf=2`) shows `status=error` in the execution list and the browser shows a generic evaluation failure.
-**Cause:** the request reached the workflow when all candidates for that job were already scored. "Eval - Prepare Prompts" emits a single no-candidates marker item (`error:true`, no `candidate_id`), which earlier fell through "Call Ollama" → "Score Candidates" → "Save Evaluations" and tried to INSERT with a null candidate_id.
-**Fix:** already shipped — "Eval - Score Candidates" now has an early guard that filters prompt items and returns `{error:true,message:'No unevaluated candidates to score'}` when there's nothing to score. If it happens again, confirm the workflow JSON in `workflows/phase2-cv-evaluation/` contains the guard block at the top of the `Eval - Score Candidates` node's `jsCode`.
+**Cause:** the n8n credential does not exist, or it was created with a different name.
+**Fix:** n8n > Settings > Credentials > Add Credential > Postgres. Name it exactly `HR PostgreSQL` (case-sensitive, with a space).
 
-### Ollama appears to run on integrated GPU, not the dGPU
-**Symptom:** Task Manager → Performance shows Ollama activity on the integrated GPU, inference feels slow.
-**Cause:** Windows Optimus hides per-process GPU assignment behind the default "GPU 0" view. Most of the time Ollama is already on the NVIDIA dGPU but Task Manager just shows the iGPU.
-**Fix (verify first):**
-```powershell
-nvidia-smi --query-compute-apps=pid,process_name,used_memory --format=csv
-curl http://localhost:11434/api/ps
-# size_vram > 0 means model is on the dGPU
-```
-If the NVIDIA GPU genuinely isn't being used, force it per-app (no admin needed):
-```powershell
-$k = 'HKCU:\Software\Microsoft\DirectX\UserGpuPreferences'
-if (-not (Test-Path $k)) { New-Item -Path $k -Force | Out-Null }
-Set-ItemProperty -Path $k -Name 'D:\ollama\program\ollama.exe' -Value 'GpuPreference=2;' -Type String
-```
-Then restart Ollama.
+### Execution fails at the Ollama HTTP Request node
 
-### Per-row "Run Evaluation" button in CV Evaluation seems to do nothing
-**Symptom:** clicking the purple "Run Evaluation" button on a single candidate row produces no visible feedback; ~15 s later a toast fires (or not).
-**Cause / fix:** already shipped — `evaluateOne` now shows `Evaluating… NN%` on the clicked row with a progress bar above the table, disables other rows, and fires an immediate info toast so you know the click registered. If you're still seeing no response at all, it's a backend issue — check `/healthz`, `ollama ps`, and the n8n execution list for an `error` status.
-
-### Execution fails at an HTTP Request node calling Ollama
-**Cause:** Ollama not running, or model not pulled.
+**Cause:** Ollama is not running, or the model has not been pulled.
 **Fix:**
 ```bash
-curl -s http://localhost:11434/api/tags | grep qwen3
-# if empty:
-ollama pull qwen3:4b
-# if Ollama itself is down:
-"/d/ollama/program/ollama.exe" serve &
+# Check if Ollama is running
+curl -s http://localhost:11434/api/tags
+
+# If not running:
+"D:/ollama/program/ollama.exe" serve
+
+# If the model is missing:
+"D:/ollama/program/ollama.exe" pull qwen3:4b
 ```
 
 ---
 
 ## Frontend
 
-### `http://localhost:3000` shows "Cannot GET /"
-**Cause:** `serve` was started in the wrong directory.
-**Fix:**
-```bash
-pkill -f "serve -l 3000"
-cd frontend
-npx serve -l 3000 -s . > /dev/null 2>&1 &
+### All service status pills show red on first load
+
+**Symptom:** every pill is red immediately after the app opens.
+**Cause:** services take a few seconds to start and register their webhooks after `start.sh` launches them. The first health-check poll fires before they are ready.
+**Fix:** click the refresh icon to recheck, or wait 30 seconds for the automatic re-check.
+
+### The DB pill stays green when Docker is paused
+
+**Cause:** the health check reads the n8n webhook response body, not the HTTP status code. If the webhook returns a 200 with a non-empty body for any reason (e.g. a cached response), the pill stays green.
+**Fix:** ensure the n8n DB-check webhook is configured to verify the response body is non-empty and contains expected data.
+
+### Tooltip appears above the pills instead of below
+
+**Cause:** CSS bug — the tooltip used `bottom` positioning instead of `top`.
+**Fix:** in the relevant stylesheet, use `top: calc(100% + 8px)` instead of `bottom`.
+
+### Generate Interview Link button does nothing
+
+**Cause:** `btoa()` crashes on Unicode characters (such as em dashes) in AI-generated questions. The exception is swallowed silently.
+**Fix:** this has been corrected in the current codebase. The encoder now uses:
+```js
+btoa(unescape(encodeURIComponent(data)))
 ```
+If you see a blank button with no error, verify the fix is in place and rebuild.
 
-### UI loads but all API calls fail with CORS error
-**Cause:** frontend hitting a different host than where n8n listens (e.g., file:// origin, or remote host).
-**Fix:** open the frontend via `http://localhost:3000`, not by double-clicking `index.html`. Keep n8n on the same machine.
+### "Failed to save to bank" in QBank
 
-### UI shows stale data after a code change
-**Cause:** browser cache on `index.html`.
-**Fix:** hard reload with `Ctrl+Shift+R`. The server has no cache headers, so once refreshed you get the latest.
+**Cause:** either the `question_bank` table was not created (migration 013 not run), or the QBank webhook nodes are missing a `webhookId` field.
+**Fix:** run all migrations, then verify the QBank workflow nodes have `webhookId` set.
 
-### "Submit CV" shows upload progress forever
-**Cause:** PDF.js extraction stuck on a malformed PDF, or `cv-submit` webhook not responding.
-**Fix:** check the browser DevTools console for PDF.js errors. If extraction fails, re-save the PDF in a different viewer and retry. If the webhook is slow, confirm n8n is up and Ollama isn't hogging CPU.
+### React app loads but all API calls fail
+
+**Cause:** n8n is not running, or `VITE_API_URL` in `frontend-react/.env` points to the wrong address.
+**Fix:**
+1. Verify n8n is up: `curl http://localhost:5678/webhook/interview/jobs`
+2. Check `frontend-react/.env` contains `VITE_API_URL=http://localhost:5678/webhook`
+3. Restart the dev server after editing `.env` (Vite only reads env vars at startup)
 
 ---
 
 ## Ollama
 
 ### CV evaluation takes 100+ seconds per candidate
-**Not a bug.** `qwen3:4b` on CPU processes roughly that fast (~100 s per CV). On this host Ollama runs on the NVIDIA GTX 1650 via CUDA (~10-15 s per CV). For demos, still keep batches under ~10 CVs so the progress bar stays snappy.
 
-### Ollama returns `{"error": "model 'qwen3:4b' not found"}`
+**Not a bug.** `qwen3:4b` running on CPU takes approximately 100 seconds per CV. Keep batch sizes small (fewer than 10) for demos.
+
+### `{"error": "model 'qwen3:4b' not found"}`
+
 **Fix:**
 ```bash
-ollama pull qwen3:4b
+"D:/ollama/program/ollama.exe" pull qwen3:4b
 ```
 
-### Ollama eats all RAM
-**Cause:** too many concurrent requests.
-**Fix:** the evaluate workflow is sequential on purpose — don't call `/cv-evaluate` in parallel from multiple tabs.
+### Questions or JD output starts with "Okay, the user wants..."
+
+**Cause:** the preamble-stripping patch has not been applied to the n8n workflow nodes. `qwen3:4b` emits inline reasoning even when `think:false` is set.
+**Fix:** run `scripts/patch_ollama_thinking.py` (patches both `workflow_entity` and `workflow_history` in `D:\n8n\.n8n\database.sqlite`), then restart n8n.
 
 ---
 
-## SMTP
+## SMTP / IMAP
 
-### Emails page shows "SMTP status unknown" or "not configured"
-**Cause:** `SMTP_HOST` env var is empty when the sidecar started.
-**Fix:**
+### Emails show status "logged" (not sent)
+
+**Cause:** `SMTP_HOST` is not set in `.env`. The sidecar runs but skips actual delivery and logs the attempt instead.
+**Fix:** fill in `SMTP_HOST` (and the other `SMTP_*` vars) in `.env`, then restart the sidecar:
 ```bash
-# Put real values in .env
-# Then restart the sidecar
-pkill -f smtp_server.py
-python scripts/smtp_server.py > /dev/null 2>&1 &
-curl http://127.0.0.1:8901/    # should show smtp_configured: true
+taskkill /f /im python.exe
+python scripts/smtp_server.py
+curl http://127.0.0.1:8901/   # should show smtp_configured: true
 ```
 
-### Every email shows `status='failed'` with `error: SMTPAuthenticationError`
-**Cause:** wrong Gmail app password, or 2FA not enabled on the account.
+### `SMTPAuthenticationError`
+
+**Cause:** wrong Gmail App Password, or two-step verification is not enabled on the account.
 **Fix:**
 1. Enable 2-Step Verification on the Google account
 2. Create a new App Password at <https://myaccount.google.com/apppasswords>
-3. Put it in `.env` as `SMTP_PASS` (no spaces)
-4. Restart the sidecar
+3. Put it in `.env` as `SMTP_PASS` (no spaces, no quotes)
+4. Restart the SMTP sidecar
 
-### Emails silently land in spam
-**Cause:** `SMTP_FROM` domain doesn't match the authenticated `SMTP_USER`. For example, sending via a Gmail account but setting `SMTP_FROM="HR <hr@diyar.com>"` — Gmail flags the mismatch.
-**Fix:** set `SMTP_FROM` to match `SMTP_USER`, e.g. `SMTP_FROM="Diyar HR <your-address@gmail.com>"`.
+### IMAP sidecar is running but no inbound replies appear
 
----
+**Cause:** either `IMAP_HOST` is not set in `.env`, or the reply email has no `In-Reply-To` header (a cold inbound from someone who was not originally emailed from the system). Cold inbounds are intentionally not supported — they have no parent row to attach to.
+**Fix:** set `IMAP_HOST`, `IMAP_USER`, `IMAP_PASS` in `.env` and restart the sidecar. Cold inbounds cannot be threaded and will be acknowledged as orphans.
 
-## Stale / cached state
+### Multiple SMTP sidecar instances running
 
-### UI state doesn't match DB after a direct SQL change
-**Cause:** frontend caches list responses in module-level JS variables.
-**Fix:** hard refresh the page (Ctrl+Shift+R), or navigate away and back.
-
-### Workflow JSON edited but n8n still runs old version
-**Cause:** n8n only re-reads the JSON on import, not on file change.
+**Symptom:** `curl http://127.0.0.1:8901/` returns "address already in use" errors, or emails are duplicated.
 **Fix:**
 ```bash
-npx n8n import:workflow --input=workflows/phase2-cv-evaluation/phase2-cv-evaluation.json
-# then in UI toggle active off/on, or run the sqlite UPDATE above
+taskkill /f /im python.exe   # kills all Python processes
+python scripts/smtp_server.py
+python scripts/imap_server.py
+# restart any other Python sidecars as needed
 ```
 
 ---
 
-## Schema mismatches
+## Live Interview
 
-### Workflow fails with `column "X" does not exist`
-**Cause:** migration added a column but workflow was not updated; or vice versa.
-**Fix:** find the owning migration in `db/migrations/`, run it:
-```bash
-docker exec -i hr-postgres psql -U hr_admin -d hr_automation < db/migrations/005-phase4-smtp.sql
-```
+### Interview link decodes to garbage / JSON parse error
 
-### `INSERT ... ON CONFLICT` fails: "no unique or exclusion constraint"
-**Cause:** the UNIQUE constraint on the target table is missing — migration not applied or was dropped.
-**Fix:** re-run the migration file that creates the UNIQUE constraint.
+**Cause:** encoding mismatch between the link generator and decoder.
+**Fix:** the encoder must use `btoa(unescape(encodeURIComponent(...)))` and the decoder must use `decodeURIComponent(escape(atob(...)))`. Both sides must use the same pair.
 
----
+### QBank PUT returns an empty response
 
-## Missing env vars
+**Cause:** a WHERE clause bug used `body.id` when the `id` is passed as a query parameter.
+**Fix:** this has been corrected in the current codebase. Verify the fix is present if you see empty responses on PUT.
 
-### `start.sh` reports "Loaded config from .env" but SMTP still logs only
-**Cause:** .env was edited after services started.
-**Fix:** restart the sidecar — env vars are read at process start.
+### `advanceQuestion` crashes during an interview
 
-### Completely fresh machine — `.env` doesn't exist
-**Fix:** `cp .env.example .env` and fill in the SMTP values.
+**Cause:** an undefined variable `q` was used instead of `nextQ` in the `speak()` call.
+**Fix:** this has been corrected in the current codebase.
 
 ---
 
-## React Frontend (`frontend-react/`)
-
-### `npm run dev` fails with "port 3001 already in use"
-**Cause:** another process is on port 3001.
-**Fix:** kill it, or let Vite auto-select the next free port (it will print the actual URL).
-```bash
-# find what's using 3001
-netstat -ano | findstr :3001
-# kill by PID
-taskkill /PID <pid> /F
-```
-
-### React app loads but API calls fail (CORS or connection refused)
-**Cause:** n8n is not running, or `VITE_API_URL` is wrong.
-**Fix:**
-1. Confirm n8n is up: `curl http://localhost:5678/healthz`
-2. Check `frontend-react/.env` contains `VITE_API_URL=http://localhost:5678/webhook`
-3. Restart the dev server after editing `.env` (Vite only reads env at startup)
-
-### React app shows blank page / white screen
-**Cause:** JS error during render.
-**Fix:** open browser DevTools → Console, read the error. Common causes:
-- Missing dependency → run `npm install` in `frontend-react/`
-- API returning unexpected shape → check n8n workflow is active
-
-### Charts don't render on Dashboard
-**Cause:** `chart.js` or `react-chartjs-2` not installed.
-**Fix:**
-```bash
-cd frontend-react && npm install chart.js react-chartjs-2
-```
-
-### PDF upload / extraction doesn't work
-**Cause:** `pdfjs-dist` not installed or worker misconfigured.
-**Fix:**
-```bash
-cd frontend-react && npm install pdfjs-dist
-```
-Check `src/utils/pdf.js` points to the correct worker path.
-
-### Build produces "chunk size > 500 kB" warning
-**Not a bug.** Vite warns when output chunks are large. The app works fine. To suppress or split:
-```js
-// vite.config.js
-build: {
-  rollupOptions: {
-    output: { manualChunks: { vendor: ['react', 'react-dom'] } }
-  }
-}
-```
-
----
-
-## Report (LaTeX / MiKTeX)
+## Report (LaTeX)
 
 ### `pdflatex` not found
-**Cause:** MiKTeX not installed or not on PATH.
+
+**Cause:** MiKTeX is not on the system PATH.
 **Fix:** call the binary directly:
 ```bash
 "C:/Users/Jasse/AppData/Local/Programs/MiKTeX/miktex/bin/x64/pdflatex.exe" report.tex
 ```
 
 ### TOC or page numbers look wrong after compile
+
 **Cause:** LaTeX needs a second pass to resolve forward references.
-**Fix:** run `pdflatex report.tex` twice.
+**Fix:** run `pdflatex` twice in the `report/` folder.
 
 ### "File `images/xxx.png' not found"
-**Cause:** screenshot filename does not match what `report.tex` expects.
-**Fix:** check `report/images/` — filenames are lowercase, hyphen-separated, no spaces (`dashboard.png`, `criteria-ai.png`, `n8n-workflows.png`, etc.). Rename on copy rather than editing the `.tex`.
+
+**Cause:** the screenshot filename does not match what `report.tex` expects.
+**Fix:** check `report/images/` — filenames are lowercase and hyphen-separated with no spaces (e.g. `dashboard.png`, `criteria-ai.png`). Rename the file to match rather than editing the `.tex`.

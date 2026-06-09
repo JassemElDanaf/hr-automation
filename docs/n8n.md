@@ -1,42 +1,47 @@
 # n8n — Setup, Workflows, and Operations
 
-> **Project status:** Proof of concept, pre-finalization. All five workflows are imported, active, and responding to the frontend; further tightening and a few new endpoints are planned before handoff. See `report/report.pdf` for the stakeholder progress report.
-
 n8n is the project's API gateway and business-logic engine. All browser requests land on n8n webhooks.
 
 ---
 
 ## How n8n Runs Here
 
-- Installed globally via npm (`npm install -g n8n`) or invoked via `npx n8n start`
+- Installed locally in `D:\n8n\node_modules`
+- Invoked directly via Node: `/d/NodeJS/node.exe /d/n8n/node_modules/.bin/n8n start`
 - Listens on port **5678** (UI + webhook API)
-- Data directory: `D:\n8n\` — contains `database.sqlite` with workflow definitions, credentials, executions. Redirected from default `%USERPROFILE%\.n8n\` via `N8N_USER_FOLDER=/d/n8n` in `start.sh`
-- `start.sh` exports `N8N_USER_MANAGEMENT_DISABLED=true` and `N8N_AUTH_EXCLUDE_ENDPOINTS=*` to skip the login screen
+- Data directory: `D:\n8n\.n8n\` — contains `database.sqlite` with workflow definitions, credentials, and executions. Set via `N8N_USER_FOLDER=/d/n8n` in `start.sh`
+- `start.sh` exports `N8N_USER_MANAGEMENT_DISABLED=true` and `N8N_DIAGNOSTICS_ENABLED=false` to skip the login screen
+
+**All runtime data lives on D:\. Never read from or write to E:\ — that path is stale and unused.**
 
 ---
 
 ## Starting / Stopping
 
-### Start (backgrounded)
+### Start
+
+Run from `D:\n8n` with the env vars set (as `start.sh` does):
+
 ```bash
-npx n8n start > /dev/null 2>&1 &
+export N8N_USER_FOLDER=/d/n8n
+export N8N_USER_MANAGEMENT_DISABLED=true
+export N8N_DIAGNOSTICS_ENABLED=false
+/d/NodeJS/node.exe /d/n8n/node_modules/.bin/n8n start
 ```
-This is what `start.sh` does. Verify:
+
+Verify n8n is up:
 ```bash
 curl -s http://localhost:5678/healthz
 # expected: {"status":"ok"}
 ```
 
-### Start (foregrounded for logs)
-```bash
-npx n8n start
-```
-
 ### Stop
-```bash
-pkill -f "npx n8n start"
+
+On Windows, kill the Node process:
 ```
-Or close the terminal running it.
+taskkill /f /im node.exe
+```
+Or use Task Manager to end the `node.exe` process. Note: this also terminates any other Node processes running at the time.
 
 ---
 
@@ -44,19 +49,24 @@ Or close the terminal running it.
 
 Open <http://localhost:5678> in your browser. With user management disabled, no login is required.
 
+If a login prompt appears, the `N8N_USER_MANAGEMENT_DISABLED` env var was not set at startup. Kill all `node.exe` processes and rerun `start.sh`.
+
 ---
 
-## Workflow ↔ Phase Mapping
+## Workflow / Phase Mapping
 
-The folder names on disk reflect build order. The workflow **name and tags** inside each JSON reflect the user-flow phase numbering.
+Folder names on disk reflect build order; the **workflow name inside n8n** uses the user-flow phase numbering.
 
-| Folder on disk | Workflow name (n8n UI) | Phase | What it does |
-|----------------|------------------------|-------|--------------|
-| `workflows/phase5-dashboard/phase5-dashboard.json` | Phase 1 - Dashboard | **1** | Dashboard aggregates |
-| `workflows/phase1-job-opening/phase1-job-opening.json` | Phase 2 - Job Openings | **2** | Job opening CRUD + toggle |
-| `workflows/phase2-cv-evaluation/phase2-cv-evaluation.json` | Phase 3 - CV Evaluation | **3** | CV submit, evaluate, criteria, generate-criteria |
-| `workflows/phase3-shortlist/phase3-shortlist.json` | Phase 4 - Shortlist | **4** | Shortlist status management |
-| `workflows/phase4-email/phase4-email.json` | Phase 5 - Emails | **5** | Email send + history |
+| n8n ID | Internal Name | Folder on disk | User-flow Phase |
+|--------|--------------|----------------|-----------------|
+| 1 | Phase 2 - Job Openings | `workflows/phase1-job-opening/` | 2 |
+| 2 | Phase 3 - CV Evaluation | `workflows/phase2-cv-evaluation/` | 3 |
+| 3 | Phase 3 - Shortlist | `workflows/phase3-shortlist/` | 4 |
+| 4 | Phase 4 - Email Notifications | `workflows/phase4-email/` | 5 |
+| 5 | Phase 5 - Dashboard | `workflows/phase5-dashboard/` | 1 |
+| 6 | Phase 6 - Live Interview | `workflows/phase6-live-interview/` | 6 |
+
+All six workflows are active in the live database at `D:\n8n\.n8n\database.sqlite`.
 
 ---
 
@@ -64,121 +74,111 @@ The folder names on disk reflect build order. The workflow **name and tags** ins
 
 All paths are prefixed with `http://localhost:5678/webhook`.
 
-### Phase 1 — Dashboard
+### Phase 1 — Dashboard (workflow ID 5)
+
 | Method | Path | Purpose |
 |--------|------|---------|
-| GET | `/dashboard-candidates` | Candidate counts across jobs |
+| GET | `/dashboard-candidates?job_id=all\|N` | Candidate counts across jobs, or for one job |
 | GET | `/dashboard-shortlist` | Shortlist status rollup |
 
-### Phase 2 — Job Openings
-| Method | Path | Purpose |
-|--------|------|---------|
-| GET | `/job-openings` | List (query: `is_active`, `status`). Returns all displayed columns **including `job_description`** so the CV Evaluation "From Job Description" action can populate without a second fetch. |
-| POST | `/job-openings` | Create |
-| GET | `/job-opening?id=N` | Get one |
-| POST | `/job-opening-toggle?id=N` | Toggle `is_active` |
-| POST | `/job-opening-update` | Update job fields (title, dept, type, etc.) |
+### Phase 2 — Job Openings (workflow ID 1)
 
-### Phase 3 — CV Evaluation
 | Method | Path | Purpose |
 |--------|------|---------|
-| POST | `/cv-submit` | Add candidate + CV text |
-| POST | `/cv-evaluate` | Score unscored candidates for a job |
+| GET | `/job-openings` | List all job openings |
+| POST | `/job-openings` | Create a new job opening |
+| GET | `/job-opening?id=N` | Get one job (includes full `job_description`) |
+| POST | `/job-opening-toggle` | Toggle `is_active`; also sets `status` to `open`/`closed` |
+| POST | `/job-opening-update` | Edit fields on an existing job |
+
+`POST /job-openings` body: `job_title`, `department`, `employment_type`, `seniority_level`, `location_type`, `description_source`, `job_description`, `reporting_to` (optional)
+
+`POST /job-opening-toggle` body: `{id}`
+
+`POST /job-opening-update` body: `{id, job_title?, department?, employment_type?, seniority_level?, location_type?, reporting_to?, job_description?}` — only include fields to change.
+
+### Phase 3 — CV Evaluation (workflow ID 2)
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| POST | `/cv-submit` | Add a candidate + CV |
+| POST | `/cv-evaluate` | Run Ollama scoring on all unevaluated candidates for a job |
 | GET | `/candidates?job_id=N` | List candidates for a job |
-| GET | `/evaluations?job_id=N` | List evaluation rows |
+| GET | `/evaluations?job_id=N` | List evaluation rows for a job |
 | GET | `/criteria-sets?job_id=N` | List saved criteria sets |
 | POST | `/criteria-sets` | Save a named criteria set |
-| POST | `/generate-criteria` | Ollama generates structured criteria |
+| POST | `/generate-criteria` | Ollama generates criteria from a job description |
+| GET | `/cv-file?candidate_id=N` | Returns `{cv_file_name, cv_file_data (base64), cv_file_mime}` |
+| POST | `/generate-interview-questions` | Ollama generates interview questions for a candidate |
+| POST | `/remove-from-shortlist` | Remove a candidate from the shortlist |
 
-### Phase 4 — Shortlist
+`POST /cv-submit` body: `{job_opening_id, candidate_name, email?, cv_text, cv_file_name?, cv_file_data?, cv_file_mime?}`
+
+`POST /cv-evaluate` body: `{job_opening_id}`
+
+`POST /generate-interview-questions` body: `{candidate_id, job_id, num_questions, include_hr, include_technical, include_salary, extra_context?}`
+
+`POST /remove-from-shortlist` body: `{id}` or `{candidate_id, job_opening_id}`
+
+### Phase 4 — Shortlist (workflow ID 3)
+
 | Method | Path | Purpose |
 |--------|------|---------|
 | GET | `/shortlist?job_id=N` | List shortlist rows for a job |
-| POST | `/shortlist` | Add candidate to shortlist |
-| POST | `/shortlist-update` | Change status (`interviewed`/`hired`/`rejected`) |
+| POST | `/add-to-shortlist` | Add a candidate to the shortlist |
+| POST | `/update-shortlist-status` | Change shortlist status |
+| POST | `/remove-from-shortlist` | Remove a candidate from the shortlist |
 
-### Phase 5 — Emails
+`POST /add-to-shortlist` body: `{candidate_id, job_opening_id}`
+
+`POST /update-shortlist-status` body: `{id, status}` — status must be one of: `shortlisted` / `interviewed` / `hired` / `rejected`
+
+### Phase 5 — Emails (workflow ID 4)
+
 | Method | Path | Purpose |
 |--------|------|---------|
-| POST | `/send-email` | Send via SMTP sidecar + log |
-| GET | `/email-history?job_id=N` | List email log rows |
+| POST | `/send-email` | Send an email via the SMTP sidecar and log the attempt |
+| GET | `/email-history?job_id=N` | List email log rows for a job |
+| POST | `/inbound-email` | Called by the IMAP sidecar with an inbound reply payload |
 
-**`POST /send-email` request shape** (used by every candidate email flow):
-
+`POST /send-email` body:
 ```jsonc
 {
   "candidate_id": 42,
   "job_opening_id": 7,
-  "email_type": "rejection",          // or "interview_invite" | "offer" | "custom"
+  "email_type": "rejection",       // rejection | interview_invite | offer | custom | recommendation
   "recipient_email": "jane@acme.com",
   "candidate_name": "Jane Doe",
   "job_title": "Senior Engineer",
-  "custom_subject": "Application Update - Senior Engineer",   // required — user-edited
-  "custom_body":    "Dear Jane,\n\nThank you for..."           // required — user-edited
+  "custom_subject": "Application Update - Senior Engineer",
+  "custom_body": "Dear Jane,\n\nThank you for..."
 }
 ```
 
-The Validate node seeds a default subject/body from `email_type` and then **always** applies `custom_subject` / `custom_body` on top if present. The frontend (`openEmailComposer`) sends them on every call, so the backend defaults are only a safety net for malformed client requests. If you add a new email type, update the `validTypes` list and the default-template branch in `workflows/phase4-email/phase4-email.json` (node: "Send - Validate & Build Email").
+The Validate node seeds a default subject/body from `email_type` and then always applies `custom_subject`/`custom_body` on top. The frontend sends them on every call. If you add a new email type, update the `validTypes` list in the workflow's "Send - Validate & Build Email" node.
 
----
+### Phase 6 — Live Interview (workflow ID 6)
 
-## Import / Export
+| Method | Path | Purpose |
+|--------|------|---------|
+| GET | `/interview/jobs` | List active jobs for the dropdown |
+| GET | `/interview/question-bank` | List all question bank entries |
+| POST | `/interview/question-bank` | Add a question |
+| PUT | `/interview/question-bank?id=N` | Edit a question |
+| DELETE | `/interview/question-bank?id=N` | Delete a question |
+| POST | `/interview/next-question` | AI generates the next question during a live session |
+| GET | `/interview/start` | Candidate interview session init (public, no auth) |
 
-### Import a workflow
-```bash
-npx n8n import:workflow --input=workflows/phase2-cv-evaluation/phase2-cv-evaluation.json
-```
-Or via UI: Menu → Import from File.
+`POST /interview/question-bank` body: `{question, category, jobType, modelAnswer}`
 
-### Bulk import
-```bash
-bash scripts/import-workflows.sh
-```
-(Note: the script currently only iterates `phase1-job-opening/`. Extend it or run CLI imports for the other phases.)
-
-### Export a workflow (to update the JSON in the repo)
-```bash
-npx n8n export:workflow --id=<workflow_id> --output=workflows/phase-foo/phase-foo.json --pretty
-```
-
----
-
-## Activating Workflows
-
-After import, each workflow must be activated before its webhooks respond.
-
-### Via UI
-1. Open the workflow
-2. Toggle "Active" in the top right
-3. Test: `curl http://localhost:5678/webhook/<path>`
-
-### If webhooks return 404 after activation
-Known n8n bug: the `activeVersionId` column is sometimes not set. Fix via SQLite:
-
-```bash
-# stop n8n first
-pkill -f "npx n8n start"
-
-# locate the DB
-cd /d/n8n
-
-# update
-sqlite3 database.sqlite <<'SQL'
-UPDATE workflow_entity
-   SET active = 1,
-       activeVersionId = versionId
- WHERE id IN ('1', '2', '3', '4', '5');
-SQL
-
-# restart n8n
-npx n8n start
-```
+`PUT /interview/question-bank?id=N` body: `{question, category, jobType, modelAnswer}`
 
 ---
 
 ## Credentials
 
 ### PostgreSQL
+
 All workflows reference a credential named exactly **`HR PostgreSQL`**. Configure once in n8n → Settings → Credentials:
 
 | Field | Value |
@@ -190,21 +190,92 @@ All workflows reference a credential named exactly **`HR PostgreSQL`**. Configur
 | Password | `hr_pass` |
 | SSL | disable |
 
-Credentials live in `D:\n8n\database.sqlite` (encrypted). They are **not** exported with workflow JSON.
+Credentials live in `D:\n8n\.n8n\database.sqlite` (encrypted). They are not exported with workflow JSON.
 
 ### SMTP
-This project **does not use n8n's SMTP credential**. Emails go through the Python sidecar on port 8901, which reads SMTP env vars from `.env`.
+
+This project does not use n8n's built-in SMTP credential. Emails go through the Python sidecar on port 8901, which reads SMTP env vars from `.env`.
 
 ---
 
 ## How the Frontend Talks to n8n
 
-Frontend constant:
+Frontend constant (from `VITE_API_URL` in `.env`):
 ```js
 const API = 'http://localhost:5678/webhook';
 ```
 
-Every `fetch` call concatenates a path to this. CORS is permissive in dev n8n, so browser → webhook calls work without extra config.
+Every `fetch` call concatenates a path to this. CORS is permissive in dev n8n, so browser-to-webhook calls work without extra config.
+
+---
+
+## CRITICAL: Patching Workflows in the Live DB
+
+n8n executes from `workflow_history.nodes` indexed by `workflow_entity.activeVersionId`. Any SQLite patch **must** update both tables:
+
+```python
+# Always patch both:
+db.execute("UPDATE workflow_entity SET nodes=? WHERE id=?", (new_nodes, wf_id))
+ver = db.execute("SELECT activeVersionId FROM workflow_entity WHERE id=?", (wf_id,)).fetchone()[0]
+db.execute("UPDATE workflow_history SET nodes=? WHERE versionId=?", (new_nodes, ver))
+db.commit()
+# Then restart n8n (taskkill /f /im node.exe, then start again)
+```
+
+Updating only `workflow_entity.nodes` leaves the runtime unchanged — n8n keeps executing the old snapshot from `workflow_history`. See `scripts/patch_ollama_thinking.py` for the canonical example.
+
+The live DB path is always: `D:\n8n\.n8n\database.sqlite`
+
+Never derive the DB path from `USERPROFILE` or `HOME` — those resolve to C drive regardless of where n8n actually runs.
+
+---
+
+## If Webhooks Return 404
+
+The workflow is active in the DB but its webhooks are not registered in memory. Fix options:
+
+**Option A — UI toggle (simplest):**
+Open <http://localhost:5678>, find the workflow, toggle it OFF, then back ON.
+
+**Option B — REST API:**
+```bash
+# Get session cookie
+curl -c /tmp/n8n.txt http://localhost:5678/rest/login -X POST \
+  -H "Content-Type: application/json" \
+  -d '{"emailOrLdapLoginId":"j.danaf@diyarme.com","password":"Diyar2024!"}'
+
+# Activate (replace WF_ID and VERSION_ID)
+curl -b /tmp/n8n.txt http://localhost:5678/rest/workflows/WF_ID/activate \
+  -X POST -H "Content-Type: application/json" \
+  -d '{"versionId":"VERSION_ID"}'
+```
+
+`VERSION_ID` comes from the latest row in `workflow_history` for that workflow.
+
+**CRITICAL after any deactivate/activate cycle via REST:** calling `/deactivate` clears `activeVersionId` in `workflow_entity`. Always re-patch the DB before calling `/activate`:
+
+```sql
+UPDATE workflow_entity SET active=1, activeVersionId='<ver>' WHERE id='<wf_id>';
+```
+
+Then call the `/activate` endpoint with that same `versionId`.
+
+---
+
+## Import / Export
+
+### Import a workflow
+```bash
+/d/NodeJS/node.exe /d/n8n/node_modules/.bin/n8n import:workflow \
+  --input=workflows/phase2-cv-evaluation/phase2-cv-evaluation.json
+```
+Or via UI: Menu → Import from File.
+
+### Export a workflow (to update the JSON in the repo)
+```bash
+/d/NodeJS/node.exe /d/n8n/node_modules/.bin/n8n export:workflow \
+  --id=<workflow_id> --output=workflows/phase-foo/phase-foo.json --pretty
+```
 
 ---
 
@@ -229,17 +300,16 @@ Logs appear in the terminal running n8n (not the UI).
 ```bash
 curl -v -X POST http://localhost:5678/webhook/cv-evaluate \
   -H 'Content-Type: application/json' \
-  -d '{"job_id": 1}'
+  -d '{"job_opening_id": 1}'
 ```
 
 ---
 
 ## Editing Workflows
 
-Prefer editing in the n8n UI (visual canvas), then export via `n8n export:workflow` and commit the updated JSON. Editing the JSON by hand is possible but error-prone because of coordinate/ID bookkeeping.
+Prefer editing in the n8n UI (visual canvas), then export via the CLI and commit the updated JSON. When hand-editing JSON:
 
-When you do hand-edit JSON (e.g., adding a connection):
-- Update `connections` object
-- Ensure target node name exists in `nodes` array
-- Increment `triggerCount` only if you added a new trigger node
-- Re-import and reactivate (see above)
+- Update the `connections` object
+- Ensure every target node name exists in the `nodes` array
+- After editing, patch both `workflow_entity` and `workflow_history` in the live SQLite (see CRITICAL section above)
+- Restart n8n after any SQLite patch

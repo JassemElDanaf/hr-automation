@@ -21,7 +21,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const body = $input.first().json.body || $input.first().json || {};\nconst errors = [];\nif (!body.job_opening_id || isNaN(parseInt(body.job_opening_id))) errors.push('job_opening_id (number) is required');\nif (!body.candidate_name || !body.candidate_name.trim()) errors.push('candidate_name is required');\nif (!body.cv_text || !body.cv_text.trim()) errors.push('cv_text is required');\nelse if (body.cv_text.trim().length < 20) errors.push('cv_text must be at least 20 characters');\n\nif (errors.length > 0) {\n  return [{ json: { error: true, message: 'Validation failed: ' + errors.join(', '), status: 400 } }];\n}\n\nconst jobId = parseInt(body.job_opening_id);\nreturn [{ json: {\n  error: false,\n  sql: 'INSERT INTO candidates (job_opening_id, candidate_name, email, cv_text, cv_file_name) SELECT $1, $2, $3, $4, $5 WHERE EXISTS (SELECT 1 FROM job_openings WHERE id = $1 AND is_active = true) RETURNING *',\n  params: [jobId, body.candidate_name.trim(), (body.email || '').trim() || null, body.cv_text.trim(), (body.cv_file_name || '').trim() || null]\n} }];"
+        "jsCode": "const body = $input.first().json.body || $input.first().json || {};\nconst errors = [];\nif (!body.job_opening_id || isNaN(parseInt(body.job_opening_id))) errors.push('job_opening_id (number) is required');\nif (!body.candidate_name || !body.candidate_name.trim()) errors.push('candidate_name is required');\nif (!body.cv_text || !body.cv_text.trim()) errors.push('cv_text is required');\nelse if (body.cv_text.trim().length < 20) errors.push('cv_text must be at least 20 characters');\n\nif (errors.length > 0) {\n  return [{ json: { error: true, message: 'Validation failed: ' + errors.join(', '), status: 400 } }];\n}\n\nconst jobId = parseInt(body.job_opening_id);\nconst fileData = body.cv_file_data || null;\nconst fileMime = (body.cv_file_mime || '').trim() || null;\nreturn [{ json: {\n  error: false,\n  sql: 'INSERT INTO candidates (job_opening_id, candidate_name, email, cv_text, cv_file_name, cv_file_data, cv_file_mime) SELECT $1, $2, $3, $4, $5, $6, $7 WHERE EXISTS (SELECT 1 FROM job_openings WHERE id = $1 AND is_active = true) RETURNING id, job_opening_id, candidate_name, email, cv_text, cv_file_name, cv_file_mime, submitted_at',\n  params: [jobId, body.candidate_name.trim(), (body.email || '').trim() || null, body.cv_text.trim(), (body.cv_file_name || '').trim() || null, fileData, fileMime]\n} }];"
       },
       "id": "validate-cv-input",
       "name": "Submit - Validate Input",
@@ -203,7 +203,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const body = $input.first().json.body || $input.first().json || {};\nconst jobId = parseInt(body.job_opening_id);\nif (!jobId || isNaN(jobId) || jobId < 1) {\n  return [{ json: { error: true, message: 'Valid job_opening_id is required', status: 400 } }];\n}\nlet sql = 'SELECT j.id as job_id, j.job_title, j.job_description, j.department, j.seniority_level, c.id as candidate_id, c.candidate_name, c.email, c.cv_text FROM job_openings j INNER JOIN candidates c ON c.job_opening_id = j.id LEFT JOIN evaluations e ON e.candidate_id = c.id AND e.job_opening_id = j.id WHERE j.id = $1 AND j.is_active = true AND e.id IS NULL';\nlet params = [jobId];\nconst candId = parseInt(body.candidate_id);\nif (candId && !isNaN(candId) && candId > 0) {\n  sql += ' AND c.id = $2';\n  params.push(candId);\n}\nconst sk = parseFloat(body.skills_weight) || 40;\nconst ex = parseFloat(body.experience_weight) || 35;\nconst ed = parseFloat(body.education_weight) || 25;\nconst criteriaText = (body.criteria_text || '').trim();\nreturn [{ json: { error: false, jobId: jobId, sql: sql, params: params, skills_weight: sk / 100, experience_weight: ex / 100, education_weight: ed / 100, criteria_text: criteriaText } }];"
+        "jsCode": "const body = $input.first().json.body || $input.first().json || {};\nconst jobId = parseInt(body.job_opening_id);\nif (!jobId || isNaN(jobId) || jobId < 1) {\n  return [{ json: { error: true, message: 'Valid job_opening_id is required', status: 400 } }];\n}\nlet sql = 'SELECT j.id as job_id, j.job_title, j.job_description, j.department, j.seniority_level, c.id as candidate_id, c.candidate_name, c.email, c.cv_text FROM job_openings j INNER JOIN candidates c ON c.job_opening_id = j.id LEFT JOIN evaluations e ON e.candidate_id = c.id AND e.job_opening_id = j.id WHERE j.id = $1 AND j.is_active = true AND e.id IS NULL';\nlet params = [jobId];\nconst candId = parseInt(body.candidate_id);\nif (candId && !isNaN(candId) && candId > 0) {\n  sql += ' AND c.id = $2';\n  params.push(candId);\n}\nconst sk = parseFloat(body.skills_weight) || 40;\nconst ex = parseFloat(body.experience_weight) || 35;\nconst ed = parseFloat(body.education_weight) || 25;\nconst criteriaText = (body.criteria_text || '').trim();\nconst rawItems = Array.isArray(body.criteria_items) ? body.criteria_items : [];\nconst criteriaItems = rawItems.map(it => ({\n  text: (it.text || '').toString().trim(),\n  required: !!it.required,\n  weight: Math.max(0, Math.min(100, parseInt(it.weight) || 0))\n})).filter(it => it.text);\nreturn [{ json: { error: false, jobId: jobId, sql: sql, params: params, skills_weight: sk / 100, experience_weight: ex / 100, education_weight: ed / 100, criteria_text: criteriaText, criteria_items: criteriaItems } }];"
       },
       "id": "validate-eval-input",
       "name": "Eval - Validate Input",
@@ -289,7 +289,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const items = $input.all();\nconst first = items[0]?.json || {};\nif (!first.job_id) {\n  return [{ json: { error: true, message: 'Job not found, inactive, or no unevaluated candidates' } }];\n}\nconst valNode = $('Eval - Validate Input').first().json;\nconst wSkills = Math.round((valNode.skills_weight || 0.4) * 100);\nconst wExp = Math.round((valNode.experience_weight || 0.35) * 100);\nconst wEdu = Math.round((valNode.education_weight || 0.25) * 100);\nconst criteriaText = valNode.criteria_text || '';\nconst jobDesc = criteriaText || first.job_description || '';\nconst results = [];\nfor (const item of items) {\n  const cvText = (item.json.cv_text || '').substring(0, 3000);\n  const prompt = `You are a professional HR evaluator. Analyze the following CV against the job requirements and provide a detailed evaluation.\n\nJOB TITLE: ${first.job_title}\nDEPARTMENT: ${first.department || 'N/A'}\nSENIORITY: ${first.seniority_level || 'N/A'}\nJOB DESCRIPTION / CRITERIA:\n${jobDesc.substring(0, 1500)}\n\nSCORING WEIGHTS: Skills ${wSkills}%, Experience ${wExp}%, Education ${wEdu}%\n\nCANDIDATE CV:\n${cvText}\n\nEvaluate this candidate thoroughly. Consider their skills match, years and relevance of experience, education credentials, and overall fit.\n\nYou MUST respond with ONLY a valid JSON object in this exact format (no other text before or after):\n{\"skills_score\": <number 0-10>, \"experience_score\": <number 0-10>, \"education_score\": <number 0-10>, \"strengths\": [\"strength1\", \"strength2\", \"strength3\"], \"weaknesses\": [\"weakness1\", \"weakness2\"], \"reasoning\": \"Brief explanation of your evaluation\"}`;\n  results.push({ json: {\n    error: false,\n    candidate_id: item.json.candidate_id,\n    candidate_name: item.json.candidate_name,\n    job_opening_id: item.json.job_id,\n    prompt: prompt,\n    requestBody: JSON.stringify({model: 'qwen3:4b', prompt: prompt, stream: false, options: {num_predict: 8000, num_ctx: 4096, temperature: 0.4}}),\n    wSkills: wSkills / 100,\n    wExp: wExp / 100,\n    wEdu: wEdu / 100\n  }});\n}\nreturn results;"
+        "jsCode": "const items = $input.all();\nconst first = items[0]?.json || {};\nif (!first.job_id) {\n  return [{ json: { error: true, message: 'Job not found, inactive, or no unevaluated candidates' } }];\n}\nconst valNode = $('Eval - Validate Input').first().json;\nconst wSkills = Math.round((valNode.skills_weight || 0.4) * 100);\nconst wExp = Math.round((valNode.experience_weight || 0.35) * 100);\nconst wEdu = Math.round((valNode.education_weight || 0.25) * 100);\nconst criteriaText = valNode.criteria_text || '';\nconst criteriaItems = Array.isArray(valNode.criteria_items) ? valNode.criteria_items : [];\nconst jobDesc = criteriaText || first.job_description || '';\nconst today = new Date().toISOString().slice(0,10);\nlet itemsBlock = '';\nlet itemsKeys = '';\nlet itemsSchemaLine = '';\nif (criteriaItems.length > 0) {\n  const required = criteriaItems.filter(i => i.required);\n  const sorted = [...criteriaItems].sort((a, b) => (b.importance || 5) - (a.importance || 5));\n  const fmt = it => {\n    const imp = Math.max(1, Math.min(10, parseInt(it.importance, 10) || 5));\n    return `- [${it.required ? 'REQUIRED' : 'optional'}] (importance ${imp}/10) ${it.text}`;\n  };\n  itemsBlock = `\\n\\nITEMIZED CRITERIA (${criteriaItems.length} items, ${required.length} required, sorted by importance):\\n${sorted.map(fmt).join('\\n')}\\n\\nHOW TO USE THE IMPORTANCE NUMBER:\\n- Importance 9-10 = CRITICAL. Failing these should heavily lower the relevant dimension scores (skills/experience/education) by 3+ points each.\\n- Importance 6-8 = HIGH. Failing these should lower the relevant dimension scores by 1-2 points each.\\n- Importance 3-5 = MEDIUM. Mild score impact.\\n- Importance 1-2 = LOW / nice-to-have. Minimal score impact.\\nA REQUIRED item with importance 9-10 that the candidate does NOT meet means the candidate is fundamentally unfit — overall score should reflect that.\\nA REQUIRED item with low importance is a hard gate but small score impact when met.`;\n  itemsKeys = ', \"required_missing\": [\"req item not met\", ...], \"items_met\": [\"req item met\", ...]';\n  itemsSchemaLine = ' Include arrays \"required_missing\" and \"items_met\" referencing the exact REQUIRED item text.';\n}\nconst results = [];\nfor (const item of items) {\n  const cvText = (item.json.cv_text || '').substring(0, 3000);\n  const prompt = `You are a professional HR evaluator. Analyze the following CV against the job requirements and provide a detailed evaluation.\\n\\nTODAY'S DATE: ${today}\\nWhen evaluating any time-sensitive criterion (e.g. \"graduating soon\", \"recent graduate\", \"X years of experience\", \"available immediately\"), use TODAY'S DATE above as the reference. Do not assume a different current date.\\n\\nJOB TITLE: ${first.job_title}\\nDEPARTMENT: ${first.department || 'N/A'}\\nSENIORITY: ${first.seniority_level || 'N/A'}\\nJOB DESCRIPTION / CRITERIA:\\n${jobDesc.substring(0, 1500)}${itemsBlock}\\n\\nSCORING WEIGHTS: Skills ${wSkills}%, Experience ${wExp}%, Education ${wEdu}%\\n\\nCANDIDATE CV:\\n${cvText}\\n\\nEvaluate this candidate thoroughly. Consider their skills match, years and relevance of experience, education credentials, and overall fit.${itemsSchemaLine}\\n\\nYou MUST respond with ONLY a valid JSON object in this exact format (no other text before or after):\\n{\\\"skills_score\\\": <number 0-10>, \\\"experience_score\\\": <number 0-10>, \\\"education_score\\\": <number 0-10>, \\\"strengths\\\": [\\\"strength1\\\", \\\"strength2\\\", \\\"strength3\\\"], \\\"weaknesses\\\": [\\\"weakness1\\\", \\\"weakness2\\\"], \\\"reasoning\\\": \\\"Brief explanation of your evaluation\\\"${itemsKeys}}`;\n  results.push({ json: {\n    error: false,\n    candidate_id: item.json.candidate_id,\n    candidate_name: item.json.candidate_name,\n    job_opening_id: item.json.job_id,\n    prompt: prompt,\n    requestBody: JSON.stringify({model: 'qwen3:4b', prompt: prompt, stream: false, think: false, format: 'json', options: {num_predict: 4000, num_ctx: 4096, temperature: 0.2}}),\n    wSkills: wSkills / 100,\n    wExp: wExp / 100,\n    wEdu: wEdu / 100,\n    has_items: criteriaItems.length > 0\n  }});\n}\nreturn results;"
       },
       "id": "prepare-prompts",
       "name": "Eval - Prepare Prompts",
@@ -324,7 +324,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Guard: Prepare Prompts may have emitted a no-candidates marker (error:true, no candidate_id).\n// In that case the HTTP node will have returned an empty/error response that Score Candidates\n// would otherwise fall back to 5/5/5 and try to INSERT with null candidate_id. Route cleanly.\nconst promptItemsCheck = $('Eval - Prepare Prompts').all();\nconst validPrompts = promptItemsCheck.filter(p => p?.json?.candidate_id);\nif (validPrompts.length === 0) {\n  return [{ json: { error: true, message: 'No unevaluated candidates to score' } }];\n}\nconst items = $input.all();\nconst promptItems = $('Eval - Prepare Prompts').all();\nconst results = [];\nfor (let i = 0; i < items.length; i++) {\n  const raw = items[i].json;\n  const meta = promptItems[i]?.json || {};\n  const wSkills = meta.wSkills || 0.4;\n  const wExp = meta.wExp || 0.35;\n  const wEdu = meta.wEdu || 0.25;\n  let aiText = (raw.response || '').trim();\n  // If response is empty, check thinking field for content\n  if (!aiText && raw.thinking) {\n    // Try to extract JSON from thinking\n    const thinkMatch = raw.thinking.match(/\\{[\\s\\S]*?\"skills_score\"[\\s\\S]*?\\}/);\n    if (thinkMatch) aiText = thinkMatch[0];\n  }\n  // Extract JSON from the response\n  let parsed = null;\n  try {\n    // Try direct parse\n    parsed = JSON.parse(aiText);\n  } catch(e) {\n    // Try to find JSON in the text\n    const jsonMatch = aiText.match(/\\{[\\s\\S]*?\"skills_score\"[\\s\\S]*?\\}/);\n    if (jsonMatch) {\n      try { parsed = JSON.parse(jsonMatch[0]); } catch(e2) {}\n    }\n  }\n  let skillsScore, expScore, eduScore, strengths, weaknesses, reasoning;\n  if (parsed && typeof parsed.skills_score === 'number') {\n    skillsScore = Math.min(10, Math.max(0, Math.round(parsed.skills_score * 10) / 10));\n    expScore = Math.min(10, Math.max(0, Math.round(parsed.experience_score * 10) / 10));\n    eduScore = Math.min(10, Math.max(0, Math.round(parsed.education_score * 10) / 10));\n    strengths = Array.isArray(parsed.strengths) ? parsed.strengths.join('; ') : (parsed.strengths || '');\n    weaknesses = Array.isArray(parsed.weaknesses) ? parsed.weaknesses.join('; ') : (parsed.weaknesses || '');\n    reasoning = parsed.reasoning || 'AI evaluation by Qwen3';\n  } else {\n    // Fallback: basic keyword scoring\n    skillsScore = 5; expScore = 5; eduScore = 5;\n    strengths = 'AI evaluation could not be fully parsed';\n    weaknesses = 'Re-evaluate recommended';\n    reasoning = 'AI evaluation could not produce structured scores. Please re-evaluate.';\n  }\n  const overall = Math.round((skillsScore * wSkills + expScore * wExp + eduScore * wEdu) * 10) / 10;\n  results.push({ json: {\n    error: false,\n    candidate_id: meta.candidate_id,\n    candidate_name: meta.candidate_name,\n    job_opening_id: meta.job_opening_id,\n    overall_score: overall,\n    skills_score: skillsScore,\n    experience_score: expScore,\n    education_score: eduScore,\n    reasoning: reasoning,\n    strengths: strengths,\n    weaknesses: weaknesses,\n    sql: 'INSERT INTO evaluations (candidate_id, job_opening_id, overall_score, skills_score, experience_score, education_score, reasoning, strengths, weaknesses) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *',\n    params: [meta.candidate_id, meta.job_opening_id, overall, skillsScore, expScore, eduScore, reasoning, strengths, weaknesses]\n  }});\n}\nreturn results;"
+        "jsCode": "const items = $input.all();\nconst promptItems = $('Eval - Prepare Prompts').all();\nconst results = [];\nfunction extractJson(text) {\n  if (!text) return null;\n  text = text.replace(/<think>[\\s\\S]*?<\\/think>/gi, '').trim();\n  text = text.replace(/^```(?:json)?\\s*/i, '').replace(/\\s*```\\s*$/i, '').trim();\n  try { return JSON.parse(text); } catch(_) {}\n  const start = text.indexOf('{');\n  if (start < 0) return null;\n  let depth = 0;\n  for (let i = start; i < text.length; i++) {\n    if (text[i] === '{') depth++;\n    else if (text[i] === '}') {\n      depth--;\n      if (depth === 0) {\n        try { return JSON.parse(text.slice(start, i + 1)); } catch(_) { return null; }\n      }\n    }\n  }\n  return null;\n}\nfunction clampScore(v) {\n  const n = typeof v === 'number' ? v : parseFloat(v);\n  return isNaN(n) ? null : Math.min(10, Math.max(0, Math.round(n * 10) / 10));\n}\nfunction toStr(v) { return Array.isArray(v) ? v.join('; ') : (v || ''); }\nfor (let i = 0; i < items.length; i++) {\n  const raw = items[i].json;\n  const meta = promptItems[i]?.json || {};\n  const wSkills = meta.wSkills || 0.4;\n  const wExp = meta.wExp || 0.35;\n  const wEdu = meta.wEdu || 0.25;\n  let aiText = (raw.response || '').trim();\n  if (!aiText && raw.thinking) aiText = raw.thinking;\n  const parsed = extractJson(aiText);\n  let skillsScore = parsed ? clampScore(parsed.skills_score) : null;\n  let expScore = parsed ? clampScore(parsed.experience_score) : null;\n  let eduScore = parsed ? clampScore(parsed.education_score) : null;\n  let strengths, weaknesses, reasoning, parseError = false;\n  if (skillsScore !== null && expScore !== null && eduScore !== null) {\n    strengths = toStr(parsed.strengths);\n    weaknesses = toStr(parsed.weaknesses);\n    reasoning = parsed.reasoning || 'AI evaluation by Qwen3';\n    if (meta.has_items) {\n      const missing = toStr(parsed.required_missing);\n      const met = toStr(parsed.items_met);\n      if (missing) reasoning += '\\n\\nRequired items NOT met: ' + missing;\n      if (met) reasoning += '\\n\\nRequired items met: ' + met;\n    }\n  } else {\n    skillsScore = 0; expScore = 0; eduScore = 0;\n    strengths = '';\n    weaknesses = '';\n    reasoning = 'AI evaluation failed to produce structured scores. Please re-run the evaluation.';\n    parseError = true;\n  }\n  const overall = Math.round((skillsScore * wSkills + expScore * wExp + eduScore * wEdu) * 10) / 10;\n  results.push({ json: {\n    error: false,\n    parse_error: parseError,\n    candidate_id: meta.candidate_id,\n    candidate_name: meta.candidate_name,\n    job_opening_id: meta.job_opening_id,\n    overall_score: overall,\n    skills_score: skillsScore,\n    experience_score: expScore,\n    education_score: eduScore,\n    reasoning: reasoning,\n    strengths: strengths,\n    weaknesses: weaknesses,\n    sql: 'INSERT INTO evaluations (candidate_id, job_opening_id, overall_score, skills_score, experience_score, education_score, reasoning, strengths, weaknesses) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *',\n    params: [meta.candidate_id, meta.job_opening_id, overall, skillsScore, expScore, eduScore, reasoning, strengths, weaknesses]\n  }});\n}\nreturn results;"
       },
       "id": "parse-ai-response",
       "name": "Eval - Score Candidates",
@@ -574,7 +574,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const query = $input.first().json.query || {};\nconst jobId = parseInt(query.job_id);\nif (!jobId || isNaN(jobId) || jobId < 1) {\n  return [{ json: { error: true, message: 'Valid job_id query parameter is required', status: 400 } }];\n}\nreturn [{ json: { error: false, sql: 'SELECT c.id, c.job_opening_id, c.candidate_name, c.email, c.cv_text, c.cv_file_name, c.submitted_at, e.overall_score, e.skills_score, e.experience_score, e.education_score, e.reasoning, e.strengths, e.weaknesses, e.evaluated_at FROM candidates c LEFT JOIN evaluations e ON e.candidate_id = c.id AND e.job_opening_id = c.job_opening_id WHERE c.job_opening_id = ' + jobId + ' ORDER BY e.overall_score DESC NULLS LAST, c.submitted_at DESC' } }];"
+        "jsCode": "const query = $input.first().json.query || {};\nconst jobId = parseInt(query.job_id);\nif (!jobId || isNaN(jobId) || jobId < 1) {\n  return [{ json: { error: true, message: 'Valid job_id query parameter is required', status: 400 } }];\n}\nreturn [{ json: { error: false, sql: \"SELECT c.id, c.job_opening_id, c.candidate_name, c.email, c.cv_text, c.cv_file_name, c.cv_file_mime, (c.cv_file_data IS NOT NULL) AS cv_file_available, c.submitted_at, e.overall_score, e.skills_score, e.experience_score, e.education_score, e.reasoning, e.strengths, e.weaknesses, e.evaluated_at FROM candidates c LEFT JOIN evaluations e ON e.candidate_id = c.id AND e.job_opening_id = c.job_opening_id WHERE c.job_opening_id = \" + jobId + \" ORDER BY e.overall_score DESC NULLS LAST, c.submitted_at DESC\" } }];"
       },
       "id": "validate-cand-id",
       "name": "ListCand - Validate Job ID",
@@ -761,7 +761,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const body = $input.first().json.body || $input.first().json || {};\nconst name = (body.name || '').trim();\nconst text = (body.criteria_text || '').trim();\nif (!name || !text) {\n  return [{ json: { error: true, message: 'Name and criteria_text are required', status: 400 } }];\n}\nconst sk = parseInt(body.skills_weight) || 40;\nconst ex = parseInt(body.experience_weight) || 35;\nconst ed = parseInt(body.education_weight) || 25;\nconst jobId = parseInt(body.job_opening_id) || null;\nreturn [{ json: { error: false, sql: 'INSERT INTO criteria_sets (name, job_opening_id, criteria_text, skills_weight, experience_weight, education_weight) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *', params: [name, jobId, text, sk, ex, ed] } }];"
+        "jsCode": "const body = $input.first().json.body || $input.first().json || {};\nconst name = (body.name || '').trim();\nconst text = (body.criteria_text || '').trim();\nif (!name || !text) {\n  return [{ json: { error: true, message: 'Name and criteria_text are required', status: 400 } }];\n}\nconst sk = parseInt(body.skills_weight) || 40;\nconst ex = parseInt(body.experience_weight) || 35;\nconst ed = parseInt(body.education_weight) || 25;\nconst jobId = parseInt(body.job_opening_id) || null;\nconst rawItems = Array.isArray(body.criteria_items) ? body.criteria_items : [];\nconst items = rawItems.map(it => ({\n  text: (it.text || '').toString().trim(),\n  required: !!it.required,\n  weight: Math.max(0, Math.min(100, parseInt(it.weight) || 0))\n})).filter(it => it.text);\nreturn [{ json: { error: false, sql: 'INSERT INTO criteria_sets (name, job_opening_id, criteria_text, skills_weight, experience_weight, education_weight, criteria_items) VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb) RETURNING *', params: [name, jobId, text, sk, ex, ed, JSON.stringify(items)] } }];"
       },
       "id": "validate-criteria",
       "name": "Criteria - Validate Input",
@@ -880,7 +880,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const body = $input.first().json.body || $input.first().json || {};\nconst jobTitle = (body.job_title || '').trim();\nconst department = (body.department || '').trim();\nconst seniority = (body.seniority_level || '').trim();\nconst employment = (body.employment_type || '').trim();\nconst jobDescription = (body.job_description || '').trim();\nif (!jobTitle) {\n  return [{ json: { error: true, message: 'job_title required', status: 400 } }];\n}\nconst prompt = `You are an HR expert. Based on the job details below, generate a structured list of evaluation criteria for screening CVs. Output 5-8 specific, measurable criteria grouped under three categories: SKILLS, EXPERIENCE, and EDUCATION. Be concise and specific to the role.\n\nJob Title: ${jobTitle}\n${department ? 'Department: ' + department : ''}\n${seniority ? 'Seniority: ' + seniority : ''}\n${employment ? 'Employment Type: ' + employment : ''}\n${jobDescription ? '\\nJob Description:\\n' + jobDescription.substring(0, 2000) : ''}\n\nOutput format (plain text, no markdown):\n\nSKILLS:\n- criterion 1\n- criterion 2\n...\n\nEXPERIENCE:\n- criterion 1\n- criterion 2\n...\n\nEDUCATION:\n- criterion 1\n- criterion 2\n...\n\nGenerate the criteria now:`;\nreturn [{ json: { error: false, prompt: prompt, requestBody: JSON.stringify({ model: 'qwen3:4b', prompt: prompt, stream: false, options: { num_predict: 4000, num_ctx: 4096, temperature: 0.4 } }) } }];"
+        "jsCode": "const body = $input.first().json.body || $input.first().json || {};\nconst jobTitle = (body.job_title || '').trim();\nconst department = (body.department || '').trim();\nconst seniority = (body.seniority_level || '').trim();\nconst employment = (body.employment_type || '').trim();\nconst jobDescription = (body.job_description || '').trim();\nif (!jobTitle) {\n  return [{ json: { error: true, message: 'job_title required', status: 400 } }];\n}\nconst prompt = `You are an HR expert. Based on the job details below, generate a structured list of evaluation criteria for screening CVs. Output 5-8 specific, measurable criteria grouped under three categories: SKILLS, EXPERIENCE, and EDUCATION. Be concise and specific to the role.\n\nJob Title: ${jobTitle}\n${department ? 'Department: ' + department : ''}\n${seniority ? 'Seniority: ' + seniority : ''}\n${employment ? 'Employment Type: ' + employment : ''}\n${jobDescription ? '\\nJob Description:\\n' + jobDescription.substring(0, 2000) : ''}\n\nOutput format (plain text, no markdown):\n\nSKILLS:\n- criterion 1\n- criterion 2\n...\n\nEXPERIENCE:\n- criterion 1\n- criterion 2\n...\n\nEDUCATION:\n- criterion 1\n- criterion 2\n...\n\nGenerate the criteria now:`;\nreturn [{ json: { error: false, prompt: prompt, requestBody: JSON.stringify({ model: 'qwen3:4b', prompt: prompt, stream: false, think: false, options: { num_predict: 4000, num_ctx: 4096, temperature: 0.4 } }) } }];"
       },
       "id": "gen-crit-build",
       "name": "GenCrit - Build Prompt",
@@ -963,7 +963,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const raw = $input.first().json;\nlet text = (raw.response || raw.text || '').trim();\nif (!text && raw.thinking) {\n  // Some qwen builds split reasoning vs final output; fall back to thinking.\n  text = raw.thinking.trim();\n}\nif (!text) {\n  return [{ json: { success: false, error: 'Ollama returned an empty response' } }];\n}\n// Strip any <think> tags some models emit\ntext = text.replace(/<think>[\\s\\S]*?<\\/think>/gi, '').trim();\nreturn [{ json: { success: true, criteria_text: text } }];"
+        "jsCode": "function stripLLMPreamble(text) {\n  if (!text) return '';\n  // 1. If the model emitted a closing </think>, take everything after the LAST one.\n  const closeIdx = text.lastIndexOf('</think>');\n  if (closeIdx >= 0) text = text.slice(closeIdx + '</think>'.length);\n  // 2. Drop any unclosed <think>...EOF tail.\n  text = text.replace(/<think>[\\s\\S]*$/i, '');\n  // 3. Drop any remaining stray </think> or <think> tokens.\n  text = text.replace(/<\\/?think>/gi, '');\n  // 4. Strip wrapping markdown code fences.\n  text = text.replace(/^```(?:markdown|md|text)?\\s*\\n?/i, '').replace(/\\n?```\\s*$/i, '');\n  text = text.trim();\n  // 5. Look for the first acceptable starting line (markdown heading, About the Role, Job Title:, **bold field).\n  const startMatch = text.match(/(^|\\n)(#{1,6}\\s+\\S|About the Role\\b|Job Title\\s*:|Department\\s*:|SKILLS\\s*:|\\*\\*[A-Z])/);\n  if (startMatch) {\n    const idx = startMatch.index + (startMatch[1] ? startMatch[1].length : 0);\n    return text.slice(idx).trim();\n  }\n  // 6. Fallback: strip leading reasoning preamble lines. Stops at first non-preamble line.\n  const preambleRe = /^(okay\\b|alright\\b|sure[,!]?\\s|so[,]?\\s|let'?s\\b|let me\\b|first[,]?\\s|to start\\b|i\\b(?:'m|m| am| need| will| think| should| have|'ll)|i'?ll\\b|the user\\b|here'?s\\b|here is\\b|thinking[:\\s]|reasoning[:\\s]|analysis[:\\s]|plan[:\\s]|step \\d|<\\/?think>|the assistant\\b|as an? (?:ai|hr))/i;\n  const lines = text.split('\\n');\n  let start = 0;\n  while (start < lines.length) {\n    const ln = lines[start].trim();\n    if (ln && !preambleRe.test(ln)) break;\n    start++;\n  }\n  return lines.slice(start).join('\\n').trim();\n}\nconst raw = $input.first().json;\nlet text = (raw.response || raw.text || '').trim();\nif (!text && raw.thinking) text = raw.thinking.trim();\ntext = stripLLMPreamble(text);\nif (!text) return [{ json: { success: false, error: 'Ollama returned an empty response' } }];\nreturn [{ json: { success: true, criteria_text: text } }];\n"
       },
       "id": "gen-crit-parse",
       "name": "GenCrit - Parse Response",
@@ -977,7 +977,7 @@
     {
       "parameters": {
         "respondWith": "json",
-        "responseBody": "={{ JSON.stringify({ success: false, error: 'Ollama unreachable \u00e2\u20ac\u201d is it running on http://127.0.0.1:11434?' }) }}",
+        "responseBody": "={{ JSON.stringify({ success: false, error: 'Ollama unreachable \u2014 is it running on http://127.0.0.1:11434?' }) }}",
         "options": {
           "responseCode": 200
         }
@@ -1006,6 +1006,368 @@
       "position": [
         1360,
         3020
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "cv-file",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "wh-cv-file",
+      "name": "CVFile - Webhook - Get CV File",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        250,
+        3400
+      ],
+      "webhookId": "cv-file-get"
+    },
+    {
+      "parameters": {
+        "jsCode": "const query = $input.first().json.query || {};\nconst id = parseInt(query.candidate_id);\nif (!id || isNaN(id) || id < 1) {\n  return [{ json: { error: true, message: 'Valid candidate_id query parameter is required', status: 400 } }];\n}\nreturn [{ json: { error: false, sql: 'SELECT id, candidate_name, cv_file_name, cv_file_mime, cv_file_data FROM candidates WHERE id = ' + id } }];"
+      },
+      "id": "validate-cv-file-id",
+      "name": "CVFile - Validate ID",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        480,
+        3400
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.error }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "cv-file-valid-check",
+      "name": "CVFile - Valid?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        700,
+        3400
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ success: false, error: $json.message }) }}",
+        "options": {
+          "responseCode": "={{ $json.status || 400 }}"
+        }
+      },
+      "id": "cv-file-error-resp",
+      "name": "CVFile - Error Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        920,
+        3280
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "={{ $json.sql }}",
+        "options": {}
+      },
+      "id": "fetch-cv-file",
+      "name": "CVFile - Fetch File",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        920,
+        3520
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "postgres": {
+          "id": "1",
+          "name": "HR PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const row = $input.first().json || {};\nif (row.id) {\n  return [{ json: { found: true, data: { id: row.id, candidate_name: row.candidate_name, cv_file_name: row.cv_file_name, cv_file_mime: row.cv_file_mime, cv_file_data: row.cv_file_data } } }];\n}\nreturn [{ json: { found: false, data: null } }];"
+      },
+      "id": "cv-file-shape",
+      "name": "CVFile - Shape Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1140,
+        3520
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json.found ? { success: true, data: $json.data } : { success: false, error: 'Candidate not found or no file stored' }) }}",
+        "options": {
+          "responseCode": "={{ $json.found ? 200 : 404 }}"
+        }
+      },
+      "id": "cv-file-resp",
+      "name": "CVFile - Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1360,
+        3520
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "generate-interview-questions",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "wh-int-q",
+      "name": "IntQ - Webhook - Generate Questions",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        250,
+        3760
+      ],
+      "webhookId": "generate-interview-questions"
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $input.first().json.body || $input.first().json || {};\nconst candidateId = parseInt(body.candidate_id);\nconst jobIdOnly = parseInt(body.job_id);\nlet numQuestions = parseInt(body.num_questions);\nif (isNaN(numQuestions) || numQuestions < 3) numQuestions = 8;\nif (numQuestions > 20) numQuestions = 20;\nconst includeHr = body.include_hr !== false;\nconst includeTechnical = body.include_technical !== false;\nconst includeSalary = body.include_salary === true;\nconst extraContext = (body.extra_context || '').trim();\n\nif ((!candidateId || isNaN(candidateId)) && (!jobIdOnly || isNaN(jobIdOnly))) {\n  return [{ json: { error: true, message: 'Provide candidate_id or job_id', status: 400 } }];\n}\nif (!includeHr && !includeTechnical && !includeSalary) {\n  return [{ json: { error: true, message: 'At least one question type must be selected', status: 400 } }];\n}\n\nlet sql;\nif (candidateId && !isNaN(candidateId)) {\n  sql = `SELECT c.id AS candidate_id, c.candidate_name, c.email, c.cv_text, j.id AS job_opening_id, j.job_title, j.department, j.seniority_level, j.employment_type, j.job_description FROM candidates c JOIN job_openings j ON j.id = c.job_opening_id WHERE c.id = ${candidateId} LIMIT 1`;\n} else {\n  sql = `SELECT NULL AS candidate_id, '' AS candidate_name, '' AS email, '' AS cv_text, j.id AS job_opening_id, j.job_title, j.department, j.seniority_level, j.employment_type, j.job_description FROM job_openings j WHERE j.id = ${jobIdOnly} LIMIT 1`;\n}\n\nreturn [{ json: { error: false, candidateId: candidateId || null, jobIdOnly: jobIdOnly || null, numQuestions, includeHr, includeTechnical, includeSalary, extraContext, sql } }];"
+      },
+      "id": "int-q-validate",
+      "name": "IntQ - Validate Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        480,
+        3760
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.error }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "int-q-valid",
+      "name": "IntQ - Valid?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        700,
+        3760
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ success: false, error: $json.message }) }}",
+        "options": {
+          "responseCode": "={{ $json.status || 400 }}"
+        }
+      },
+      "id": "int-q-err",
+      "name": "IntQ - Error Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        920,
+        3640
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "={{ $json.sql }}",
+        "options": {}
+      },
+      "id": "int-q-fetch",
+      "name": "IntQ - Fetch Candidate & Job",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        920,
+        3880
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "postgres": {
+          "id": "1",
+          "name": "HR PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const ctx = $('IntQ - Validate Input').first().json;\nconst row = $input.first().json || {};\nif (!row || !row.candidate_id) {\n  return [{ json: { error: true, message: 'Candidate not found', status: 404 } }];\n}\nconst cvText = (row.cv_text || '').substring(0, 6000);\nconst jobDesc = (row.job_description || '').substring(0, 3000);\nconst types = [];\nif (ctx.includeHr) types.push('hr');\nif (ctx.includeTechnical) types.push('technical');\nif (ctx.includeSalary) types.push('salary');\nconst typesLabel = types.map(t =>\n  t === 'hr' ? 'behavioural / soft-skills questions' :\n  t === 'technical' ? 'technical questions specific to the candidate CV and the job requirements' :\n  'compensation / expected-salary question'\n).join(', ');\n\nconst prompt = `You are a senior recruiter conducting a warm, professional interview. Generate EXACTLY ${ctx.numQuestions} interview questions for the candidate below.\n\nSTYLE RULES — every question must follow these:\n- Write conversationally, as if you are speaking to the candidate in person.\n- Use openers like: \"Tell me about a time...\", \"Walk me through...\", \"How did you approach...\", \"What was your experience with...\", \"Can you share a situation where...\", \"How would you handle...\".\n- NEVER ask blunt yes/no factual questions like \"Do you know X?\", \"Have you used Y?\", \"List your skills in Z.\"\n- Each question should invite the candidate to share a story, reasoning, or real example from their background.\n- Keep each question to 1-2 natural sentences.\n\nQuestion types to include: ${typesLabel}.\nDistribute the ${ctx.numQuestions} questions as evenly as possible across the requested types.\n\nFor each question return:\n  - category: one of \"hr\", \"technical\", or \"salary\"\n  - question: the conversational question (1-2 sentences)\n  - hints: one short sentence on what a strong answer looks like or what to probe for\n\nReturn ONLY a JSON object:\n{\n  \"questions\": [\n    { \"category\": \"hr|technical|salary\", \"question\": \"...\", \"hints\": \"...\" }\n  ]\n}\n\nJob: ${row.job_title || ''}${row.department ? ' (' + row.department + ')' : ''}${row.seniority_level ? ' — ' + row.seniority_level : ''}\n\nJob Description:\n${jobDesc}\n\nCandidate: ${row.candidate_name || ''}\n\nCV (extract):\n${cvText}\n\n${ctx.extraContext ? 'Additional focus from HR:\\n' + ctx.extraContext + '\\n' : ''}\nReturn the JSON now:`;\n\nreturn [{ json: { error: false, candidate: { id: row.candidate_id, name: row.candidate_name, email: row.email }, job: { id: row.job_opening_id, title: row.job_title, department: row.department }, includeHr: ctx.includeHr, includeTechnical: ctx.includeTechnical, includeSalary: ctx.includeSalary, numQuestions: ctx.numQuestions, requestBody: JSON.stringify({ model: 'qwen3:4b', prompt: prompt, stream: false, think: false, format: 'json', options: { num_predict: 4000, num_ctx: 6144, temperature: 0.4 } }) } }];"
+      },
+      "id": "int-q-build",
+      "name": "IntQ - Build Prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1140,
+        3880
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.error }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "int-q-found",
+      "name": "IntQ - Found?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1360,
+        3880
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ success: false, error: $json.message }) }}",
+        "options": {
+          "responseCode": "={{ $json.status || 404 }}"
+        }
+      },
+      "id": "int-q-notfound",
+      "name": "IntQ - Not Found",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1580,
+        3760
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://127.0.0.1:11434/api/generate",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.requestBody }}",
+        "options": {
+          "timeout": 240000
+        }
+      },
+      "id": "int-q-ollama",
+      "name": "IntQ - Call Ollama",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1580,
+        4000
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $input.first().json;\nconst ctx = $('IntQ - Build Prompt').first().json;\nlet text = (raw.response || raw.text || '').trim();\ntext = text.replace(/<think>[\\s\\S]*?<\\/think>/gi, '').replace(/^```json\\s*/i, '').replace(/```\\s*$/i, '').trim();\nlet parsed = null;\ntry { parsed = JSON.parse(text); } catch (e) {\n  const start = text.indexOf('{');\n  const end = text.lastIndexOf('}');\n  if (start !== -1 && end > start) {\n    try { parsed = JSON.parse(text.substring(start, end + 1)); } catch {}\n  }\n}\nif (!parsed || !Array.isArray(parsed.questions)) {\n  return [{ json: { success: false, error: 'Could not parse questions from Ollama response', raw: text.substring(0, 500) } }];\n}\nconst allowed = new Set();\nif (ctx.includeHr) allowed.add('hr');\nif (ctx.includeTechnical) allowed.add('technical');\nif (ctx.includeSalary) allowed.add('salary');\nconst fallbackCategory = ctx.includeHr ? 'hr' : (ctx.includeTechnical ? 'technical' : 'salary');\n// qwen3 mislabels categories often (e.g. 'behavioral' for HR, 'compensation' for salary). Map\n// common variants to the canonical names so we don't silently drop valid questions and end up\n// returning fewer than the user asked for.\nconst ALIASES = {\n  hr: 'hr', behavioral: 'hr', behavioural: 'hr', behavior: 'hr', behaviour: 'hr',\n  soft: 'hr', 'soft skills': 'hr', cultural: 'hr', 'cultural fit': 'hr', motivation: 'hr', personality: 'hr',\n  technical: 'technical', tech: 'technical', skills: 'technical', skill: 'technical', engineering: 'technical', coding: 'technical',\n  salary: 'salary', compensation: 'salary', pay: 'salary', 'expected salary': 'salary', comp: 'salary'\n};\nconst cleaned = parsed.questions\n  .filter(q => q && q.question)\n  .map(q => {\n    const rawCat = String(q.category || '').toLowerCase().trim();\n    const aliased = ALIASES[rawCat] || rawCat;\n    const cat = allowed.has(aliased) ? aliased : fallbackCategory;\n    return { category: cat, question: String(q.question).trim(), hints: String(q.hints || '').trim() };\n  })\n  .slice(0, ctx.numQuestions);\nreturn [{ json: { success: true, candidate: ctx.candidate, job: ctx.job, questions: cleaned } }];"
+      },
+      "id": "int-q-parse",
+      "name": "IntQ - Parse Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1800,
+        4000
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ success: false, error: 'Ollama unreachable \u2014 is it running on http://127.0.0.1:11434?' }) }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "int-q-ollama-err",
+      "name": "IntQ - Ollama Down",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1800,
+        4140
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "responseCode": "={{ $json.success ? 200 : 500 }}"
+        }
+      },
+      "id": "int-q-resp",
+      "name": "IntQ - Success Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        2020,
+        4000
       ]
     }
   ],
@@ -1468,6 +1830,177 @@
           }
         ]
       ]
+    },
+    "CVFile - Webhook - Get CV File": {
+      "main": [
+        [
+          {
+            "node": "CVFile - Validate ID",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "CVFile - Validate ID": {
+      "main": [
+        [
+          {
+            "node": "CVFile - Valid?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "CVFile - Valid?": {
+      "main": [
+        [
+          {
+            "node": "CVFile - Error Response",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "CVFile - Fetch File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "CVFile - Fetch File": {
+      "main": [
+        [
+          {
+            "node": "CVFile - Shape Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "CVFile - Shape Response": {
+      "main": [
+        [
+          {
+            "node": "CVFile - Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IntQ - Webhook - Generate Questions": {
+      "main": [
+        [
+          {
+            "node": "IntQ - Validate Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IntQ - Validate Input": {
+      "main": [
+        [
+          {
+            "node": "IntQ - Valid?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IntQ - Valid?": {
+      "main": [
+        [
+          {
+            "node": "IntQ - Error Response",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "IntQ - Fetch Candidate & Job",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IntQ - Fetch Candidate & Job": {
+      "main": [
+        [
+          {
+            "node": "IntQ - Build Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IntQ - Build Prompt": {
+      "main": [
+        [
+          {
+            "node": "IntQ - Found?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IntQ - Found?": {
+      "main": [
+        [
+          {
+            "node": "IntQ - Not Found",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "IntQ - Call Ollama",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IntQ - Call Ollama": {
+      "main": [
+        [
+          {
+            "node": "IntQ - Parse Response",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "IntQ - Ollama Down",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IntQ - Parse Response": {
+      "main": [
+        [
+          {
+            "node": "IntQ - Success Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
   "pinData": {},
@@ -1483,5 +2016,5 @@
       "name": "CV Evaluation"
     }
   ],
-  "triggerCount": 6
+  "triggerCount": 9
 }

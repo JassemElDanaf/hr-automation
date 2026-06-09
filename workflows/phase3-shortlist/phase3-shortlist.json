@@ -357,6 +357,125 @@
         1140,
         1420
       ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "remove-from-shortlist",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "wh-remove-shortlist",
+      "name": "RemoveSL - Webhook - Remove Shortlist",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        250,
+        1700
+      ],
+      "webhookId": "remove-from-shortlist"
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $input.first().json.body || $input.first().json || {};\nconst id = body.id ? parseInt(body.id) : null;\nconst candidateId = body.candidate_id ? parseInt(body.candidate_id) : null;\nconst jobId = body.job_opening_id ? parseInt(body.job_opening_id) : null;\nif (id && !isNaN(id)) {\n  return [{ json: { error: false, sql: 'DELETE FROM shortlist WHERE id = $1 RETURNING *', params: [id] } }];\n}\nif (candidateId && jobId && !isNaN(candidateId) && !isNaN(jobId)) {\n  return [{ json: { error: false, sql: 'DELETE FROM shortlist WHERE candidate_id = $1 AND job_opening_id = $2 RETURNING *', params: [candidateId, jobId] } }];\n}\nreturn [{ json: { error: true, message: 'Provide either shortlist id, or both candidate_id and job_opening_id', status: 400 } }];"
+      },
+      "id": "validate-remove-shortlist",
+      "name": "RemoveSL - Validate Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        480,
+        1700
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.error }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "remove-shortlist-check",
+      "name": "RemoveSL - Valid?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        700,
+        1700
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ success: false, error: $json.message }) }}",
+        "options": {
+          "responseCode": "={{ $json.status || 400 }}"
+        }
+      },
+      "id": "remove-shortlist-error",
+      "name": "RemoveSL - Error Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        920,
+        1580
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "={{ $json.sql }}",
+        "options": {
+          "queryReplacement": "={{ $json.params }}"
+        }
+      },
+      "id": "delete-shortlist",
+      "name": "RemoveSL - Delete Shortlist",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        920,
+        1820
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "1",
+          "name": "HR PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ success: true, data: $json }) }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "remove-shortlist-resp",
+      "name": "RemoveSL - Success Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1140,
+        1820
+      ]
     }
   ],
   "connections": {
@@ -512,6 +631,57 @@
           }
         ]
       ]
+    },
+    "RemoveSL - Webhook - Remove Shortlist": {
+      "main": [
+        [
+          {
+            "node": "RemoveSL - Validate Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "RemoveSL - Validate Input": {
+      "main": [
+        [
+          {
+            "node": "RemoveSL - Valid?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "RemoveSL - Valid?": {
+      "main": [
+        [
+          {
+            "node": "RemoveSL - Error Response",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "RemoveSL - Delete Shortlist",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "RemoveSL - Delete Shortlist": {
+      "main": [
+        [
+          {
+            "node": "RemoveSL - Success Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
   "pinData": {},
@@ -527,5 +697,5 @@
       "name": "Shortlist"
     }
   ],
-  "triggerCount": 3
+  "triggerCount": 4
 }

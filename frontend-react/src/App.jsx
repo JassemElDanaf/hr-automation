@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Outlet } from 'react-router-dom';
 import { SelectedJobProvider } from './state/selectedJob';
 import { UIProvider } from './state/uiState';
 import Header from './components/layout/Header';
@@ -10,24 +10,43 @@ import JobOpenings from './pages/JobOpenings';
 import CVEvaluation from './pages/CVEvaluation';
 import Shortlist from './pages/Shortlist';
 import Emails from './pages/Emails';
+import LiveInterview from './pages/LiveInterview';
+import AIInterviews from './pages/AIInterviews';
+import CandidateInterview from './pages/CandidateInterview';
 import './styles/global.css';
+
+function HRLayout() {
+  return (
+    <>
+      <Header />
+      <NavTabs />
+      <Outlet />
+      <Toast />
+      <EmailComposerModal />
+    </>
+  );
+}
 
 export default function App() {
   return (
     <BrowserRouter>
       <SelectedJobProvider>
         <UIProvider>
-          <Header />
-          <NavTabs />
           <Routes>
-            <Route path="/" element={<Dashboard />} />
-            <Route path="/jobs" element={<JobOpenings />} />
-            <Route path="/cv-eval" element={<CVEvaluation />} />
-            <Route path="/shortlist" element={<Shortlist />} />
-            <Route path="/emails" element={<Emails />} />
+            {/* Standalone candidate-facing route — no HR chrome */}
+            <Route path="/interview/:token" element={<CandidateInterview />} />
+
+            {/* HR dashboard routes — full layout */}
+            <Route element={<HRLayout />}>
+              <Route path="/" element={<Dashboard />} />
+              <Route path="/jobs" element={<JobOpenings />} />
+              <Route path="/cv-eval" element={<CVEvaluation />} />
+              <Route path="/shortlist" element={<Shortlist />} />
+              <Route path="/emails" element={<Emails />} />
+              <Route path="/live-interview" element={<LiveInterview />} />
+              <Route path="/ai-interviews" element={<AIInterviews />} />
+            </Route>
           </Routes>
-          <Toast />
-          <EmailComposerModal />
         </UIProvider>
       </SelectedJobProvider>
     </BrowserRouter>

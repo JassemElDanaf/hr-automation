@@ -7,8 +7,22 @@ import Badge from '../components/common/Badge';
 import ScoreBadge from '../components/common/ScoreBadge';
 import EmptyState from '../components/common/EmptyState';
 import Loading from '../components/common/Loading';
-import { sendEmailRequest, getShortlistTemplate, getInterviewTemplate, getOfferTemplate } from '../services/email';
+import { sendEmailRequest, getShortlistTemplate, getInterviewTemplate, getOfferTemplate, getRejectionTemplate, getEmailStatus } from '../services/email';
+import { emailTypeLabel } from '../utils/helpers';
 import EvalDetailModal from '../components/modals/EvalDetailModal';
+import InterviewQuestionsModal from '../components/modals/InterviewQuestionsModal';
+
+const HM_LS_KEY = 'hr_hiring_manager_emails';
+function loadHMEmails() {
+  try { return JSON.parse(localStorage.getItem(HM_LS_KEY) || '{}'); } catch { return {}; }
+}
+function saveHMEmail(jobOpeningId, email) {
+  if (!jobOpeningId || !email) return;
+  const m = loadHMEmails();
+  m[jobOpeningId] = email;
+  try { localStorage.setItem(HM_LS_KEY, JSON.stringify(m)); } catch {}
+}
+function looksLikeEmail(s) { return typeof s === 'string' && /@/.test(s) && /\./.test(s.split('@').pop() || ''); }
 
 export default function Shortlist() {
   const { selectedJob, setSelectedJob } = useSelectedJob();
@@ -17,7 +31,7 @@ export default function Shortlist() {
   const [jobId, setJobId] = useState('');
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [slFilter, setSlFilter] = useState('all');
+  const [slFilter, setSlFilter] = useState('shortlisted');
   const [slArchivedMap, setSlArchivedMap] = useState(() => {
     try { return JSON.parse(localStorage.getItem('hr_shortlist_archived') || '{}'); } catch { return {}; }
   });
@@ -26,6 +40,7 @@ export default function Shortlist() {
   const [emailMap, setEmailMap] = useState({}); // candidate_id -> [{ email_type, status, sent_at, subject, body, recipient_email, error_message }, ...]
   const [expandedEmail, setExpandedEmail] = useState({}); // candidate_id -> true if email details expanded
   const [profileCandidate, setProfileCandidate] = useState(null); // candidate for detail modal
+  const [interviewPrep, setInterviewPrep] = useState(null); // { candidate, job } for the prep-before-handoff modal
   const [transitioning, setTransitioning] = useState({}); // id -> true while animation plays
   const [retainedInView, setRetainedInView] = useState(new Set()); // keep card visible after state change
 
@@ -119,7 +134,7 @@ export default function Shortlist() {
         const res = await sendEmailRequest({ candidateId, jobId: jobOpeningId, emailType: sendType, recipientEmail: email, candidateName, jobTitle, subject, body });
         const status = res.data?.status;
         // Update email map immediately for this candidate
-        const newEntry = { email_type: sendType, status: status || 'failed', sent_at: new Date().toISOString(), subject, body, recipient_email: email, error_message: res.data?.error || null };
+        const newEntry = { email_type: sendType, status: status || 'failed', sent_at: new Date().toISOString(), subject, body, recipient_email: email, error_message: res.data?.error || null, direction: 'outbound' };
         setEmailMap(prev => ({ ...prev, [candidateId]: [newEntry, ...(prev[candidateId] || [])] }));
         if (status === 'sent') showToast(`Email sent to ${email}`, 'success');
         else if (status === 'logged') showToast('Email not sent \u2014 SMTP not configured. Email was saved to log only.', 'error');
@@ -127,6 +142,58 @@ export default function Shortlist() {
         else showToast('Email delivery uncertain \u2014 check Emails tab for status', 'error');
       },
     });
+  }
+
+  function rejectFromShortlist(s) {
+    const jobSel = jobs.find(j => j.id === parseInt(jobId)) || {};
+    const jobTitle = jobSel?.job_title || 'the position';
+    const tmpl = getRejectionTemplate(s.candidate_name, jobTitle);
+    openEmailComposer({
+      title: 'Reject Candidate', description: `Reject ${s.candidate_name}?`,
+      candidate: { id: s.candidate_id, name: s.candidate_name, email: s.email },
+      job: { id: s.job_opening_id, title: jobTitle }, emailType: 'rejection',
+      defaultSubject: tmpl.subject, defaultBody: tmpl.body,
+      sendLabel: 'Reject Candidate', sendClass: 'btn-danger', showSendToggle: true,
+      onSend: async ({ subject, body, sendEmail }) => {
+        await updateStatus(s.id, 'rejected');
+        if (sendEmail && s.email) {
+          const res = await sendEmailRequest({ candidateId: s.candidate_id, jobId: s.job_opening_id, emailType: 'rejection', recipientEmail: s.email, candidateName: s.candidate_name, jobTitle, subject, body });
+          const status = res.data?.status;
+          const newEntry = { email_type: 'rejection', status: status || 'failed', sent_at: new Date().toISOString(), subject, body, recipient_email: s.email, error_message: res.data?.error || null, direction: 'outbound' };
+          setEmailMap(prev => ({ ...prev, [s.candidate_id]: [newEntry, ...(prev[s.candidate_id] || [])] }));
+          if (status === 'sent') showToast(`Rejection email sent to ${s.email}`, 'error');
+          else if (status === 'logged') showToast('Rejected — SMTP not configured, email saved to log only.', 'error');
+          else showToast(`Rejected — email failed: ${res.data?.error || 'unknown error'}`, 'error');
+        } else {
+          showToast('Candidate rejected', 'error');
+        }
+      },
+    });
+  }
+
+  // Hand Off chains through the interview-prep modal (set meeting + generate questions)
+  // and then opens the email composer with the full pack. The HM email is the moment HR
+  // formally transfers ownership, so we want HR to walk through prep first instead of
+  // sending a bare evaluation summary.
+  function handOffToHM(s) {
+    const jobSel = jobs.find(j => j.id === parseInt(jobId)) || {};
+    const candidateForModal = {
+      id: s.candidate_id,
+      candidate_name: s.candidate_name,
+      email: s.email,
+      overall_score: s.overall_score,
+      skills_score: s.skills_score,
+      experience_score: s.experience_score,
+      education_score: s.education_score,
+      strengths: s.strengths,
+      weaknesses: s.weaknesses,
+      reasoning: s.reasoning,
+    };
+    setInterviewPrep({ candidate: candidateForModal, job: jobSel });
+  }
+
+  function handlePackSent(candidateId, newEntry) {
+    setEmailMap(prev => ({ ...prev, [candidateId]: [newEntry, ...(prev[candidateId] || [])] }));
   }
 
   // Archive helpers
@@ -174,6 +241,18 @@ export default function Shortlist() {
 
   function switchSlFilter(f) { setSlFilter(f); setRetainedInView(new Set()); }
 
+  // "Handed off to HM" is a derived stage — any candidate with at least one
+  // successfully-sent recommendation email is considered handed off, regardless
+  // of their underlying shortlist.status. Lets us add the new tab without a
+  // schema migration. The Shortlisted / Interviewed pills exclude these
+  // candidates so they aren't double-counted.
+  const isHandedOff = (candidateId) => {
+    const emails = emailMap[candidateId];
+    // Only outbound recommendation rows count — an inbound row threaded back to
+    // a recommendation parent must not toggle handoff state on its own.
+    return !!(emails && emails.some(e => e.email_type === 'recommendation' && e.status === 'sent' && e.direction !== 'inbound'));
+  };
+
   // Sort: most recently updated first
   const sortedData = [...data].sort((a, b) => {
     const dateA = new Date(a.updated_at || a.shortlisted_at || 0);
@@ -185,17 +264,23 @@ export default function Shortlist() {
   const filteredData = sortedData.filter(s => {
     if (retainedInView.has(s.id)) return true;
     const archived = isSlArchived(s.id);
+    const handedOff = isHandedOff(s.candidate_id);
     if (slFilter === 'all') return true;
     if (slFilter === 'archived') return archived;
-    if (slFilter === 'shortlisted') return !archived && s.status === 'shortlisted';
-    if (slFilter === 'interviewed') return !archived && s.status === 'interviewed';
+    if (slFilter === 'handed_off') return !archived && handedOff && s.status !== 'hired' && s.status !== 'rejected';
+    // Shortlisted / Interviewed pills hide handed-off cards so the same candidate
+    // doesn't appear in two pipeline stages at once. Hired / Rejected are terminal
+    // verdicts and trump handoff state.
+    if (slFilter === 'shortlisted') return !archived && !handedOff && s.status === 'shortlisted';
+    if (slFilter === 'interviewed') return !archived && !handedOff && s.status === 'interviewed';
     if (slFilter === 'hired') return !archived && s.status === 'hired';
     if (slFilter === 'rejected') return !archived && s.status === 'rejected';
     return true;
   });
 
-  const shortlisted = data.filter(d => d.status === 'shortlisted').length;
-  const interviewed = data.filter(d => d.status === 'interviewed').length;
+  const handedOffCount = data.filter(d => !isSlArchived(d.id) && isHandedOff(d.candidate_id) && d.status !== 'hired' && d.status !== 'rejected').length;
+  const shortlisted = data.filter(d => d.status === 'shortlisted' && !isHandedOff(d.candidate_id)).length;
+  const interviewed = data.filter(d => d.status === 'interviewed' && !isHandedOff(d.candidate_id)).length;
   const hired = data.filter(d => d.status === 'hired').length;
   const rejected = data.filter(d => d.status === 'rejected').length;
 
@@ -220,6 +305,7 @@ export default function Shortlist() {
       <div className="stats">
         <StatCard label="Shortlisted" value={shortlisted || '-'} />
         <StatCard label="Interviewed" value={interviewed || '-'} />
+        <StatCard label="Handed off" value={handedOffCount || '-'} />
         <StatCard label="Hired" value={hired || '-'} />
         <StatCard label="Rejected" value={rejected || '-'} />
       </div>
@@ -229,8 +315,9 @@ export default function Shortlist() {
           <span className="results-filter-label">Show:</span>
           {[
             { key: 'all', label: 'All', count: data.length },
-            { key: 'shortlisted', label: 'Shortlisted', count: data.filter(d => !isSlArchived(d.id) && d.status === 'shortlisted').length },
-            { key: 'interviewed', label: 'Interviewed', count: data.filter(d => !isSlArchived(d.id) && d.status === 'interviewed').length },
+            { key: 'shortlisted', label: 'Shortlisted', count: data.filter(d => !isSlArchived(d.id) && !isHandedOff(d.candidate_id) && d.status === 'shortlisted').length },
+            { key: 'interviewed', label: 'Interviewed', count: data.filter(d => !isSlArchived(d.id) && !isHandedOff(d.candidate_id) && d.status === 'interviewed').length },
+            { key: 'handed_off', label: 'Handed off', count: data.filter(d => !isSlArchived(d.id) && isHandedOff(d.candidate_id) && d.status !== 'hired' && d.status !== 'rejected').length },
             { key: 'hired', label: 'Hired', count: data.filter(d => !isSlArchived(d.id) && d.status === 'hired').length },
             { key: 'rejected', label: 'Rejected', count: data.filter(d => !isSlArchived(d.id) && d.status === 'rejected').length },
             { key: 'archived', label: 'Archived', count: data.filter(d => isSlArchived(d.id)).length },
@@ -252,11 +339,13 @@ export default function Shortlist() {
             const isDecided = s.status === 'hired' || s.status === 'rejected';
             const isAnimating = !!transitioning[s.id];
             const candidateEmails = emailMap[s.candidate_id];
-            const hasEmailSent = candidateEmails && candidateEmails.some(e => e.status === 'sent');
+            const hasEmailSent = candidateEmails && candidateEmails.some(e => e.status === 'sent' && e.direction !== 'inbound');
+            const handedOff = isHandedOff(s.candidate_id) && s.status !== 'hired' && s.status !== 'rejected';
             const cardCls = [
               'candidate-card',
               `candidate-card--${s.status}`,
-              hasEmailSent && s.status === 'shortlisted' ? 'candidate-card--notified' : '',
+              handedOff ? 'candidate-card--handed-off' : '',
+              hasEmailSent && s.status === 'shortlisted' && !handedOff ? 'candidate-card--notified' : '',
               isAnimating ? 'candidate-card--transitioning' : '',
             ].filter(Boolean).join(' ');
 
@@ -272,7 +361,10 @@ export default function Shortlist() {
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                     <h3>{s.candidate_name}</h3>
                     <Badge type={s.status}>{s.status}</Badge>
-                    {hasEmailSent && <span className="card-notified-chip">{'\u2709'} Notified</span>}
+                    {handedOff
+                      ? <span className="card-handoff-chip">{'\u2709'} Handed off to HM</span>
+                      : (hasEmailSent && <span className="card-notified-chip">{'\u2709'} Notified</span>)
+                    }
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <button className="btn btn-sm btn-secondary" onClick={() => setProfileCandidate(s)}>View Profile</button>
@@ -295,41 +387,58 @@ export default function Shortlist() {
                   const emails = emailMap[s.candidate_id];
                   if (!emails || emails.length === 0) return null;
                   const em = emails[0]; // latest
-                  const getTypeLabel = (e) => e.email_type === 'custom' ? 'Shortlist email' : e.email_type === 'interview_invite' ? 'Interview invite' : e.email_type === 'offer' ? 'Job offer' : e.email_type === 'rejection' ? 'Rejection email' : e.email_type || 'Email';
                   const getStatusText = (e) => e.status === 'sent' ? 'sent' : e.status === 'failed' ? 'failed' : e.status === 'logged' ? 'not sent (logged only)' : e.status;
+                  const isInbound = em.direction === 'inbound';
                   const isSent = em.status === 'sent';
                   const isFailed = em.status === 'failed';
                   const isLogged = em.status === 'logged';
+                  const isHandoffEmail = em.email_type === 'recommendation' && isSent;
                   const time = em.sent_at ? new Date(em.sent_at).toLocaleString() : '';
                   const isExpanded = !!expandedEmail[s.candidate_id];
+                  const bannerCls = isInbound ? 'sl-email-inbound'
+                    : isFailed || isLogged ? 'sl-email-failed'
+                    : isHandoffEmail ? 'sl-email-handoff'
+                    : isSent ? 'sl-email-sent' : '';
                   return (
                     <div className="sl-email-wrapper">
                       <div
-                        className={`sl-email-status sl-email-clickable ${isFailed || isLogged ? 'sl-email-failed' : isSent ? 'sl-email-sent' : ''}`}
+                        className={`sl-email-status sl-email-clickable ${bannerCls}`}
                         onClick={() => setExpandedEmail(prev => ({ ...prev, [s.candidate_id]: !prev[s.candidate_id] }))}
                       >
-                        <span className="sl-email-icon">{isSent ? '\u2709' : '\u26A0'}</span>
+                        <span className="sl-email-icon">{isInbound ? '\u{1F4E5}' : isSent ? '\u2709' : '\u26A0'}</span>
                         <span style={{ flex: 1 }}>
-                          <strong>{getTypeLabel(em)}</strong> {getStatusText(em)}
+                          {isInbound ? (
+                            <><strong>Reply from {em.recipient_email || 'sender'}</strong>{em.subject && <span style={{ color: 'var(--gray-600)' }}> &middot; {em.subject}</span>}</>
+                          ) : (
+                            <><strong>{emailTypeLabel(em.email_type)}</strong> {getStatusText(em)}</>
+                          )}
                           {time && <span className="sl-email-time"> &middot; {time}</span>}
                         </span>
                         <span className="sl-email-toggle">{isExpanded ? '\u25B2' : '\u25BC'}</span>
                       </div>
                       {isExpanded && (
                         <div className="sl-email-details">
-                          {emails.map((e, i) => (
-                            <div key={i} className={`sl-email-detail-item ${e.status === 'sent' ? 'sl-detail-sent' : e.status === 'failed' || e.status === 'logged' ? 'sl-detail-failed' : ''}`}>
-                              <div className="sl-email-detail-header">
-                                <strong>{getTypeLabel(e)}</strong>
-                                <span className={`sl-email-detail-badge sl-email-detail-badge--${e.status}`}>{e.status === 'sent' ? '\u2713 Sent' : e.status === 'failed' ? '\u2717 Failed' : e.status === 'logged' ? '\u26A0 Logged only' : e.status}</span>
+                          {emails.map((e, i) => {
+                            const inbound = e.direction === 'inbound';
+                            const itemCls = inbound ? 'sl-detail-inbound'
+                              : e.status === 'sent' ? 'sl-detail-sent'
+                              : e.status === 'failed' || e.status === 'logged' ? 'sl-detail-failed' : '';
+                            return (
+                              <div key={i} className={`sl-email-detail-item ${itemCls}`}>
+                                <div className="sl-email-detail-header">
+                                  <strong>{inbound ? 'Reply received' : emailTypeLabel(e.email_type)}</strong>
+                                  <span className={`sl-email-detail-badge sl-email-detail-badge--${inbound ? 'inbound' : e.status}`}>
+                                    {inbound ? '\u{1F4E5} Inbound' : e.status === 'sent' ? '\u2713 Sent' : e.status === 'failed' ? '\u2717 Failed' : e.status === 'logged' ? '\u26A0 Logged only' : e.status}
+                                  </span>
+                                </div>
+                                {e.recipient_email && <div className="sl-email-detail-row"><span className="sl-email-detail-label">{inbound ? 'From:' : 'To:'}</span> {e.recipient_email}</div>}
+                                {e.subject && <div className="sl-email-detail-row"><span className="sl-email-detail-label">Subject:</span> {e.subject}</div>}
+                                {e.sent_at && <div className="sl-email-detail-row"><span className="sl-email-detail-label">Date:</span> {new Date(e.sent_at).toLocaleString()}</div>}
+                                {e.error_message && <div className="sl-email-detail-row sl-email-detail-error"><span className="sl-email-detail-label">Error:</span> {e.error_message}</div>}
+                                {e.body && <div className="sl-email-detail-body"><pre>{e.body}</pre></div>}
                               </div>
-                              {e.recipient_email && <div className="sl-email-detail-row"><span className="sl-email-detail-label">To:</span> {e.recipient_email}</div>}
-                              {e.subject && <div className="sl-email-detail-row"><span className="sl-email-detail-label">Subject:</span> {e.subject}</div>}
-                              {e.sent_at && <div className="sl-email-detail-row"><span className="sl-email-detail-label">Date:</span> {new Date(e.sent_at).toLocaleString()}</div>}
-                              {e.error_message && <div className="sl-email-detail-row sl-email-detail-error"><span className="sl-email-detail-label">Error:</span> {e.error_message}</div>}
-                              {e.body && <div className="sl-email-detail-body"><pre>{e.body}</pre></div>}
-                            </div>
-                          ))}
+                            );
+                          })}
                         </div>
                       )}
                     </div>
@@ -341,18 +450,26 @@ export default function Shortlist() {
                       <span style={{ fontSize: '13px', color: 'var(--gray-400)', fontWeight: 600 }}>Archived ({slArchivedMap[s.id] || s.status})</span>
                       <button className="btn btn-sm btn-secondary" onClick={() => restoreSlArchive(s.id)}>Restore</button>
                     </>
-                  ) : (<>
+                  ) : handedOff ? (<>
+                    {/* Once handed off to HM, decisions belong here. Hire / Reject are
+                        the HM-driven verdicts. Re-send Pack lets HR forward the same
+                        materials again (e.g. after fixing an interviewer email). */}
+                    <button className="btn btn-sm btn-success" onClick={() => updateStatus(s.id, 'hired')}>{'\u2713'} Hire</button>
+                    {hasEmail && <button className="btn btn-sm btn-secondary" onClick={() => sendEmail(s.candidate_id, s.job_opening_id, s.candidate_name, s.email, 'offer')}>Send Offer</button>}
+                    <button className="btn btn-sm btn-danger" onClick={() => rejectFromShortlist(s)}>{'\u2717'} Reject</button>
+                    <button className="btn btn-sm btn-secondary" onClick={() => handOffToHM(s)}>Re-send Pack</button>
+                    <button className="btn btn-sm btn-ghost" onClick={() => archiveShortlistItem(s.id, s.status)}>Archive</button>
+                  </>) : (<>
                     {s.status === 'shortlisted' && <>
                       <button className="btn btn-sm btn-primary" onClick={() => updateStatus(s.id, 'interviewed')}>Mark Interviewed</button>
                       {hasEmail && <button className="btn btn-sm btn-success" onClick={() => sendEmail(s.candidate_id, s.job_opening_id, s.candidate_name, s.email, 'shortlisted')}>Email Shortlist</button>}
                       {hasEmail && <button className="btn btn-sm btn-secondary" onClick={() => sendEmail(s.candidate_id, s.job_opening_id, s.candidate_name, s.email, 'interview_invite')}>Interview Invite</button>}
-                      <button className="btn btn-sm btn-danger" onClick={() => updateStatus(s.id, 'rejected')}>Reject</button>
+                      <button className="btn btn-sm btn-primary" onClick={() => handOffToHM(s)}>{'\u2709'} Hand Off to HM</button>
                     </>}
                     {s.status === 'interviewed' && <>
-                      <button className="btn btn-sm btn-success" onClick={() => updateStatus(s.id, 'hired')}>Hire</button>
-                      {hasEmail && <button className="btn btn-sm btn-success" onClick={() => sendEmail(s.candidate_id, s.job_opening_id, s.candidate_name, s.email, 'offer')}>Send Offer</button>}
-                      <button className="btn btn-sm btn-danger" onClick={() => updateStatus(s.id, 'rejected')}>Reject</button>
+                      <button className="btn btn-sm btn-primary" onClick={() => handOffToHM(s)}>{'\u2709'} Hand Off to HM</button>
                       <button className="btn btn-sm btn-secondary" onClick={() => updateStatus(s.id, 'shortlisted')}>Back to Shortlist</button>
+                      <button className="btn btn-sm btn-danger" onClick={() => rejectFromShortlist(s)}>{'\u2717'} Reject</button>
                     </>}
                     {s.status === 'hired' && <>
                       <span className="card-state-badge card-state-badge--hired card-state-badge--enter">{'\u2713'} Hired</span>
@@ -376,6 +493,14 @@ export default function Shortlist() {
         allCandidates={data}
         isOpen={!!profileCandidate}
         onClose={() => setProfileCandidate(null)}
+      />
+
+      <InterviewQuestionsModal
+        candidate={interviewPrep?.candidate}
+        job={interviewPrep?.job}
+        isOpen={!!interviewPrep}
+        onClose={() => setInterviewPrep(null)}
+        onPackSent={handlePackSent}
       />
     </div>
   );
