@@ -20,13 +20,11 @@ export default function Emails() {
   const [emailData, setEmailData] = useState([]);
   const [statusFilter, setStatusFilter] = useState('all');
   const [loading, setLoading] = useState(false);
-  const [smtpStatus, setSmtpStatus] = useState(null);
   const [showSmtpHelp, setShowSmtpHelp] = useState(false);
   const [expandedRow, setExpandedRow] = useState(null); // email id of expanded row
 
   useEffect(() => {
     loadJobs();
-    checkSmtp();
   }, []);
 
   useEffect(() => {
@@ -62,13 +60,6 @@ export default function Emails() {
       setEmailData((res.data || []).filter(e => e.id));
     } catch (err) { showToast('Failed to load emails', 'error'); }
     finally { setLoading(false); }
-  }
-
-  async function checkSmtp() {
-    try {
-      const res = await fetch((import.meta.env.VITE_API_URL || 'http://localhost:5678/webhook') + '/email-history?job_id=0');
-      // We'll derive status from actual email data
-    } catch {}
   }
 
   // Filter pills now include 'inbound' (replies pulled by the IMAP poller).

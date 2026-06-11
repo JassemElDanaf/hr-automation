@@ -977,7 +977,7 @@
     {
       "parameters": {
         "respondWith": "json",
-        "responseBody": "={{ JSON.stringify({ success: false, error: 'Ollama unreachable \u2014 is it running on http://127.0.0.1:11434?' }) }}",
+        "responseBody": "={{ JSON.stringify({ success: false, error: 'Ollama unreachable — is it running on http://127.0.0.1:11434?' }) }}",
         "options": {
           "responseCode": 200
         }
@@ -1339,7 +1339,7 @@
     {
       "parameters": {
         "respondWith": "json",
-        "responseBody": "={{ JSON.stringify({ success: false, error: 'Ollama unreachable \u2014 is it running on http://127.0.0.1:11434?' }) }}",
+        "responseBody": "={{ JSON.stringify({ success: false, error: 'Ollama unreachable — is it running on http://127.0.0.1:11434?' }) }}",
         "options": {
           "responseCode": 200
         }

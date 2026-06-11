@@ -252,9 +252,9 @@ export default function EvalDetailModal({ candidate, allCandidates, job, isOpen,
 
           <div style={{ background: 'var(--gray-50)', borderRadius: 'var(--radius)', padding: '20px', marginBottom: '20px' }}>
             <h4 style={{ fontSize: '14px', fontWeight: 700, color: 'var(--gray-800)', marginBottom: '16px' }}>Score Breakdown</h4>
-            <ScoreBar label="Skills Match (40%)" score={c.skills_score} />
-            <ScoreBar label="Experience (35%)" score={c.experience_score} />
-            <ScoreBar label="Education (25%)" score={c.education_score} />
+            <ScoreBar label="Skills Match" score={c.skills_score} />
+            <ScoreBar label="Experience" score={c.experience_score} />
+            <ScoreBar label="Education" score={c.education_score} />
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '20px' }}>

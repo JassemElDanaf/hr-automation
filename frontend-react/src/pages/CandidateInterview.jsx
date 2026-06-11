@@ -410,12 +410,16 @@ export default function CandidateInterview() {
   }
 
   async function stopAndUploadRecording() {
+    // The recorder is usually already stopped by stopCamera() in finishInterview —
+    // the captured chunks survive in recordingChunksRef, so upload from those
+    // rather than bailing on recorder state.
     const rec = mediaRecorderRef.current;
-    if (!rec || rec.state === 'inactive') return null;
-    await new Promise(resolve => {
-      rec.onstop = resolve;
-      rec.stop();
-    });
+    if (rec && rec.state !== 'inactive') {
+      await new Promise(resolve => {
+        rec.onstop = resolve;
+        rec.stop();
+      });
+    }
     if (!recordingChunksRef.current.length) return null;
     try {
       const blob = new Blob(recordingChunksRef.current, { type: 'video/webm' });
@@ -494,9 +498,10 @@ export default function CandidateInterview() {
     };
     rec.onend = () => {
       setIsListening(false);
-      // Don't restart while loading next question — advanceQuestion calls startRecognition() explicitly
-      if (phaseRef.current === 'interview' && micOnRef.current && !loadingQRef.current)
-        setTimeout(() => { if (phaseRef.current === 'interview' && !loadingQRef.current) startRecognition(); }, 300);
+      // Don't restart while loading the next question or while TTS is speaking —
+      // both cases call startRecognition() explicitly when they're done.
+      if (phaseRef.current === 'interview' && micOnRef.current && !loadingQRef.current && !speakingRef.current)
+        setTimeout(() => { if (phaseRef.current === 'interview' && !loadingQRef.current && !speakingRef.current) startRecognition(); }, 300);
     };
     rec.onerror = (e) => {
       if (e.error === 'not-allowed' || e.error === 'service-not-available') {
@@ -625,7 +630,10 @@ export default function CandidateInterview() {
 
   async function submitInterview() {
     setSubmitting(true);
-    const tr = transcriptRef.current;
+    // completedPairs carries the candidate's review-screen edits; transcriptRef
+    // only has the original captured answers. Sync the ref so both agree.
+    const tr = completedPairs.length ? completedPairs : transcriptRef.current;
+    transcriptRef.current = tr;
     const duration = finalTimerRef.current;
     const base = { jobId: tokenData.jobId, evaluationId: tokenData.evaluationId, candidateId: tokenData.candidateId, candidateName: tokenData.candidateName, transcript: tr, durationSeconds: duration, customQuestions: tokenData.customQuestions || [] };
     // 1. Save immediately with empty scores

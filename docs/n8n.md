@@ -239,10 +239,13 @@ Open <http://localhost:5678>, find the workflow, toggle it OFF, then back ON.
 
 **Option B — REST API:**
 ```bash
-# Get session cookie
+# Get session cookie — credentials come from .env (gitignored):
+# N8N_REST_USER / N8N_REST_PASSWORD. Do not hardcode them here.
+# With N8N_USER_MANAGEMENT_DISABLED=true this endpoint may 404; webhooks
+# self-register ~15-30s after /healthz is ok, so usually just wait instead.
 curl -c /tmp/n8n.txt http://localhost:5678/rest/login -X POST \
   -H "Content-Type: application/json" \
-  -d '{"emailOrLdapLoginId":"j.danaf@diyarme.com","password":"Diyar2024!"}'
+  -d "{\"emailOrLdapLoginId\":\"$N8N_REST_USER\",\"password\":\"$N8N_REST_PASSWORD\"}"
 
 # Activate (replace WF_ID and VERSION_ID)
 curl -b /tmp/n8n.txt http://localhost:5678/rest/workflows/WF_ID/activate \

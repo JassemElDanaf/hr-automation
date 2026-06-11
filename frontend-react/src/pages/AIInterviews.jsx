@@ -120,7 +120,7 @@ export default function AIInterviews() {
       const base = { jobId: s.jobOpeningId, evaluationId: s.evaluationId, candidateId: s.candidateId, candidateName: s.candidateName, transcript: qaPairs, durationSeconds: s.durationSeconds };
       const evalRes = await apiPost('/interview/evaluate', base);
       const scores = evalRes.data || evalRes;
-      await apiPost('/interview/save-transcript', { ...base, scores, recordingPath: s.recordingPath || '' });
+      await apiPost('/interview/save-transcript', { ...base, scores, recordingPath: s.recordingPath || '', requirementsMatch: parseJSON(s.requirementsMatch) });
       showToast('Evaluation complete', 'success');
       const res = await apiGet(`/interview/sessions?jobId=${jobId}`);
       setSessions(res.data || res || []);
@@ -353,7 +353,16 @@ export default function AIInterviews() {
                           ))}
                         </div>
 
-                        {/* Manual eval */}
+                        {/* Re-evaluate + Manual eval */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
+                          <button
+                            onClick={() => reEvaluate(s)}
+                            disabled={reEvaluating[s.id]}
+                            style={{ fontSize: 12, padding: '5px 12px', borderRadius: 6, border: '1px solid #d97706', background: '#fff', color: '#b45309', cursor: reEvaluating[s.id] ? 'not-allowed' : 'pointer', fontFamily: 'inherit', fontWeight: 600 }}>
+                            {reEvaluating[s.id] ? 'Evaluating…' : '↻ Re-evaluate with AI'}
+                          </button>
+                        </div>
+
                         {!manualEditing[s.id] ? (
                           <button
                             onClick={() => setManualEditing(p => ({ ...p, [s.id]: {
@@ -376,17 +385,22 @@ export default function AIInterviews() {
                             onCancel={() => setManualEditing(p => { const n = { ...p }; delete n[s.id]; return n; })}
                             onSave={async () => {
                               const d = manualEditing[s.id];
+                              // Key names must match what the n8n IntTx - Prep node reads
+                              // (communication/technical/confidence/cultureFit/overall) —
+                              // anything else silently saves as 0.
                               const scores = {
-                                scoreComm: parseFloat(d.comm), scoreTech: parseFloat(d.tech),
-                                scoreConf: parseFloat(d.conf), scoreCulture: parseFloat(d.culture),
-                                scoreOverall: parseFloat(d.overall),
+                                communication: parseFloat(d.comm) || 0, technical: parseFloat(d.tech) || 0,
+                                confidence: parseFloat(d.conf) || 0, cultureFit: parseFloat(d.culture) || 0,
+                                overall: parseFloat(d.overall) || 0,
                                 summary: d.summary, recommendation: d.recommendation,
+                                perQuestion: parseJSON(s.perQuestion),
                               };
                               await apiPost('/interview/save-transcript', {
                                 jobId: s.jobOpeningId, evaluationId: s.evaluationId,
                                 candidateId: s.candidateId, candidateName: s.candidateName,
                                 transcript: parseJSON(s.qaPairs), durationSeconds: s.durationSeconds,
                                 scores, recordingPath: s.recordingPath || '',
+                                requirementsMatch: parseJSON(s.requirementsMatch),
                               });
                               showToast('Evaluation updated', 'success');
                               setManualEditing(p => { const n = { ...p }; delete n[s.id]; return n; });

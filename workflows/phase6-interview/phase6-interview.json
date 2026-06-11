@@ -215,7 +215,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const body = $input.first().json.body || $input.first().json || {};\nconst jobTitle = (body.jobTitle || 'the position').substring(0, 100);\nconst candidateName = (body.candidateName || 'the candidate').substring(0, 100);\nconst questionNumber = parseInt(body.questionNumber) || 1;\nconst totalQuestions = parseInt(body.totalQuestions) || 10;\nconst language = body.language === 'ar' ? 'Arabic' : 'English';\nconst isFirst = !!body.isFirst;\nconst transcript = Array.isArray(body.transcript) ? body.transcript.slice(-4) : [];\nconst recentLines = transcript.map(t => `[${t.time||''}] ${t.speaker}: ${t.text}`).join('\\n');\nconst contextBlock = recentLines ? `\\nRecent conversation:\\n${recentLines}\\n` : '';\nconst prompt = `You are an AI interviewer conducting a structured job interview for the position of ${jobTitle} at Diyar United Company.\\nCandidate: ${candidateName}${contextBlock}\\n\\nGenerate interview question ${questionNumber} of ${totalQuestions}.\\n${isFirst ? 'This is the opening question \u2014 start with something to put the candidate at ease, like about their background or motivation.' : 'Build naturally on the conversation so far.'}\\nLanguage: ${language}\\n\\nReturn ONLY valid JSON:\\n{\\\"question\\\": \\\"Your interview question here\\\"}`;\nreturn [{ json: { requestBody: { model: 'qwen3:4b', prompt, think: false, stream: false, format: 'json', options: { temperature: 0.7, num_predict: 300 } } } }];"
+        "jsCode": "const body = $input.first().json.body || $input.first().json || {};\nconst jobTitle = (body.jobTitle || 'the position').substring(0, 100);\nconst candidateName = (body.candidateName || 'the candidate').substring(0, 100);\nconst questionNumber = parseInt(body.questionNumber) || 1;\nconst totalQuestions = parseInt(body.totalQuestions) || 10;\nconst language = body.language === 'ar' ? 'Arabic' : 'English';\nconst isFirst = !!body.isFirst;\nconst transcript = Array.isArray(body.transcript) ? body.transcript.slice(-4) : [];\nconst recentLines = transcript.map(t => `[${t.time||''}] ${t.speaker}: ${t.text}`).join('\\n');\nconst contextBlock = recentLines ? `\\nRecent conversation:\\n${recentLines}\\n` : '';\nconst prompt = `You are an AI interviewer conducting a structured job interview for the position of ${jobTitle} at Diyar United Company.\\nCandidate: ${candidateName}${contextBlock}\\n\\nGenerate interview question ${questionNumber} of ${totalQuestions}.\\n${isFirst ? 'This is the opening question — start with something to put the candidate at ease, like about their background or motivation.' : 'Build naturally on the conversation so far.'}\\nLanguage: ${language}\\n\\nReturn ONLY valid JSON:\\n{\\\"question\\\": \\\"Your interview question here\\\"}`;\nreturn [{ json: { requestBody: { model: 'qwen3:4b', prompt, think: false, stream: false, format: 'json', options: { temperature: 0.7, num_predict: 300 } } } }];"
       },
       "id": "build-intv-nextq",
       "name": "IntNextQ - Build Prompt",
@@ -295,7 +295,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const body = $input.first().json.body || $input.first().json || {};\nconst jobTitle = (body.jobTitle || 'the position').substring(0, 100);\nconst candidateName = (body.candidateName || 'the candidate').substring(0, 100);\nconst duration = parseInt(body.duration) || 0;\nconst minutes = Math.floor(duration/60);\nconst qaPairs = Array.isArray(body.qaPairs) ? body.qaPairs : (Array.isArray(body.transcript) ? body.transcript : []);\nconst customQuestions = Array.isArray(body.customQuestions) ? body.customQuestions : [];\nconst modelAnswerMap = {};\ncustomQuestions.forEach((q, i) => { if (q.modelAnswer && q.modelAnswer.trim()) modelAnswerMap[i] = q.modelAnswer.trim(); });\nconst hasRubric = Object.keys(modelAnswerMap).length > 0;\nconst qText = qaPairs.map((p, i) => { const ma = modelAnswerMap[i]; const rubricLine = ma ? '\\nExpected answer: ' + ma : ''; return 'Q' + (i+1) + '. ' + (p.question||'') + rubricLine + '\\nCandidate\\'s answer: ' + ((p.answer||'(no answer captured)').substring(0,500)); }).join('\\n\\n');\nconst rubricInstruction = hasRubric ? '\\nFor questions with an \"Expected answer\", score the candidate primarily based on how well their answer aligns with that rubric.' : '';\nconst prompt = 'You are an expert HR evaluator assessing a completed AI-conducted job interview.\\n\\nPosition: ' + jobTitle + '\\nCandidate: ' + candidateName + '\\nDuration: ' + minutes + ' minute(s), ' + qaPairs.length + ' questions asked\\n\\nQuestions and Answers:\\n' + (qText||'No Q&A captured.') + rubricInstruction + '\\n\\nRate the candidate 1-10 on:\\n- communication: clarity, articulation, listening\\n- technical: knowledge and skills for the role\\n- confidence: delivery and conviction\\n- cultureFit: professional values alignment\\n\\nReturn ONLY valid JSON (no extra text):\\n{\\n  \\\"communication\\\": 7,\\n  \\\"technical\\\": 7,\\n  \\\"confidence\\\": 6,\\n  \\\"cultureFit\\\": 7,\\n  \\\"overall\\\": 7,\\n  \\\"summary\\\": \\\"2-3 sentence performance summary\\\",\\n  \\\"recommendation\\\": \\\"Hire / Consider / Don\\'t Recommend \u2014 1-2 sentence justification\\\",\\n  \\\"perQuestion\\\": [{\\\"index\\\": 1, \\\"score\\\": 7, \\\"feedback\\\": \\\"one sentence feedback\\\"}]\\n}';\nreturn [{ json: { requestBody: { model: 'qwen3:4b', prompt, think: false, stream: false, format: 'json', options: { temperature: 0.2, num_predict: 2000 } } } }];"
+        "jsCode": "const body = $input.first().json.body || $input.first().json || {};\nconst jobTitle = (body.jobTitle || 'the position').substring(0, 100);\nconst candidateName = (body.candidateName || 'the candidate').substring(0, 100);\nconst duration = parseInt(body.durationSeconds || body.duration) || 0;\nconst minutes = Math.floor(duration/60);\nconst qaPairs = Array.isArray(body.qaPairs) ? body.qaPairs : (Array.isArray(body.transcript) ? body.transcript : []);\nconst customQuestions = Array.isArray(body.customQuestions) ? body.customQuestions : [];\nconst modelAnswerMap = {};\ncustomQuestions.forEach((q, i) => { if (q.modelAnswer && q.modelAnswer.trim()) modelAnswerMap[i] = q.modelAnswer.trim(); });\nconst hasRubric = Object.keys(modelAnswerMap).length > 0;\n\nconst REQ_CATEGORIES = ['salary', 'iqama', 'notice', 'location'];\nconst requirementQs = [];\ncustomQuestions.forEach((q, i) => { if (REQ_CATEGORIES.includes((q.category||'').toLowerCase()) && q.modelAnswer && q.modelAnswer.trim()) requirementQs.push({ index: i, category: (q.category||'').toLowerCase(), question: q.question || q.text || '', requirement: q.modelAnswer.trim() }); });\nconst hasRequirements = requirementQs.length > 0;\n\nconst noResponseCount = qaPairs.filter(p => {\n  const a = (p.answer || '').trim().toLowerCase();\n  return a === '(no response)' || a === '(no answer captured)' || a === '';\n}).length;\nconst totalQ = qaPairs.length;\n\nconst qText = qaPairs.map((p, i) => {\n  const ma = modelAnswerMap[i];\n  const rubricLine = ma ? '\\nExpected answer: ' + ma : '';\n  return 'Q' + (i+1) + '. ' + (p.question||'') + rubricLine + '\\nCandidate\\'s answer: ' + ((p.answer||'(no answer captured)').substring(0,500));\n}).join('\\n\\n');\n\nconst rubricInstruction = hasRubric ? '\\nFor questions with an \"Expected answer\", score primarily on alignment with that rubric.' : '';\n\nconst requirementsBlock = hasRequirements ? '\\n\\nREQUIREMENTS TO EXTRACT:\\n' + requirementQs.map(r => '- Q' + (r.index+1) + ' [' + r.category + ']: \"' + r.question + '\" -> Required: \"' + r.requirement + '\"').join('\\n') + '\\n\\nFor each requirement above, extract the candidate\\'s stated answer and determine if it meets the requirement (met: true/false).' : '';\nconst requirementsJson = hasRequirements ? ',\\n  \"requirements\": [{\"index\": 1, \"category\": \"salary\", \"question\": \"...\", \"requirement\": \"...\", \"extracted\": \"candidate stated value\", \"met\": true, \"note\": \"brief note\"}]' : '';\n\nconst penaltyInstruction = noResponseCount === 0 ? '' :\n  '\\n\\nPENALTY RULES (non-negotiable):\\n' +\n  '- Every \"(no response)\" or \"(no answer captured)\" answer scores 1-2 for that question — the candidate said nothing.\\n' +\n  (noResponseCount >= Math.ceil(totalQ / 2)\n    ? '- The candidate failed to answer ' + noResponseCount + ' out of ' + totalQ + ' questions. Overall MUST be ≤ 3.\\n'\n    : '- The candidate failed to answer ' + noResponseCount + ' out of ' + totalQ + ' questions. Overall MUST be ≤ 5.\\n') +\n  '- Do NOT inflate scores based on one good answer. Score reflects the full interview, not cherry-picked moments.\\n' +\n  '- overall must equal the rounded average of communication + technical + confidence + cultureFit — do not independently estimate it.';\n\nconst prompt = 'You are a strict HR evaluator for a competitive role. Score honestly — unanswered questions are a serious red flag.\\n\\nPosition: ' + jobTitle + '\\nCandidate: ' + candidateName + '\\nDuration: ' + minutes + ' minute(s), ' + totalQ + ' questions asked\\n\\nQuestions and Answers:\\n' + (qText||'No Q&A captured.') + rubricInstruction + requirementsBlock + penaltyInstruction + '\\n\\nRate 1-10 on each dimension. Return ONLY valid JSON:\\n{\\n  \"communication\": <score>,\\n  \"technical\": <score>,\\n  \"confidence\": <score>,\\n  \"cultureFit\": <score>,\\n  \"overall\": <average of above 4>,\\n  \"summary\": \"2-3 sentence honest performance summary\",\\n  \"recommendation\": \"Hire / Consider / Don\\'t Recommend — 1-2 sentence justification\",\\n  \"perQuestion\": [{\"index\": 1, \"score\": <score>, \"feedback\": \"one sentence\"}]' + requirementsJson + '\\n}';\n\nreturn [{ json: { requestBody: { model: 'qwen3:4b', prompt, think: false, stream: false, format: 'json', options: { temperature: 0.2, num_predict: 2500 } } } }];"
       },
       "id": "build-intv-eval",
       "name": "IntEval - Build Prompt",
@@ -328,7 +328,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const raw = $input.first().json;\nlet text = (raw.response || '').trim();\ntext = text.replace(/<think>[\\s\\S]*?<\\/think>/gi,'').replace(/^```json\\s*/i,'').replace(/```\\s*$/i,'').trim();\nfunction ex(t) { try { return JSON.parse(t); } catch {} const s=t.indexOf('{'),e=t.lastIndexOf('}'); if(s<0||e<s) return null; try { return JSON.parse(t.slice(s,e+1)); } catch { return null; } }\nfunction c(v) { const n=parseFloat(v); return isNaN(n)?0:Math.min(10,Math.max(0,Math.round(n*10)/10)); }\nconst p = ex(text);\nreturn [{ json: { communication: p?c(p.communication):0, technical: p?c(p.technical):0, confidence: p?c(p.confidence):0, cultureFit: p?c(p.cultureFit):0, overall: p?c(p.overall):0, summary: p?.summary||'Evaluation could not be generated. Please check the n8n workflow.', recommendation: p?.recommendation||'', perQuestion: p?.perQuestion||[] } }];"
+        "jsCode": "const raw = $input.first().json;\nlet text = (raw.response || '').trim();\ntext = text.replace(/<think>[\\s\\S]*?<\\/think>/gi,'').replace(/^```json\\s*/i,'').replace(/```\\s*$/i,'').trim();\nfunction ex(t) { try { return JSON.parse(t); } catch {} const s=t.indexOf('{'),e=t.lastIndexOf('}'); if(s<0||e<s) return null; try { return JSON.parse(t.slice(s,e+1)); } catch { return null; } }\nfunction c(v) { const n=parseFloat(v); return isNaN(n)?0:Math.min(10,Math.max(0,Math.round(n*10)/10)); }\nconst p = ex(text);\nreturn [{ json: { communication: p?c(p.communication):0, technical: p?c(p.technical):0, confidence: p?c(p.confidence):0, cultureFit: p?c(p.cultureFit):0, overall: p?c(p.overall):0, summary: p?.summary||'Evaluation could not be generated.', recommendation: p?.recommendation||'', perQuestion: p?.perQuestion||[], requirements: p?.requirements||[] } }];"
       },
       "id": "parse-intv-eval",
       "name": "IntEval - Parse",
@@ -375,42 +375,8 @@
     },
     {
       "parameters": {
-        "jsCode": "const body = $input.first().json.body;\nconst scores = body.scores || {};\nconst evalId = parseInt(body.evaluationId) || 0;\nreturn [{\n  json: {\n    jobId: parseInt(body.jobId) || 0,\n    candidateId: parseInt(body.candidateId) || 0,\n    evaluationId: evalId > 0 ? evalId : null,\n    candidateName: (body.candidateName || '').replace(/'/g, \"''\"),\n    durationSeconds: parseInt(body.durationSeconds) || 0,\n    transcript: JSON.stringify(body.transcript || []).replace(/'/g, \"''\"),\n    qaPairs: JSON.stringify(body.transcript || []).replace(/'/g, \"''\"),\n    communication: parseFloat(scores.communication) || 0,\n    technical: parseFloat(scores.technical) || 0,\n    confidence: parseFloat(scores.confidence) || 0,\n    cultureFit: parseFloat(scores.cultureFit) || 0,\n    overall: parseFloat(scores.overall) || 0,\n    summary: (scores.summary || '').replace(/'/g, \"''\"),\n    recommendation: (scores.recommendation || '').replace(/'/g, \"''\"),\n    perQuestion: JSON.stringify(scores.perQuestion || []).replace(/'/g, \"''\")\n  }\n}];"
-      },
-      "id": "prep-intv-tx",
-      "name": "IntTx - Prep",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        480,
-        1100
-      ]
-    },
-    {
-      "parameters": {
-        "operation": "executeQuery",
-        "query": "INSERT INTO interview_sessions (\n  job_opening_id, candidate_id, evaluation_id, candidate_name,\n  duration_seconds, transcript, qa_pairs,\n  score_communication, score_technical, score_confidence, score_culture_fit, score_overall,\n  summary, recommendation, per_question\n) VALUES (\n  {{ $json.jobId }}, {{ $json.candidateId }},\n  {{ $json.evaluationId !== null && $json.evaluationId !== undefined ? $json.evaluationId : 'NULL' }},\n  '{{ $json.candidateName }}',\n  {{ $json.durationSeconds }}, '{{ $json.transcript }}'::jsonb, '{{ $json.qaPairs }}'::jsonb,\n  {{ $json.communication }}, {{ $json.technical }}, {{ $json.confidence }}, {{ $json.cultureFit }}, {{ $json.overall }},\n  '{{ $json.summary }}', '{{ $json.recommendation }}', '{{ $json.perQuestion }}'::jsonb\n)\nON CONFLICT (candidate_id, job_opening_id) DO UPDATE SET\n  duration_seconds     = EXCLUDED.duration_seconds,\n  transcript           = EXCLUDED.transcript,\n  qa_pairs             = EXCLUDED.qa_pairs,\n  score_communication  = EXCLUDED.score_communication,\n  score_technical      = EXCLUDED.score_technical,\n  score_confidence     = EXCLUDED.score_confidence,\n  score_culture_fit    = EXCLUDED.score_culture_fit,\n  score_overall        = EXCLUDED.score_overall,\n  summary              = EXCLUDED.summary,\n  recommendation       = EXCLUDED.recommendation,\n  per_question         = EXCLUDED.per_question\nRETURNING id",
-        "options": {}
-      },
-      "id": "save-intv-tx",
-      "name": "IntTx - Save",
-      "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2.5,
-      "position": [
-        710,
-        1100
-      ],
-      "credentials": {
-        "postgres": {
-          "id": "1",
-          "name": "HR PostgreSQL"
-        }
-      }
-    },
-    {
-      "parameters": {
         "respondWith": "json",
-        "responseBody": "={{ JSON.stringify({ success: true, message: 'Transcript received', id: $json.id }) }}",
+        "responseBody": "={{ JSON.stringify({ success: true, message: 'Transcript received' }) }}",
         "options": {
           "responseCode": 200
         }
@@ -420,44 +386,65 @@
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
       "position": [
-        940,
+        1170,
         1100
       ]
     },
     {
       "parameters": {
+        "jsCode": "const body = $input.first().json.body;\nconst scores = body.scores || {};\nconst evalId = parseInt(body.evaluationId) || 0;\nreturn [{\n  json: {\n    jobId: parseInt(body.jobId) || 0,\n    candidateId: parseInt(body.candidateId) || 0,\n    evaluationId: evalId > 0 ? evalId : null,\n    candidateName: (body.candidateName || '').replace(/'/g, \"''\"),\n    durationSeconds: parseInt(body.durationSeconds) || 0,\n    transcript: JSON.stringify(body.transcript || []).replace(/'/g, \"''\"),\n    qaPairs: JSON.stringify(body.transcript || []).replace(/'/g, \"''\"),\n    communication: parseFloat(scores.communication) || 0,\n    technical: parseFloat(scores.technical) || 0,\n    confidence: parseFloat(scores.confidence) || 0,\n    cultureFit: parseFloat(scores.cultureFit) || 0,\n    overall: parseFloat(scores.overall) || 0,\n    summary: (scores.summary || '').replace(/'/g, \"''\"),\n    recommendation: (scores.recommendation || '').replace(/'/g, \"''\"),\n    perQuestion: JSON.stringify(scores.perQuestion || []).replace(/'/g, \"''\"),\n    recordingPath: (body.recordingPath || '').replace(/'/g, \"''\"),\n    requirementsMatch: JSON.stringify(scores.requirements || body.requirementsMatch || []).replace(/'/g, \"''\")\n  }\n}];"
+      },
+      "id": "prep-intv-tx",
+      "name": "IntTx - Prep",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1200,
+        1500
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO interview_sessions (\n  job_opening_id, candidate_id, evaluation_id, candidate_name,\n  duration_seconds, transcript, qa_pairs,\n  score_communication, score_technical, score_confidence, score_culture_fit, score_overall,\n  summary, recommendation, per_question, recording_path, requirements_match\n) VALUES (\n  {{ $json.jobId }}, {{ $json.candidateId }},\n  {{ $json.evaluationId !== null && $json.evaluationId !== undefined ? $json.evaluationId : 'NULL' }},\n  '{{ $json.candidateName }}',\n  {{ $json.durationSeconds }}, '{{ $json.transcript }}'::jsonb, '{{ $json.qaPairs }}'::jsonb,\n  {{ $json.communication }}, {{ $json.technical }}, {{ $json.confidence }}, {{ $json.cultureFit }}, {{ $json.overall }},\n  '{{ $json.summary }}', '{{ $json.recommendation }}', '{{ $json.perQuestion }}'::jsonb,\n  '{{ $json.recordingPath }}', '{{ $json.requirementsMatch }}'::jsonb\n)\nON CONFLICT (candidate_id, job_opening_id) DO UPDATE SET\n  duration_seconds     = EXCLUDED.duration_seconds,\n  transcript           = EXCLUDED.transcript,\n  qa_pairs             = EXCLUDED.qa_pairs,\n  score_communication  = EXCLUDED.score_communication,\n  score_technical      = EXCLUDED.score_technical,\n  score_confidence     = EXCLUDED.score_confidence,\n  score_culture_fit    = EXCLUDED.score_culture_fit,\n  score_overall        = EXCLUDED.score_overall,\n  summary              = EXCLUDED.summary,\n  recommendation       = EXCLUDED.recommendation,\n  per_question         = EXCLUDED.per_question,\n  recording_path       = CASE WHEN EXCLUDED.recording_path <> '' THEN EXCLUDED.recording_path ELSE interview_sessions.recording_path END,\n  requirements_match   = CASE WHEN EXCLUDED.requirements_match::text <> '[]' THEN EXCLUDED.requirements_match ELSE interview_sessions.requirements_match END\nRETURNING id",
+        "options": {}
+      },
+      "id": "save-intv-tx",
+      "name": "IntTx - Save",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1440,
+        1500
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "1",
+          "name": "Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
         "httpMethod": "GET",
         "path": "interview/sessions",
-        "responseMode": "responseNode",
-        "options": {}
+        "options": {},
+        "responseMode": "responseNode"
       },
       "id": "wh-intv-sessions",
       "name": "IntSess - Webhook",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
       "position": [
-        250,
-        1300
+        800,
+        1700
       ],
-      "webhookId": "interview-sessions"
-    },
-    {
-      "parameters": {
-        "jsCode": "const qs = $input.first().json.query || {};\nconst jobId = parseInt(qs.jobId) || 0;\nif (!jobId) throw new Error('jobId required');\nreturn [{ json: { jobId } }];"
-      },
-      "id": "prep-intv-sessions",
-      "name": "IntSess - Prep",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        480,
-        1300
-      ]
+      "webhookId": "intSessWebhook"
     },
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "SELECT \n  s.id,\n  s.candidate_id AS \"candidateId\",\n  s.evaluation_id AS \"evaluationId\",\n  s.job_opening_id AS \"jobOpeningId\",\n  s.candidate_name AS \"candidateName\",\n  s.duration_seconds AS \"durationSeconds\",\n  s.score_communication AS \"scoreComm\",\n  s.score_technical AS \"scoreTech\",\n  s.score_confidence AS \"scoreConf\",\n  s.score_culture_fit AS \"scoreCulture\",\n  s.score_overall AS \"scoreOverall\",\n  s.summary,\n  s.recommendation,\n  s.per_question AS \"perQuestion\",\n  s.qa_pairs AS \"qaPairs\",\n  s.created_at AS \"completedAt\",\n  c.email AS \"candidateEmail\"\nFROM interview_sessions s\nJOIN candidates c ON c.id = s.candidate_id\nWHERE s.job_opening_id = {{ $json.jobId }}::integer\nORDER BY s.created_at DESC",
+        "query": "SELECT \n  s.id,\n  s.candidate_id AS \"candidateId\",\n  s.evaluation_id AS \"evaluationId\",\n  s.job_opening_id AS \"jobOpeningId\",\n  COALESCE(s.candidate_name, c.candidate_name) AS \"candidateName\",\n  s.duration_seconds AS \"durationSeconds\",\n  s.score_communication AS \"scoreComm\",\n  s.score_technical AS \"scoreTech\",\n  s.score_confidence AS \"scoreConf\",\n  s.score_culture_fit AS \"scoreCulture\",\n  s.score_overall AS \"scoreOverall\",\n  s.summary,\n  s.recommendation,\n  s.per_question AS \"perQuestion\",\n  s.qa_pairs AS \"qaPairs\",\n  s.recording_path AS \"recordingPath\",\n  s.requirements_match AS \"requirementsMatch\",\n  s.created_at AS \"completedAt\",\n  c.email AS \"candidateEmail\",\n  (c.cv_file_data IS NOT NULL AND length(c.cv_file_data::text) > 10) AS \"hasCv\"\nFROM interview_sessions s\nJOIN candidates c ON c.id = s.candidate_id\nWHERE s.job_opening_id = {{ $json.jobId }}::integer\nORDER BY s.created_at DESC",
         "options": {}
       },
       "id": "fetch-intv-sessions",
@@ -465,14 +452,13 @@
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
       "position": [
-        710,
-        1300
+        1040,
+        1700
       ],
-      "alwaysOutputData": true,
       "credentials": {
         "postgres": {
           "id": "1",
-          "name": "HR PostgreSQL"
+          "name": "Postgres"
         }
       }
     },
@@ -489,9 +475,448 @@
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
       "position": [
-        940,
+        1280,
+        1700
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const qs = $input.first().json.query || {};\nconst jobId = parseInt(qs.jobId) || 0;\nif (!jobId) throw new Error('jobId required');\nreturn [{ json: { jobId } }];"
+      },
+      "id": "prep-intv-sessions",
+      "name": "IntSess - Prep",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        480,
         1300
       ]
+    },
+    {
+      "id": "qbank-wh-get",
+      "name": "QBank - GET",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        2200,
+        0
+      ],
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "interview/question-bank",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "webhookId": "qbank-get"
+    },
+    {
+      "id": "qbank-query",
+      "name": "QBank - Query",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        2400,
+        0
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT id, question, category, job_type AS \"jobType\", model_answer AS \"modelAnswer\", times_used AS \"timesUsed\", created_at AS \"createdAt\" FROM question_bank ORDER BY created_at DESC",
+        "options": {}
+      },
+      "credentials": {
+        "postgres": {
+          "id": "1",
+          "name": "Postgres"
+        }
+      }
+    },
+    {
+      "id": "qbank-resp-get",
+      "name": "QBank - Response GET",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        2600,
+        0
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($input.all().map(i => i.json)) }}",
+        "options": {
+          "responseCode": 200
+        }
+      }
+    },
+    {
+      "id": "qbank-wh-post",
+      "name": "QBank - POST",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        2200,
+        200
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "interview/question-bank",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "webhookId": "qbank-post"
+    },
+    {
+      "id": "qbank-insert",
+      "name": "QBank - Insert",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        2400,
+        200
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO question_bank (question, category, job_type, model_answer) VALUES ('{{ $json.body.question }}', '{{ $json.body.category || 'hr' }}', '{{ $json.body.jobType || '' }}', '{{ $json.body.modelAnswer || '' }}') RETURNING id, question, category, job_type AS \"jobType\", model_answer AS \"modelAnswer\", times_used AS \"timesUsed\"",
+        "options": {}
+      },
+      "credentials": {
+        "postgres": {
+          "id": "1",
+          "name": "Postgres"
+        }
+      }
+    },
+    {
+      "id": "qbank-resp-post",
+      "name": "QBank - Response POST",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        2600,
+        200
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($input.first().json) }}",
+        "options": {
+          "responseCode": 201
+        }
+      }
+    },
+    {
+      "id": "qbank-wh-del",
+      "name": "QBank - DELETE",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        2200,
+        400
+      ],
+      "parameters": {
+        "httpMethod": "DELETE",
+        "path": "interview/question-bank",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "webhookId": "qbank-delete"
+    },
+    {
+      "id": "qbank-delete",
+      "name": "QBank - Delete",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        2400,
+        400
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "DELETE FROM question_bank WHERE id = {{ $json.query.id }}::integer RETURNING id",
+        "options": {}
+      },
+      "credentials": {
+        "postgres": {
+          "id": "1",
+          "name": "Postgres"
+        }
+      }
+    },
+    {
+      "id": "qbank-resp-del",
+      "name": "QBank - Response DELETE",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        2600,
+        400
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\"deleted\": true}",
+        "options": {
+          "responseCode": 200
+        }
+      }
+    },
+    {
+      "id": "qbank-wh-put",
+      "name": "QBank - PUT",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        2200,
+        600
+      ],
+      "parameters": {
+        "httpMethod": "PUT",
+        "path": "interview/question-bank",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "webhookId": "qbank-put"
+    },
+    {
+      "id": "qbank-update",
+      "name": "QBank - Update",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        2400,
+        600
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE question_bank SET question='{{ $json.body.question }}', category='{{ $json.body.category }}', job_type='{{ $json.body.jobType || '' }}', model_answer='{{ $json.body.modelAnswer || '' }}' WHERE id={{ ($json.query && $json.query.id) || $json.body.id }}::integer RETURNING id, question, category, job_type AS \"jobType\", model_answer AS \"modelAnswer\"",
+        "options": {}
+      },
+      "credentials": {
+        "postgres": {
+          "id": "1",
+          "name": "Postgres"
+        }
+      }
+    },
+    {
+      "id": "qbank-resp-put",
+      "name": "QBank - Response PUT",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        2600,
+        600
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($input.first().json) }}",
+        "options": {
+          "responseCode": 200
+        }
+      }
+    },
+    {
+      "id": "wh-cq-save",
+      "name": "CQ Save - Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        250,
+        700
+      ],
+      "webhookId": "candidate-questions-save",
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "candidate-questions",
+        "responseMode": "responseNode",
+        "options": {}
+      }
+    },
+    {
+      "id": "cq-save-code",
+      "name": "CQ Save - Build Query",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        480,
+        700
+      ],
+      "parameters": {
+        "jsCode": "const body = $input.first().json.body || $input.first().json || {};\nconst candidateId   = parseInt(body.candidate_id);\nconst jobOpeningId  = parseInt(body.job_opening_id);\nconst questions     = Array.isArray(body.questions)   ? body.questions   : [];\nconst notes         = Array.isArray(body.notes)       ? body.notes       : [];\nconst generalNotes  = String(body.general_notes || '').substring(0, 20000);\nconst meeting       = body.meeting || {};\n\nif (!candidateId  || isNaN(candidateId))  return [{ json: { error: true, message: 'candidate_id required' } }];\nif (!jobOpeningId || isNaN(jobOpeningId)) return [{ json: { error: true, message: 'job_opening_id required' } }];\n\nfunction pgEsc(s) { return s.replace(/'/g, \"''\"); }\n\nconst qJson  = pgEsc(JSON.stringify(questions));\nconst nJson  = pgEsc(JSON.stringify(notes));\nconst gNotes = pgEsc(generalNotes);\nconst mJson  = pgEsc(JSON.stringify(meeting));\n\nconst sql = `INSERT INTO candidate_prepared_questions (candidate_id, job_opening_id, questions, notes, general_notes, meeting, updated_at) VALUES (${candidateId}, ${jobOpeningId}, '${qJson}'::jsonb, '${nJson}'::jsonb, '${gNotes}', '${mJson}'::jsonb, NOW()) ON CONFLICT (candidate_id, job_opening_id) DO UPDATE SET questions = EXCLUDED.questions, notes = EXCLUDED.notes, general_notes = EXCLUDED.general_notes, meeting = EXCLUDED.meeting, updated_at = NOW() RETURNING id, candidate_id, job_opening_id, updated_at`;\n\nreturn [{ json: { sql, ok: true } }];"
+      }
+    },
+    {
+      "id": "cq-save-pg",
+      "name": "CQ Save - Upsert",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        710,
+        700
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "={{ $json.sql }}",
+        "options": {}
+      },
+      "credentials": {
+        "postgres": {
+          "id": "1",
+          "name": "HR PostgreSQL"
+        }
+      }
+    },
+    {
+      "id": "cq-save-resp",
+      "name": "CQ Save - Respond",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        940,
+        700
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ success: true, id: $input.first().json.id }) }}",
+        "options": {
+          "responseCode": 200
+        }
+      }
+    },
+    {
+      "id": "wh-cq-get",
+      "name": "CQ Get - Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        250,
+        900
+      ],
+      "webhookId": "candidate-questions-get",
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "candidate-questions",
+        "responseMode": "responseNode",
+        "options": {}
+      }
+    },
+    {
+      "id": "cq-get-code",
+      "name": "CQ Get - Validate",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        480,
+        900
+      ],
+      "parameters": {
+        "jsCode": "const q = $input.first().json.query || {};\nconst candidateId  = parseInt(q.candidate_id);\nconst jobId        = parseInt(q.job_id);\nif (!candidateId || !jobId) return [{ json: { error: true, message: 'candidate_id and job_id required' } }];\nreturn [{ json: {\n  sql: `SELECT id, candidate_id, job_opening_id, questions, notes, general_notes, meeting, updated_at FROM candidate_prepared_questions WHERE candidate_id = ${candidateId} AND job_opening_id = ${jobId} LIMIT 1`\n} }];"
+      }
+    },
+    {
+      "id": "cq-get-pg",
+      "name": "CQ Get - Query",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        710,
+        900
+      ],
+      "alwaysOutputData": true,
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "={{ $json.sql }}",
+        "options": {}
+      },
+      "credentials": {
+        "postgres": {
+          "id": "1",
+          "name": "HR PostgreSQL"
+        }
+      }
+    },
+    {
+      "id": "cq-get-resp",
+      "name": "CQ Get - Respond",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        940,
+        900
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($input.first().json) }}",
+        "options": {
+          "responseCode": 200
+        }
+      }
+    },
+    {
+      "id": "wh-cq-list",
+      "name": "CQ List - Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        250,
+        1100
+      ],
+      "webhookId": "candidate-questions-list",
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "candidate-questions-list",
+        "responseMode": "responseNode",
+        "options": {}
+      }
+    },
+    {
+      "id": "cq-list-code",
+      "name": "CQ List - Validate",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        480,
+        1100
+      ],
+      "parameters": {
+        "jsCode": "const q = $input.first().json.query || {};\nconst jobId = parseInt(q.job_id);\nif (!jobId) return [{ json: { error: true, message: 'job_id required' } }];\nreturn [{ json: {\n  sql: `SELECT cpq.id, cpq.candidate_id, cpq.job_opening_id, cpq.questions, cpq.general_notes, cpq.meeting, cpq.updated_at, c.candidate_name, c.email, jo.job_title, jo.department FROM candidate_prepared_questions cpq JOIN candidates c ON c.id = cpq.candidate_id JOIN job_openings jo ON jo.id = cpq.job_opening_id WHERE cpq.job_opening_id = ${jobId} ORDER BY cpq.updated_at DESC`\n} }];"
+      }
+    },
+    {
+      "id": "cq-list-pg",
+      "name": "CQ List - Query",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        710,
+        1100
+      ],
+      "alwaysOutputData": true,
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "={{ $json.sql }}",
+        "options": {}
+      },
+      "credentials": {
+        "postgres": {
+          "id": "1",
+          "name": "HR PostgreSQL"
+        }
+      }
+    },
+    {
+      "id": "cq-list-resp",
+      "name": "CQ List - Respond",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        940,
+        1100
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($input.all().map(i => i.json).filter(r => r.candidate_id)) }}",
+        "options": {
+          "responseCode": 200
+        }
+      }
     }
   ],
   "connections": {
@@ -715,6 +1140,17 @@
         ]
       ]
     },
+    "IntSess - Query": {
+      "main": [
+        [
+          {
+            "node": "IntSess - Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
     "IntSess - Prep": {
       "main": [
         [
@@ -726,11 +1162,187 @@
         ]
       ]
     },
-    "IntSess - Query": {
+    "QBank - GET": {
       "main": [
         [
           {
-            "node": "IntSess - Response",
+            "node": "QBank - Query",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "QBank - Query": {
+      "main": [
+        [
+          {
+            "node": "QBank - Response GET",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "QBank - POST": {
+      "main": [
+        [
+          {
+            "node": "QBank - Insert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "QBank - Insert": {
+      "main": [
+        [
+          {
+            "node": "QBank - Response POST",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "QBank - DELETE": {
+      "main": [
+        [
+          {
+            "node": "QBank - Delete",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "QBank - Delete": {
+      "main": [
+        [
+          {
+            "node": "QBank - Response DELETE",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "QBank - PUT": {
+      "main": [
+        [
+          {
+            "node": "QBank - Update",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "QBank - Update": {
+      "main": [
+        [
+          {
+            "node": "QBank - Response PUT",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "CQ Save - Webhook": {
+      "main": [
+        [
+          {
+            "node": "CQ Save - Build Query",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "CQ Save - Build Query": {
+      "main": [
+        [
+          {
+            "node": "CQ Save - Upsert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "CQ Save - Upsert": {
+      "main": [
+        [
+          {
+            "node": "CQ Save - Respond",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "CQ Get - Webhook": {
+      "main": [
+        [
+          {
+            "node": "CQ Get - Validate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "CQ Get - Validate": {
+      "main": [
+        [
+          {
+            "node": "CQ Get - Query",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "CQ Get - Query": {
+      "main": [
+        [
+          {
+            "node": "CQ Get - Respond",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "CQ List - Webhook": {
+      "main": [
+        [
+          {
+            "node": "CQ List - Validate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "CQ List - Validate": {
+      "main": [
+        [
+          {
+            "node": "CQ List - Query",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "CQ List - Query": {
+      "main": [
+        [
+          {
+            "node": "CQ List - Respond",
             "type": "main",
             "index": 0
           }

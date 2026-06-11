@@ -1,7 +1,7 @@
 @echo off
 REM Diyar HR Automation - shutdown script
 REM Stops everything launch.bat / start.sh brings up, in reverse order:
-REM   React frontend (3001) -> n8n (5678) -> SMTP sidecar (8901) -> Ollama (11434) -> hr-postgres
+REM   React frontend (3001) -> n8n (5678) -> SMTP (8901) -> IMAP (8902) -> Recording (8903) -> Ollama (11434) -> hr-postgres
 REM Docker Desktop itself is left running (stop from its tray icon if you want a full shutdown).
 
 cd /d "%~dp0"
@@ -9,11 +9,13 @@ cd /d "%~dp0"
 echo Stopping HR Automation services...
 echo.
 
-call :kill_port 3001 "[1/5] React frontend"
-call :kill_port 5678 "[2/5] n8n"
-call :kill_port 8901 "[3/5] SMTP sidecar"
+call :kill_port 3001 "[1/7] React frontend"
+call :kill_port 5678 "[2/7] n8n"
+call :kill_port 8901 "[3/7] SMTP sidecar"
+call :kill_port 8902 "[4/7] IMAP sidecar"
+call :kill_port 8903 "[5/7] Recording server"
 
-echo [4/5] Stopping Ollama...
+echo [6/7] Stopping Ollama...
 taskkill /F /IM ollama.exe >nul 2>&1
 if errorlevel 1 (
   echo   Ollama not running.
@@ -22,7 +24,7 @@ if errorlevel 1 (
   taskkill /F /IM ollama_llama_server.exe >nul 2>&1
 )
 
-echo [5/5] Stopping hr-postgres container...
+echo [7/7] Stopping hr-postgres container...
 docker ps --format "{{.Names}}" 2>nul | findstr /X "hr-postgres" >nul
 if %errorlevel% == 0 (
   docker stop hr-postgres >nul 2>&1

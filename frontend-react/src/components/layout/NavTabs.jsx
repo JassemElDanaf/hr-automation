@@ -42,10 +42,25 @@ const SERVICES = [
     desc: 'Email sidecar — handles all candidate email sends',
     offlineHint: 'Run: python scripts/smtp_server.py',
     check: async () => {
-      const r = await fetch('http://localhost:8901/', { signal: AbortSignal.timeout(3000) });
-      if (!r.ok) return { ok: false };
-      const j = await r.json();
-      return { ok: true, detail: j.smtp_configured ? 'configured' : 'unconfigured' };
+      // Sidecar must be up first (fast check)
+      const sidecar = await fetch('http://localhost:8901/', { signal: AbortSignal.timeout(3000) });
+      if (!sidecar.ok) return { ok: false, detail: 'sidecar offline' };
+      const sc = await sidecar.json();
+      if (!sc.smtp_configured) return { ok: true, detail: 'not configured' };
+      // Ask n8n for real delivery health based on email_log
+      try {
+        const hr = await fetch('http://localhost:5678/webhook/smtp-health', { signal: AbortSignal.timeout(4000) });
+        if (!hr.ok) return { ok: true, detail: 'configured' };
+        const hj = await hr.json();
+        const statusMap = { healthy: true, failing: false, not_tested: true };
+        const ok = statusMap[hj.status] !== false;
+        const detail = hj.status === 'healthy' ? `healthy · ${hj.detail}`
+          : hj.status === 'failing' ? `failing · ${hj.detail}`
+          : 'configured · no sends yet';
+        return { ok, detail };
+      } catch {
+        return { ok: true, detail: 'configured' };
+      }
     },
   },
   {

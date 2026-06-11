@@ -2,7 +2,7 @@
 # HR Automation — Start All Services
 # Usage: ./start.sh [--no-open]
 
-export PATH="/d/NodeJS:/d/n8n/node_modules/.bin:/c/Users/Jasse/AppData/Roaming/npm:$PATH"
+export PATH="/d/NodeJS:/c/Users/Jasse/AppData/Roaming/npm:/d/n8n/node_modules/.bin:$PATH"
 export N8N_USER_FOLDER=/d/n8n
 export N8N_USER_MANAGEMENT_DISABLED=true
 export N8N_BASIC_AUTH_ACTIVE=false
@@ -103,7 +103,7 @@ echo "[4/6] n8n..."
 if curl -s http://localhost:5678/healthz > /dev/null 2>&1; then
   echo "  n8n already running."
 else
-  npx n8n start > /dev/null 2>&1 &
+  n8n start > /dev/null 2>&1 &
   sleep 8
   if curl -s http://localhost:5678/healthz > /dev/null 2>&1; then
     echo "  n8n started."

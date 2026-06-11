@@ -130,15 +130,17 @@ export default function Shortlist() {
       job: { id: jobOpeningId, title: jobTitle }, emailType: sendType,
       defaultSubject: tmpl.subject, defaultBody: tmpl.body,
       sendLabel: 'Send Email', sendClass: 'btn-success', showSendToggle: false,
-      onSend: async ({ subject, body }) => {
-        const res = await sendEmailRequest({ candidateId, jobId: jobOpeningId, emailType: sendType, recipientEmail: email, candidateName, jobTitle, subject, body });
+      editableRecipient: !email, recipientLabel: 'Candidate',
+      onSend: async ({ subject, body, recipientEmail: resolvedEmail }) => {
+        const to = resolvedEmail || email;
+        const res = await sendEmailRequest({ candidateId, jobId: jobOpeningId, emailType: sendType, recipientEmail: to, candidateName, jobTitle, subject, body });
         const status = res.data?.status;
-        // Update email map immediately for this candidate
-        const newEntry = { email_type: sendType, status: status || 'failed', sent_at: new Date().toISOString(), subject, body, recipient_email: email, error_message: res.data?.error || null, direction: 'outbound' };
+        const errMsg = res.data?.error_message || res.data?.error || null;
+        const newEntry = { email_type: sendType, status: status || 'failed', sent_at: new Date().toISOString(), subject, body, recipient_email: to, error_message: errMsg, direction: 'outbound' };
         setEmailMap(prev => ({ ...prev, [candidateId]: [newEntry, ...(prev[candidateId] || [])] }));
-        if (status === 'sent') showToast(`Email sent to ${email}`, 'success');
+        if (status === 'sent') showToast(`Email sent to ${to}`, 'success');
         else if (status === 'logged') showToast('Email not sent \u2014 SMTP not configured. Email was saved to log only.', 'error');
-        else if (status === 'failed') showToast(`Email failed to send: ${res.data?.error || 'unknown error'}`, 'error');
+        else if (status === 'failed') showToast(`Email failed to send: ${errMsg || 'unknown error'}`, 'error');
         else showToast('Email delivery uncertain \u2014 check Emails tab for status', 'error');
       },
     });
@@ -335,8 +337,6 @@ export default function Shortlist() {
           {filteredData.map(s => {
             const score = s.overall_score != null ? parseFloat(s.overall_score).toFixed(1) : '\u2014';
             const scoreClsName = s.overall_score >= 7 ? 'score-high' : s.overall_score >= 4 ? 'score-mid' : 'score-low';
-            const hasEmail = s.email && s.email.includes('@');
-            const isDecided = s.status === 'hired' || s.status === 'rejected';
             const isAnimating = !!transitioning[s.id];
             const candidateEmails = emailMap[s.candidate_id];
             const hasEmailSent = candidateEmails && candidateEmails.some(e => e.status === 'sent' && e.direction !== 'inbound');
@@ -455,16 +455,17 @@ export default function Shortlist() {
                         the HM-driven verdicts. Re-send Pack lets HR forward the same
                         materials again (e.g. after fixing an interviewer email). */}
                     <button className="btn btn-sm btn-success" onClick={() => updateStatus(s.id, 'hired')}>{'\u2713'} Hire</button>
-                    {hasEmail && <button className="btn btn-sm btn-secondary" onClick={() => sendEmail(s.candidate_id, s.job_opening_id, s.candidate_name, s.email, 'offer')}>Send Offer</button>}
+                    <button className="btn btn-sm btn-secondary" onClick={() => sendEmail(s.candidate_id, s.job_opening_id, s.candidate_name, s.email, 'offer')}>Send Offer</button>
                     <button className="btn btn-sm btn-danger" onClick={() => rejectFromShortlist(s)}>{'\u2717'} Reject</button>
                     <button className="btn btn-sm btn-secondary" onClick={() => handOffToHM(s)}>Re-send Pack</button>
                     <button className="btn btn-sm btn-ghost" onClick={() => archiveShortlistItem(s.id, s.status)}>Archive</button>
                   </>) : (<>
                     {s.status === 'shortlisted' && <>
                       <button className="btn btn-sm btn-primary" onClick={() => updateStatus(s.id, 'interviewed')}>Mark Interviewed</button>
-                      {hasEmail && <button className="btn btn-sm btn-success" onClick={() => sendEmail(s.candidate_id, s.job_opening_id, s.candidate_name, s.email, 'shortlisted')}>Email Shortlist</button>}
-                      {hasEmail && <button className="btn btn-sm btn-secondary" onClick={() => sendEmail(s.candidate_id, s.job_opening_id, s.candidate_name, s.email, 'interview_invite')}>Interview Invite</button>}
+                      <button className="btn btn-sm btn-success" onClick={() => sendEmail(s.candidate_id, s.job_opening_id, s.candidate_name, s.email, 'shortlisted')}>Email Shortlist</button>
+                      <button className="btn btn-sm btn-secondary" onClick={() => sendEmail(s.candidate_id, s.job_opening_id, s.candidate_name, s.email, 'interview_invite')}>Interview Invite</button>
                       <button className="btn btn-sm btn-primary" onClick={() => handOffToHM(s)}>{'\u2709'} Hand Off to HM</button>
+                      <button className="btn btn-sm btn-danger" onClick={() => rejectFromShortlist(s)}>{'\u2717'} Reject</button>
                     </>}
                     {s.status === 'interviewed' && <>
                       <button className="btn btn-sm btn-primary" onClick={() => handOffToHM(s)}>{'\u2709'} Hand Off to HM</button>
@@ -488,9 +489,13 @@ export default function Shortlist() {
         </div>
       )}
 
+      {/* Shortlist rows use id = shortlist row id; the modal (and its
+          Email-Recommendation flow) expects id = candidate id, plus the job
+          for /send-email's job_opening_id. Remap before passing down. */}
       <EvalDetailModal
-        candidate={profileCandidate}
+        candidate={profileCandidate ? { ...profileCandidate, id: profileCandidate.candidate_id } : null}
         allCandidates={data}
+        job={jobs.find(j => j.id === parseInt(jobId)) || null}
         isOpen={!!profileCandidate}
         onClose={() => setProfileCandidate(null)}
       />

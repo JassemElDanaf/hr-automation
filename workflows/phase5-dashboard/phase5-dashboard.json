@@ -1,6 +1,6 @@
 {
   "id": "5",
-  "name": "Phase 1 - Dashboard",
+  "name": "Phase 5 - Dashboard",
   "nodes": [
     {
       "parameters": {
@@ -13,7 +13,10 @@
       "name": "DashCand - Webhook",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "position": [250, 300],
+      "position": [
+        250,
+        300
+      ],
       "webhookId": "dashboard-candidates"
     },
     {
@@ -26,7 +29,10 @@
       "name": "DashCand - Fetch",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
-      "position": [480, 300],
+      "position": [
+        480,
+        300
+      ],
       "alwaysOutputData": true,
       "credentials": {
         "postgres": {
@@ -47,7 +53,10 @@
       "name": "DashCand - Response",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
-      "position": [700, 300]
+      "position": [
+        700,
+        300
+      ]
     },
     {
       "parameters": {
@@ -60,7 +69,10 @@
       "name": "DashSl - Webhook",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "position": [250, 500],
+      "position": [
+        250,
+        500
+      ],
       "webhookId": "dashboard-shortlist"
     },
     {
@@ -73,7 +85,10 @@
       "name": "DashSl - Fetch",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
-      "position": [480, 500],
+      "position": [
+        480,
+        500
+      ],
       "alwaysOutputData": true,
       "credentials": {
         "postgres": {
@@ -94,21 +109,56 @@
       "name": "DashSl - Response",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
-      "position": [700, 500]
+      "position": [
+        700,
+        500
+      ]
     }
   ],
   "connections": {
     "DashCand - Webhook": {
-      "main": [[{ "node": "DashCand - Fetch", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "DashCand - Fetch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "DashCand - Fetch": {
-      "main": [[{ "node": "DashCand - Response", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "DashCand - Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "DashSl - Webhook": {
-      "main": [[{ "node": "DashSl - Fetch", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "DashSl - Fetch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "DashSl - Fetch": {
-      "main": [[{ "node": "DashSl - Response", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "DashSl - Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
   "pinData": {},
@@ -117,8 +167,12 @@
   },
   "staticData": null,
   "tags": [
-    { "name": "Phase 1" },
-    { "name": "Dashboard" }
+    {
+      "name": "Phase 1"
+    },
+    {
+      "name": "Dashboard"
+    }
   ],
   "triggerCount": 2
 }

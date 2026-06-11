@@ -7,7 +7,8 @@ const CAT_LABELS = { hr: 'Behavioural', technical: 'Technical', salary: 'Salary'
 const CAT_COLOR  = { hr: '#2563eb', technical: '#16a34a', salary: '#d97706', iqama: '#7c3aed', notice: '#dc2626', location: '#0891b2' };
 const CAT_BG     = { hr: '#eff6ff', technical: '#f0fdf4', salary: '#fffbeb', iqama: '#f5f3ff', notice: '#fef2f2', location: '#ecfeff' };
 
-const QBANK_URL = 'http://localhost:5678/webhook/interview/question-bank';
+const API_BASE  = import.meta.env.VITE_API_URL || 'http://localhost:5678/webhook';
+const QBANK_URL = `${API_BASE}/interview/question-bank`;
 
 let _nextId = 1;
 function emptyQ() { return { id: _nextId++, text: '', category: 'hr', selected: true }; }
@@ -39,6 +40,7 @@ export default function LiveInterview() {
   const [generating, setGenerating]       = useState(false);
   const [savedQsLoaded, setSavedQsLoaded] = useState(false);
   const [savingToBank, setSavingToBank]   = useState(false);
+  const [pendingPrep, setPendingPrep]     = useState(null); // { candidateId, questions }
 
   const [link, setLink]                   = useState('');
   const [copied, setCopied]               = useState(false);
@@ -52,6 +54,23 @@ export default function LiveInterview() {
   }, [candidateId, qMode, generatedQs, customQs, bankSelectedQs]);
 
   useEffect(() => { loadJobs(); }, []);
+
+  // When candidates load and there's a pending prep auto-select, apply it
+  useEffect(() => {
+    if (!pendingPrep || candidates.length === 0) return;
+    const c = candidates.find(c => String(c.CandidateId) === String(pendingPrep.candidateId));
+    if (!c) return;
+    setCandidateId(String(c.CandidateId));
+    setCandidateName(c.FullName);
+    setEvaluationId(c.EvaluationId || '');
+    if (pendingPrep.questions?.length) {
+      setGeneratedQs(pendingPrep.questions.map(q => ({ id: _nextId++, text: q.question || q.text || '', category: q.category || 'hr', selected: true })));
+      setQMode('ai-generate');
+      setSavedQsLoaded(true);
+      showToast(`${pendingPrep.questions.length} prepared questions loaded`, 'success');
+    }
+    setPendingPrep(null);
+  }, [candidates, pendingPrep]);
 
   useEffect(() => {
     if (!selectedJob || jobId || jobs.length === 0) return;
@@ -109,17 +128,22 @@ export default function LiveInterview() {
       }
     } catch {}
 
-    // 2️⃣ Fallback: fetch saved questions from backend
+    // 2️⃣ Fallback: fetch saved prep from candidate_prepared_questions (written
+    // by "Save to Profile" in the interview-prep modal). The old source —
+    // /interview/saved-questions over the interview_questions table — was never
+    // written to by any workflow, so it always returned [].
     setSavedQsLoaded(false);
-    if (c.EvaluationId) {
+    if (jobId) {
       try {
-        const r = await apiGet(`/interview/saved-questions?evaluationId=${c.EvaluationId}`);
-        const list = Array.isArray(r) ? r : (r.data || r || []);
+        const r = await apiGet(`/candidate-questions?candidate_id=${c.CandidateId}&job_id=${jobId}`);
+        const row = r?.data || r || {};
+        const list = Array.isArray(row.questions) ? row.questions : [];
         if (list.length > 0) {
-          const mapped = list.map(q => ({ id: _nextId++, text: q.Question || q.question || '', category: (q.Category || q.category || 'hr').toLowerCase(), selected: true }));
+          const mapped = list.map(q => ({ id: _nextId++, text: q.question || q.text || '', category: (q.category || 'hr').toLowerCase(), selected: true, modelAnswer: q.modelAnswer || '' }));
           setGeneratedQs(mapped);
+          setQMode('ai-generate');
           setSavedQsLoaded(true);
-          showToast(`${list.length} saved questions loaded from previous session`, 'success');
+          showToast(`${list.length} saved questions loaded from candidate profile`, 'success');
         }
       } catch {}
     }
@@ -172,16 +196,20 @@ export default function LiveInterview() {
       jobId: parseInt(jobId), evaluationId: parseInt(evaluationId),
       candidateId: parseInt(candidateId), candidateName, jobTitle,
     };
+    // modelAnswer must travel with each question — the IntEval node scores
+    // against it (rubric) and extracts requirements from it. Dropping it here
+    // silently disables both features.
+    const toPayloadQ = q => ({ question: q.text.trim(), category: q.category, modelAnswer: (q.modelAnswer || '').trim() });
     if (qMode === 'from-bank') {
       const filled = bankSelectedQs.filter(q => q.selected && q.text.trim());
-      if (filled.length) payload.customQuestions = filled.map(q => ({ question: q.text.trim(), category: q.category }));
+      if (filled.length) payload.customQuestions = filled.map(toPayloadQ);
       // no questions selected = AI generates live during interview (same as no custom questions)
     } else if (qMode === 'ai-generate') {
       const filled = generatedQs.filter(q => q.selected && q.text.trim());
-      if (filled.length) payload.customQuestions = filled.map(q => ({ question: q.text.trim(), category: q.category }));
+      if (filled.length) payload.customQuestions = filled.map(toPayloadQ);
     } else {
       const filled = customQs.filter(q => q.selected && q.text.trim());
-      if (filled.length) payload.customQuestions = filled.map(q => ({ question: q.text.trim(), category: q.category }));
+      if (filled.length) payload.customQuestions = filled.map(toPayloadQ);
     }
     setLink(`${window.location.origin}/interview/${btoa(unescape(encodeURIComponent(JSON.stringify(payload))))}`);
     setCopied(false);
@@ -213,7 +241,7 @@ export default function LiveInterview() {
 
       {/* Sub-tabs */}
       <div style={{ display: 'flex', gap: 0, marginBottom: 24, borderBottom: '2px solid var(--gray-200)' }}>
-        {[{ key: 'setup', label: 'Setup' }, { key: 'bank', label: 'Question Bank' }].map(t => (
+        {[{ key: 'setup', label: 'Setup' }, { key: 'bank', label: 'Question Bank' }, { key: 'prep', label: 'Candidate Prep' }].map(t => (
           <button
             key={t.key}
             onClick={() => setMainTab(t.key)}
@@ -415,6 +443,19 @@ export default function LiveInterview() {
       )}
 
       {mainTab === 'bank' && <QuestionBankTab showToast={showToast} />}
+      {mainTab === 'prep' && (
+        <CandidatePrepTab
+          showToast={showToast}
+          jobs={jobs}
+          selectedJob={selectedJob}
+          onUseForInterview={(cand, prepData) => {
+            setMainTab('setup');
+            // Queue the candidate + questions to be applied once candidates load
+            setPendingPrep({ candidateId: cand.candidate_id, questions: prepData?.questions || [] });
+            handleJobChange(String(cand.job_opening_id));
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -551,6 +592,154 @@ function BankPicker({ onSelect, selected, onUpdate, onRemove, onReorder, onAdd }
             Selected — drag to reorder or edit before sending
           </div>
           <QuestionList qs={selected} onAdd={onAdd} onRemove={onRemove} onUpdate={onUpdate} onReorder={onReorder} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── CandidatePrepTab ─────────────────────────────────────────────────────────
+
+function CandidatePrepTab({ showToast, jobs, selectedJob, onUseForInterview }) {
+  const [filterJobId, setFilterJobId] = useState(() => {
+    return selectedJob ? String(selectedJob.id) : '';
+  });
+  const [rows, setRows]       = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [expanded, setExpanded] = useState(null);
+
+  useEffect(() => {
+    if (selectedJob && !filterJobId) setFilterJobId(String(selectedJob.id));
+  }, [selectedJob]);
+
+  useEffect(() => {
+    if (!filterJobId) { setRows([]); return; }
+    (async () => {
+      setLoading(true);
+      try {
+        const r = await fetch(`${API_BASE}/candidate-questions-list?job_id=${filterJobId}`);
+        const json = await r.json();
+        setRows(Array.isArray(json) ? json : (json.data || json.rows || []));
+      } catch { showToast('Failed to load candidate prep data', 'error'); }
+      finally { setLoading(false); }
+    })();
+  }, [filterJobId]);
+
+  const jobTitle = jobs.find(j => String(j.JobId) === filterJobId)?.job_title || '';
+
+  return (
+    <div style={cardStyle}>
+      <div style={{ marginBottom: 16 }}>
+        <h3 style={{ fontSize: 16, fontWeight: 700, color: 'var(--gray-900)', margin: '0 0 4px' }}>Candidate Prep</h3>
+        <p style={{ fontSize: 13, color: 'var(--gray-500)', margin: 0 }}>
+          Candidates with prepared interview questions saved from the Shortlist tab.
+        </p>
+      </div>
+
+      <div className="form-group" style={{ marginBottom: 16, maxWidth: 320 }}>
+        <label>Filter by job</label>
+        <select value={filterJobId} onChange={e => { setFilterJobId(e.target.value); setExpanded(null); }}>
+          <option value="">— Select a job —</option>
+          {jobs.map(j => (
+            <option key={j.JobId} value={j.JobId}>{j.job_title}{j.department ? ` — ${j.department}` : ''}</option>
+          ))}
+        </select>
+      </div>
+
+      {loading && (
+        <div style={{ padding: 24, textAlign: 'center', color: 'var(--gray-400)', fontSize: 13 }}>Loading…</div>
+      )}
+
+      {!loading && rows.length === 0 && (
+        <div style={{ padding: '32px 20px', textAlign: 'center', background: 'var(--gray-50)', border: '1px dashed var(--gray-300)', borderRadius: 10 }}>
+          <div style={{ fontSize: 32, marginBottom: 8 }}>📋</div>
+          <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--gray-700)', marginBottom: 6 }}>
+            {filterJobId ? 'No prepared questions for this job yet' : 'Select a job to see prepared candidates'}
+          </div>
+          <div style={{ fontSize: 13, color: 'var(--gray-400)' }}>
+            Use "Hand Off to HM" on shortlisted candidates and save questions from the Interview Questions modal.
+          </div>
+        </div>
+      )}
+
+      {!loading && rows.length > 0 && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {rows.map(row => {
+            const isExpanded = expanded === row.candidate_id;
+            const qs = Array.isArray(row.questions) ? row.questions : [];
+            const hasMeeting = row.meeting && (row.meeting.platform || row.meeting.datetime);
+            return (
+              <div key={row.candidate_id} style={{ border: '1px solid var(--gray-200)', borderRadius: 10, overflow: 'hidden' }}>
+                <div
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 12, padding: '14px 18px',
+                    background: isExpanded ? '#f8faff' : '#fff', cursor: 'pointer',
+                    borderBottom: isExpanded ? '1px solid var(--gray-200)' : 'none',
+                  }}
+                  onClick={() => setExpanded(isExpanded ? null : row.candidate_id)}
+                >
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--gray-900)' }}>
+                      {row.candidate_name || row.full_name || `Candidate #${row.candidate_id}`}
+                    </div>
+                    <div style={{ fontSize: 12, color: 'var(--gray-500)', marginTop: 2, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                      {row.job_title && <span>📌 {row.job_title}</span>}
+                      <span>❓ {qs.length} question{qs.length !== 1 ? 's' : ''}</span>
+                      {hasMeeting && <span>📅 Meeting: {row.meeting.platform}{row.meeting.datetime ? ` · ${new Date(row.meeting.datetime).toLocaleString()}` : ''}</span>}
+                      {row.updated_at && <span>🕐 Saved {new Date(row.updated_at).toLocaleDateString()}</span>}
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={e => { e.stopPropagation(); onUseForInterview(row, { questions: qs, meeting: row.meeting }); }}
+                    style={{
+                      padding: '7px 16px', fontSize: 13, fontWeight: 600,
+                      color: '#fff', background: '#2563eb',
+                      border: 'none', borderRadius: 7, cursor: 'pointer', fontFamily: 'inherit',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    Use for Interview
+                  </button>
+                  <span style={{ fontSize: 16, color: 'var(--gray-400)', transform: isExpanded ? 'rotate(90deg)' : 'none', transition: 'transform 0.15s', marginLeft: 4 }}>›</span>
+                </div>
+
+                {isExpanded && (
+                  <div style={{ padding: '14px 18px', background: '#fff' }}>
+                    {qs.length > 0 ? (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                        {qs.map((q, i) => (
+                          <div key={i} style={{
+                            padding: '8px 10px', border: '1px solid var(--gray-200)', borderRadius: 7,
+                            borderLeft: `3px solid ${CAT_COLOR[q.category] || '#2563eb'}`,
+                            fontSize: 13, color: 'var(--gray-800)',
+                          }}>
+                            <span style={{
+                              display: 'inline-block', marginRight: 6,
+                              padding: '2px 7px', borderRadius: 10, fontSize: 10, fontWeight: 700,
+                              background: CAT_BG[q.category] || '#eff6ff',
+                              color: CAT_COLOR[q.category] || '#1e40af',
+                              textTransform: 'uppercase',
+                            }}>
+                              {q.category}
+                            </span>
+                            {q.question}
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div style={{ fontSize: 13, color: 'var(--gray-400)' }}>No questions saved.</div>
+                    )}
+                    {row.general_notes && (
+                      <div style={{ marginTop: 10, padding: '8px 10px', background: 'var(--gray-50)', borderRadius: 6, fontSize: 12, color: 'var(--gray-600)' }}>
+                        <strong>Notes:</strong> {row.general_notes}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
     </div>
