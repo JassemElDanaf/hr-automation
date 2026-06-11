@@ -6,7 +6,12 @@ function formatTime(s) {
   return `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
 }
 function decodeToken(token) {
-  try { return JSON.parse(decodeURIComponent(escape(atob(token)))); } catch { return null; }
+  try {
+    // Tokens are URL-safe base64 ('-'/'_' for '+'/'/', padding stripped).
+    let b64 = token.replace(/-/g, '+').replace(/_/g, '/');
+    while (b64.length % 4) b64 += '=';
+    return JSON.parse(decodeURIComponent(escape(atob(b64))));
+  } catch { return null; }
 }
 
 const MAX_QUESTIONS = 5;
@@ -424,7 +429,9 @@ export default function CandidateInterview() {
     try {
       const blob = new Blob(recordingChunksRef.current, { type: 'video/webm' });
       const filename = recordingFilename.current || 'recording.webm';
-      const res = await fetch(`http://localhost:8903/recording/upload?filename=${encodeURIComponent(filename)}`, {
+      // Relative path — proxied by the vite dev server to the recording
+      // sidecar (:8903), so uploads work from a candidate's machine too.
+      const res = await fetch(`/recording/upload?filename=${encodeURIComponent(filename)}`, {
         method: 'POST',
         headers: { 'Content-Type': 'video/webm', 'X-Filename': filename },
         body: blob,

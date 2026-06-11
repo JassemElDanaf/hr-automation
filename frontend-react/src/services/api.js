@@ -1,4 +1,6 @@
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5678/webhook';
+// Relative by default — the vite dev server proxies /webhook to n8n (:5678),
+// so the same page works on localhost and through a tunnel for candidates.
+const API_BASE = import.meta.env.VITE_API_URL || '/webhook';
 
 export async function apiGet(path) {
   const res = await fetch(`${API_BASE}${path}`);

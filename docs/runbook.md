@@ -326,6 +326,33 @@ curl -b /tmp/n8n.txt http://localhost:5678/rest/workflows/WF_ID/activate \
 
 ## 8. Common Operations
 
+### Remote candidate interviews (sending an interview link)
+
+Interview links only work for a remote candidate if they can reach the app.
+Everything the candidate page needs (API + recording upload) is served
+same-origin through the vite dev server's proxy, so **one tunnel to port 3001
+covers the whole flow**:
+
+```bash
+cloudflared tunnel --url http://localhost:3001
+```
+
+1. Start the tunnel and copy the `https://<random>.trycloudflare.com` URL.
+2. Open the app **through that URL** (not localhost) — the generated link
+   inherits whatever origin you're on (`VITE_PUBLIC_URL` in
+   `frontend-react/.env` overrides it if you have a stable address).
+3. Generate the link in Live Interview → Setup and send it.
+4. Kill the tunnel when done — while it runs, the URL is publicly reachable.
+
+The HTTPS tunnel is also what lets the candidate's browser grant mic/camera
+access (`getUserMedia` requires a secure context). A plain `http://<LAN-IP>`
+link will load but the mic will be blocked.
+
+**Never tunnel port 5678 directly** — n8n runs with auth disabled, so that
+exposes the full n8n editor (and every workflow) to anyone with the URL. The
+3001 tunnel only exposes the app plus the proxied `/webhook` + `/recording`
+endpoints.
+
 ### Reset the database
 
 ```bash

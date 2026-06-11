@@ -7,8 +7,16 @@ const CAT_LABELS = { hr: 'Behavioural', technical: 'Technical', salary: 'Salary'
 const CAT_COLOR  = { hr: '#2563eb', technical: '#16a34a', salary: '#d97706', iqama: '#7c3aed', notice: '#dc2626', location: '#0891b2' };
 const CAT_BG     = { hr: '#eff6ff', technical: '#f0fdf4', salary: '#fffbeb', iqama: '#f5f3ff', notice: '#fef2f2', location: '#ecfeff' };
 
-const API_BASE  = import.meta.env.VITE_API_URL || 'http://localhost:5678/webhook';
+const API_BASE  = import.meta.env.VITE_API_URL || '/webhook';
 const QBANK_URL = `${API_BASE}/interview/question-bank`;
+
+// URL-safe base64: plain btoa() output contains '/' which splits the URL path,
+// so the /interview/:token route silently stops matching. '-' and '_' replace
+// '+' and '/', padding is dropped (decodeToken restores all three).
+function encodeInterviewToken(payload) {
+  return btoa(unescape(encodeURIComponent(JSON.stringify(payload))))
+    .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
 
 let _nextId = 1;
 function emptyQ() { return { id: _nextId++, text: '', category: 'hr', selected: true }; }
@@ -211,7 +219,11 @@ export default function LiveInterview() {
       const filled = customQs.filter(q => q.selected && q.text.trim());
       if (filled.length) payload.customQuestions = filled.map(toPayloadQ);
     }
-    setLink(`${window.location.origin}/interview/${btoa(unescape(encodeURIComponent(JSON.stringify(payload))))}`);
+    // The link origin must be reachable by the candidate. Default to wherever
+    // HR opened the app (generate from the tunnel URL for remote candidates);
+    // VITE_PUBLIC_URL in .env overrides it for a stable public address.
+    const origin = (import.meta.env.VITE_PUBLIC_URL || window.location.origin).replace(/\/$/, '');
+    setLink(`${origin}/interview/${encodeInterviewToken(payload)}`);
     setCopied(false);
   }
 

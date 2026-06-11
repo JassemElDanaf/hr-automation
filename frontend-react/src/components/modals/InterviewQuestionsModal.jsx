@@ -5,7 +5,7 @@ import { getInterviewPackTemplate, sendEmailRequest, getEmailStatus } from '../.
 
 const NOTES_LS_KEY = 'hr_interview_notes';
 const HM_LS_KEY    = 'hr_hiring_manager_emails';
-const API_BASE     = import.meta.env.VITE_API_URL || 'http://localhost:5678/webhook';
+const API_BASE     = import.meta.env.VITE_API_URL || '/webhook';
 const QBANK_URL    = `${API_BASE}/interview/question-bank`;
 
 const PLATFORMS = [

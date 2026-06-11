@@ -3,7 +3,8 @@ import { apiGet, apiPost } from '../services/api';
 import { useUI } from '../state/uiState';
 import { useSelectedJob } from '../state/selectedJob';
 
-const RECORDING_SERVER = 'http://localhost:8903';
+// Relative — proxied by the vite dev server to the recording sidecar (:8903).
+const RECORDING_SERVER = '';
 
 const REQ_META = {
   salary:   { label: 'Salary',        color: '#d97706', bg: '#fffbeb', icon: '💰' },
