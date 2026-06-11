@@ -128,7 +128,7 @@ export default function TalentPool() {
   return (
     <div className="container">
       <div style={{ marginBottom: 20 }}>
-        <h2 style={{ fontSize: 20, fontWeight: 700, color: 'var(--gray-900)' }}>Talent Pool</h2>
+        <h2 style={{ fontSize: 20, fontWeight: 700, color: 'var(--gray-900)' }}>CV Pool</h2>
         <p style={{ fontSize: 14, color: 'var(--gray-500)', marginTop: 4 }}>
           Search every CV ever uploaded — find the skill, open the CV, shortlist.
         </p>
