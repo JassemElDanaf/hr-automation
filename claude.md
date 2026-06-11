@@ -63,7 +63,7 @@ Workflow files on disk still use their original folder names (`phase1-job-openin
 - `frontend-react/` — React + Vite app
 - 9 page components: Dashboard, JobOpenings, CVEvaluation, Shortlist, Emails, TalentPool, LiveInterview, AIInterviews, CandidateInterview (candidate-facing, no HR chrome)
 - State: React Context API (`selectedJob` + `uiState`), localStorage persistence for selected job
-- Routing: react-router-dom with URL paths (`/`, `/jobs`, `/cv-eval`, `/shortlist`, `/emails`, `/talent-pool`, `/live-interview`, `/ai-interviews`, plus standalone `/interview/:token` for candidates)
+- Routing: react-router-dom with URL paths (`/`, `/talent-pool` (CV Pool), `/jobs`, `/cv-eval`, `/shortlist`, `/emails`, `/live-interview` (the "Interview" tab: Setup / Question Bank / Candidate Prep / Results sub-tabs — Results embeds AIInterviews; `/ai-interviews` redirects there), plus standalone `/interview/:token` for candidates)
 - API: `services/api.js` reads `VITE_API_URL` from `.env` → n8n webhooks
 - PDF parsing: `pdfjs-dist` (bundled, not CDN)
 - Charts: `chart.js` + `react-chartjs-2`

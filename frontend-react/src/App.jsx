@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Outlet } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Outlet, Navigate } from 'react-router-dom';
 import { SelectedJobProvider } from './state/selectedJob';
 import { UIProvider } from './state/uiState';
 import Header from './components/layout/Header';
@@ -11,7 +11,6 @@ import CVEvaluation from './pages/CVEvaluation';
 import Shortlist from './pages/Shortlist';
 import Emails from './pages/Emails';
 import LiveInterview from './pages/LiveInterview';
-import AIInterviews from './pages/AIInterviews';
 import CandidateInterview from './pages/CandidateInterview';
 import TalentPool from './pages/TalentPool';
 import './styles/global.css';
@@ -46,7 +45,8 @@ export default function App() {
               <Route path="/emails" element={<Emails />} />
               <Route path="/talent-pool" element={<TalentPool />} />
               <Route path="/live-interview" element={<LiveInterview />} />
-              <Route path="/ai-interviews" element={<AIInterviews />} />
+              {/* AI Interviews now lives as the Results sub-tab of Interview */}
+              <Route path="/ai-interviews" element={<Navigate to="/live-interview?tab=results" replace />} />
             </Route>
           </Routes>
         </UIProvider>

@@ -140,7 +140,9 @@ function RecoPill({ text }) {
   return <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 9px', borderRadius: 99, background: bg, color }}>{label}</span>;
 }
 
-export default function AIInterviews() {
+// `embedded` renders without the page container/heading so the whole view can
+// live as the "Results" sub-tab inside the Interview page.
+export default function AIInterviews({ embedded = false }) {
   const { showToast, openEmailComposer } = useUI();
   const { selectedJob } = useSelectedJob();
   const [jobs, setJobs]                   = useState([]);
@@ -332,13 +334,15 @@ HR Department`;
   }
 
   return (
-    <div className="container">
-      <div style={{ marginBottom: 24 }}>
-        <h2 style={{ fontSize: 20, fontWeight: 700, color: 'var(--gray-900)' }}>AI Interviews</h2>
-        <p style={{ fontSize: 14, color: 'var(--gray-500)', marginTop: 4 }}>
-          Review completed self-assessment interviews — watch recordings, view CVs, check requirements, and read AI evaluations.
-        </p>
-      </div>
+    <div className={embedded ? undefined : 'container'}>
+      {!embedded && (
+        <div style={{ marginBottom: 24 }}>
+          <h2 style={{ fontSize: 20, fontWeight: 700, color: 'var(--gray-900)' }}>AI Interviews</h2>
+          <p style={{ fontSize: 14, color: 'var(--gray-500)', marginTop: 4 }}>
+            Review completed self-assessment interviews — watch recordings, view CVs, check requirements, and read AI evaluations.
+          </p>
+        </div>
+      )}
 
       {/* Job selector */}
       <div style={{ background: '#fff', border: '1px solid var(--gray-200)', borderRadius: 'var(--radius)', padding: '20px 24px', marginBottom: 24, display: 'flex', gap: 16, alignItems: 'flex-end', maxWidth: 640 }}>

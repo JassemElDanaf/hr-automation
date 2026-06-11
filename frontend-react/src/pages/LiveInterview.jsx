@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { apiGet, apiPost } from '../services/api';
 import { useUI } from '../state/uiState';
 import { useSelectedJob } from '../state/selectedJob';
+import AIInterviews from './AIInterviews';
 
 const CAT_LABELS = { hr: 'Behavioural', technical: 'Technical', salary: 'Salary', iqama: 'Iqama / Visa', notice: 'Notice Period', location: 'Location' };
 const CAT_COLOR  = { hr: '#2563eb', technical: '#16a34a', salary: '#d97706', iqama: '#7c3aed', notice: '#dc2626', location: '#0891b2' };
@@ -25,8 +26,11 @@ export default function LiveInterview() {
   const { showToast } = useUI();
   const { selectedJob } = useSelectedJob();
 
-  // ── Main sub-tab ──
-  const [mainTab, setMainTab] = useState('setup'); // 'setup' | 'bank'
+  // ── Main sub-tab ── ('setup' | 'bank' | 'prep' | 'results')
+  // ?tab=results deep-links to Results (used by the old /ai-interviews redirect)
+  const [mainTab, setMainTab] = useState(() =>
+    new URLSearchParams(window.location.search).get('tab') === 'results' ? 'results' : 'setup'
+  );
 
   // ── Setup state ──
   const [jobs, setJobs]                   = useState([]);
@@ -245,15 +249,15 @@ export default function LiveInterview() {
   return (
     <div className="container">
       <div style={{ marginBottom: 24 }}>
-        <h2 style={{ fontSize: 20, fontWeight: 700, color: 'var(--gray-900)' }}>Live Interview</h2>
+        <h2 style={{ fontSize: 20, fontWeight: 700, color: 'var(--gray-900)' }}>Interview</h2>
         <p style={{ fontSize: 14, color: 'var(--gray-500)', marginTop: 4 }}>
-          Generate a private interview link for a shortlisted candidate.
+          Prepare questions, send a private AI-interview link, and review completed interviews.
         </p>
       </div>
 
       {/* Sub-tabs */}
       <div style={{ display: 'flex', gap: 0, marginBottom: 24, borderBottom: '2px solid var(--gray-200)' }}>
-        {[{ key: 'setup', label: 'Setup' }, { key: 'bank', label: 'Question Bank' }, { key: 'prep', label: 'Candidate Prep' }].map(t => (
+        {[{ key: 'setup', label: 'Setup' }, { key: 'bank', label: 'Question Bank' }, { key: 'prep', label: 'Candidate Prep' }, { key: 'results', label: 'Results' }].map(t => (
           <button
             key={t.key}
             onClick={() => setMainTab(t.key)}
@@ -454,6 +458,7 @@ export default function LiveInterview() {
         </div>
       )}
 
+      {mainTab === 'results' && <AIInterviews embedded />}
       {mainTab === 'bank' && <QuestionBankTab showToast={showToast} />}
       {mainTab === 'prep' && (
         <CandidatePrepTab
