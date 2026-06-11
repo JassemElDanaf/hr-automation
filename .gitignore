@@ -28,3 +28,6 @@ tmp/
 Thumbs.db
 .vscode/
 .idea/
+
+# --- Interview recordings (candidate video - never commit) ---
+recordings/
