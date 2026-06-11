@@ -1,7 +1,7 @@
 import { apiPost } from './api';
 
-export async function sendEmailRequest({ candidateId, jobId, emailType, recipientEmail, candidateName, jobTitle, subject, body }) {
-  const res = await apiPost('/send-email', {
+export async function sendEmailRequest({ candidateId, jobId, emailType, recipientEmail, candidateName, jobTitle, subject, body, attachments, recordingFile }) {
+  const payload = {
     candidate_id: candidateId,
     job_opening_id: jobId,
     email_type: emailType,
@@ -10,7 +10,12 @@ export async function sendEmailRequest({ candidateId, jobId, emailType, recipien
     job_title: jobTitle,
     custom_subject: subject,
     custom_body: body,
-  });
+  };
+  // Small files (CV / generated PDF) travel base64 through n8n; the recording
+  // goes by filename only — the SMTP sidecar reads it from recordings/ itself.
+  if (Array.isArray(attachments) && attachments.length) payload.attachments = attachments;
+  if (recordingFile) payload.recording_file = recordingFile;
+  const res = await apiPost('/send-email', payload);
   return res;
 }
 

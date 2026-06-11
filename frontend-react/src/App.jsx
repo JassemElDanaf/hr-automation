@@ -13,6 +13,7 @@ import Emails from './pages/Emails';
 import LiveInterview from './pages/LiveInterview';
 import AIInterviews from './pages/AIInterviews';
 import CandidateInterview from './pages/CandidateInterview';
+import TalentPool from './pages/TalentPool';
 import './styles/global.css';
 
 function HRLayout() {
@@ -43,6 +44,7 @@ export default function App() {
               <Route path="/cv-eval" element={<CVEvaluation />} />
               <Route path="/shortlist" element={<Shortlist />} />
               <Route path="/emails" element={<Emails />} />
+              <Route path="/talent-pool" element={<TalentPool />} />
               <Route path="/live-interview" element={<LiveInterview />} />
               <Route path="/ai-interviews" element={<AIInterviews />} />
             </Route>

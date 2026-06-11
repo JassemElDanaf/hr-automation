@@ -325,6 +325,8 @@ export default function CandidateInterview() {
   const mediaRecorderRef   = useRef(null);
   const recordingChunksRef = useRef([]);
   const recordingFilename  = useRef('');
+  const recordingStartRef  = useRef(null); // Date.now() when recording began
+  const currentQStartRef   = useRef(null); // recording-seconds when current Q was asked
 
   // Inject styles
   useEffect(() => {
@@ -367,6 +369,12 @@ export default function CandidateInterview() {
   }, [completedPairs, currentQ, loadingQ]);
 
   function cleanup() { stopTimer(); stopSpeaking(); stopRecognition(); stopCamera(); }
+
+  // Seconds into the recording — used to timestamp each question so the HM's
+  // playback can overlay the question being asked at that moment.
+  function recSeconds() {
+    return recordingStartRef.current ? Math.round((Date.now() - recordingStartRef.current) / 1000) : null;
+  }
 
   // ── Timer ──────────────────────────────────────────────────────────────────
 
@@ -411,6 +419,7 @@ export default function CandidateInterview() {
       rec.start(2000); // chunk every 2s
       mediaRecorderRef.current = rec;
       recordingFilename.current = `${candidateId}_${jobId}_${Date.now()}.webm`;
+      recordingStartRef.current = Date.now();
     } catch { /* MediaRecorder not supported — recording silently skipped */ }
   }
 
@@ -571,6 +580,7 @@ export default function CandidateInterview() {
       setMicOn(true); setPhase('interview'); setChipStatus('live');
       startTimer();
       await speak(`Hello ${tokenData.candidateName}, welcome to your interview for ${tokenData.jobTitle}. I'll ask you ${total} questions.`);
+      currentQStartRef.current = recSeconds();
       await speak(firstQ.question);
       startRecognition();
     } catch { /* allow retry */ } finally { setStarting(false); }
@@ -586,8 +596,10 @@ export default function CandidateInterview() {
 
     if (!manual && !answer) { if (phaseRef.current === 'interview') startRecognition(); return; }
 
-    // Push completed pair into display state
-    const entry = { question: currentQRef.current?.question || '', answer, category: currentQRef.current?.category || 'hr' };
+    // Push completed pair into display state. `t` = seconds into the recording
+    // when this question was asked — rides inside the transcript jsonb so no
+    // schema change is needed; playback uses it to sync the question overlay.
+    const entry = { question: currentQRef.current?.question || '', answer, category: currentQRef.current?.category || 'hr', t: currentQStartRef.current };
     const newTx = [...transcriptRef.current, entry];
     transcriptRef.current = newTx;
     setCompletedPairs([...newTx]);
@@ -618,6 +630,7 @@ export default function CandidateInterview() {
       currentQRef.current = nextQ; currentQIdxRef.current += 1;
       setCurrentQ(nextQ); setCurrentQIndex(i => i + 1);
       loadingQRef.current = false; setLoadingQ(false);
+      currentQStartRef.current = recSeconds();
       await speak(nextQ.question);
       startRecognition();
     } catch {
@@ -682,11 +695,12 @@ export default function CandidateInterview() {
         <li>Speak clearly — the interview advances automatically after a pause</li>
         <li>Click "Next Question" anytime to move on manually</li>
         <li>All questions and your answers stay visible on screen as you go</li>
+        <li><strong>This interview is recorded</strong> (video and audio) and may be reviewed by the hiring team</li>
       </ul>
       <button className="ci-go" onClick={startInterview} disabled={starting || !tokenData}>
         {starting ? 'Starting…' : 'Start Interview'}
       </button>
-      <div className="ci-note">Allow microphone and camera access when prompted</div>
+      <div className="ci-note">By starting, you consent to being recorded. Allow microphone and camera access when prompted.</div>
     </div></div>
   );
 

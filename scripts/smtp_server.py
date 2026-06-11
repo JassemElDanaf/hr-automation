@@ -12,16 +12,22 @@ Returns 200 JSON:
   { "status": "logged", "reason": "..." }  - SMTP not configured, not attempted
   { "status": "failed", "error": "..." }   - attempted but failed
 """
+import base64
 import json
 import os
+import pathlib
 import smtplib
 import sys
+from email.mime.application import MIMEApplication
+from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.utils import make_msgid
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 LISTEN_HOST = '127.0.0.1'
 LISTEN_PORT = 8901
+RECORDINGS_DIR = pathlib.Path(__file__).parent.parent / 'recordings'
+MAX_ATTACH_BYTES = 18 * 1024 * 1024  # stay under Gmail's 25 MB cap incl. b64 overhead
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -74,8 +80,52 @@ class Handler(BaseHTTPRequestHandler):
         msgid_domain = from_addr.split('@')[-1].split('>')[0].strip() if '@' in from_addr else 'diyar.local'
         message_id = make_msgid(domain=msgid_domain)
 
+        # Optional attachments: small files arrive base64 in the request
+        # (CV pdf, generated report pdf); the interview recording arrives as a
+        # filename only and is read from recordings/ locally, so large videos
+        # never travel through n8n's JSON payload limit.
+        attachments = body.get('attachments') or []
+        recording_file = (body.get('recording_file') or '').strip()
+        skipped = []
+
         try:
-            msg = MIMEText(text, 'plain', 'utf-8')
+            parts = []
+            total = 0
+            for a in attachments[:5]:
+                fn = os.path.basename(str(a.get('filename') or 'attachment'))
+                try:
+                    data = base64.b64decode(a.get('content_b64') or '')
+                except Exception:
+                    skipped.append(fn + ' (bad base64)')
+                    continue
+                if not data or total + len(data) > MAX_ATTACH_BYTES:
+                    skipped.append(fn + ' (too large)')
+                    continue
+                total += len(data)
+                part = MIMEApplication(data, Name=fn)
+                part['Content-Disposition'] = f'attachment; filename="{fn}"'
+                parts.append(part)
+            if recording_file:
+                fn = os.path.basename(recording_file)
+                path = RECORDINGS_DIR / fn
+                if not path.exists():
+                    skipped.append(fn + ' (recording not found)')
+                elif total + path.stat().st_size > MAX_ATTACH_BYTES:
+                    skipped.append(fn + ' (too large for email)')
+                else:
+                    data = path.read_bytes()
+                    total += len(data)
+                    part = MIMEApplication(data, Name=fn)
+                    part['Content-Disposition'] = f'attachment; filename="{fn}"'
+                    parts.append(part)
+
+            if parts:
+                msg = MIMEMultipart()
+                msg.attach(MIMEText(text, 'plain', 'utf-8'))
+                for p in parts:
+                    msg.attach(p)
+            else:
+                msg = MIMEText(text, 'plain', 'utf-8')
             msg['Subject'] = subject
             msg['From'] = from_addr
             msg['To'] = to
@@ -94,7 +144,10 @@ class Handler(BaseHTTPRequestHandler):
                 server.login(user, passwd)
             server.send_message(msg)
             server.quit()
-            return self._respond(200, {'status': 'sent', 'to': to, 'from': from_addr, 'message_id': message_id})
+            resp = {'status': 'sent', 'to': to, 'from': from_addr, 'message_id': message_id}
+            if skipped:
+                resp['attachments_skipped'] = skipped
+            return self._respond(200, resp)
         except Exception as e:
             return self._respond(200, {'status': 'failed', 'error': f'{type(e).__name__}: {e}'})
 

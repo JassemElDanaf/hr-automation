@@ -113,6 +113,62 @@
         700,
         500
       ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "talent-pool",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "wh-talent-pool",
+      "name": "Talent - Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        250,
+        700
+      ],
+      "webhookId": "talent-pool"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT c.id, c.candidate_name, c.email, c.submitted_at, c.cv_text, c.job_opening_id, j.job_title, j.department, e.overall_score, s.status AS shortlist_status, (c.cv_file_data IS NOT NULL AND length(c.cv_file_data) > 10) AS cv_file_available FROM candidates c JOIN job_openings j ON j.id = c.job_opening_id LEFT JOIN evaluations e ON e.candidate_id = c.id AND e.job_opening_id = c.job_opening_id LEFT JOIN shortlist s ON s.candidate_id = c.id AND s.job_opening_id = c.job_opening_id ORDER BY c.submitted_at DESC",
+        "options": {}
+      },
+      "id": "fetch-talent-pool",
+      "name": "Talent - Fetch",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        480,
+        700
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "postgres": {
+          "id": "1",
+          "name": "HR PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ success: true, data: $input.all().map(i => i.json).filter(i => i.id), count: $input.all().map(i => i.json).filter(i => i.id).length }) }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "resp-talent-pool",
+      "name": "Talent - Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        700,
+        700
+      ]
     }
   ],
   "connections": {
@@ -154,6 +210,28 @@
         [
           {
             "node": "DashSl - Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Talent - Webhook": {
+      "main": [
+        [
+          {
+            "node": "Talent - Fetch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Talent - Fetch": {
+      "main": [
+        [
+          {
+            "node": "Talent - Response",
             "type": "main",
             "index": 0
           }

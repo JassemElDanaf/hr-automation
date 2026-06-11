@@ -24,9 +24,18 @@ export default function EmailComposerModal() {
   const [sendEmail, setSendEmail] = useState(true);
   // idle | sending | sent | closing
   const [sendPhase, setSendPhase] = useState('idle');
+  // null = not initialized for this open; otherwise { key: bool }
+  const [attachSel, setAttachSel] = useState(null);
 
   const cfg = emailComposer;
   if (!cfg) return null;
+
+  // Optional attachment checkboxes (cfg.attachmentOptions: [{key,label,sublabel,checked,disabled}])
+  const attachmentOptions = Array.isArray(cfg.attachmentOptions) ? cfg.attachmentOptions : [];
+  const attachState = attachSel !== null
+    ? attachSel
+    : Object.fromEntries(attachmentOptions.map(o => [o.key, !!o.checked && !o.disabled]));
+  const toggleAttach = (key) => setAttachSel({ ...attachState, [key]: !attachState[key] });
 
   // HM-facing: editableRecipient:true → never fall back to candidate email
   // Candidate-facing with no email: also editable (editedRecipient starts empty)
@@ -55,6 +64,7 @@ export default function EmailComposerModal() {
     setBody('');
     setEditedRecipient(null);
     setSendPhase('idle');
+    setAttachSel(null);
   };
 
   const handleClose = () => {
@@ -85,7 +95,8 @@ export default function EmailComposerModal() {
 
     setSendPhase('sending');
     try {
-      await cfg.onSend({ subject: subj, body: bod, sendEmail: willSend, recipientEmail });
+      const selectedAttachments = attachmentOptions.filter(o => attachState[o.key] && !o.disabled).map(o => o.key);
+      await cfg.onSend({ subject: subj, body: bod, sendEmail: willSend, recipientEmail, attachments: selectedAttachments });
       setSendPhase('sent');
       setTimeout(() => {
         setSendPhase('closing');
@@ -233,6 +244,31 @@ export default function EmailComposerModal() {
                 <button className="btn btn-sm btn-secondary" type="button" onClick={handleReset}>&#x21BA; Reset to default template</button>
                 <span style={{ fontSize: '12px', color: 'var(--gray-500)' }}>Tip: personalize before sending.</span>
               </div>
+
+              {attachmentOptions.length > 0 && (
+                <div style={{ marginTop: '12px', padding: '12px 14px', background: 'var(--gray-50)', border: '1px solid var(--gray-200)', borderRadius: 'var(--radius)' }}>
+                  <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--gray-700)', marginBottom: '8px' }}>
+                    📎 Attachments
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    {attachmentOptions.map(o => (
+                      <label key={o.key} style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', cursor: o.disabled ? 'not-allowed' : 'pointer', opacity: o.disabled ? 0.5 : 1 }}>
+                        <input
+                          type="checkbox"
+                          checked={!!attachState[o.key] && !o.disabled}
+                          disabled={o.disabled}
+                          onChange={() => toggleAttach(o.key)}
+                          style={{ marginTop: '2px' }}
+                        />
+                        <span style={{ fontSize: '13px', color: 'var(--gray-800)' }}>
+                          {o.label}
+                          {o.sublabel && <span style={{ display: 'block', fontSize: '11px', color: 'var(--gray-400)' }}>{o.sublabel}</span>}
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
