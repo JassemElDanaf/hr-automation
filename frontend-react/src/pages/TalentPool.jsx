@@ -189,11 +189,6 @@ export default function TalentPool() {
                       <strong style={{ fontSize: 15, color: 'var(--gray-900)' }}>
                         <Highlighted text={r.candidate_name} terms={terms} />
                       </strong>
-                      {status && (
-                        <span style={{ fontSize: 10.5, fontWeight: 700, padding: '2px 9px', borderRadius: 10, textTransform: 'uppercase', letterSpacing: '0.04em', background: status === 'rejected' ? '#fee2e2' : status === 'hired' ? '#dcfce7' : '#dbeafe', color: status === 'rejected' ? '#991b1b' : status === 'hired' ? '#166534' : '#1e40af' }}>
-                          {status}
-                        </span>
-                      )}
                       {r.cv_file_available && (
                         <span title="Original PDF on file" style={{ fontSize: 12, color: 'var(--gray-400)' }}>📄</span>
                       )}
@@ -210,11 +205,15 @@ export default function TalentPool() {
                     <div style={{ fontSize: 19, fontWeight: 800, color: scoreColor, lineHeight: 1 }}>{score != null ? score.toFixed(1) : '—'}</div>
                     <div style={{ fontSize: 9.5, fontWeight: 600, color: 'var(--gray-400)', textTransform: 'uppercase', letterSpacing: '0.06em', marginTop: 3 }}>Score</div>
                   </div>
-                  <div style={{ display: 'flex', gap: 8 }}>
+                  {/* Fixed two-slot action grid so View CV lines up vertically on
+                      every row, whether the second slot holds the Shortlist
+                      button or the candidate's status pill. */}
+                  <div style={{ display: 'grid', gridTemplateColumns: '116px 116px', gap: 8, alignItems: 'center' }}>
                     <button
                       onClick={() => toggleCV(r)}
                       style={{
-                        display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 600, padding: '8px 16px', borderRadius: 8,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontSize: 13, fontWeight: 600,
+                        height: 36, borderRadius: 8, width: '100%',
                         border: `1.5px solid ${panel.open ? '#2563eb' : 'var(--gray-300)'}`,
                         background: panel.open ? '#eff6ff' : '#fff',
                         color: panel.open ? '#2563eb' : 'var(--gray-700)',
@@ -223,10 +222,30 @@ export default function TalentPool() {
                     >
                       📄 {panel.loading ? 'Loading…' : panel.open ? 'Hide CV' : 'View CV'}
                     </button>
-                    {!status && (
-                      <button className="btn btn-sm btn-success" style={{ padding: '8px 16px', borderRadius: 8 }} disabled={shortlisting === r.id} onClick={() => shortlist(r)}>
+                    {!status ? (
+                      <button
+                        disabled={shortlisting === r.id}
+                        onClick={() => shortlist(r)}
+                        style={{
+                          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontSize: 13, fontWeight: 600,
+                          height: 36, borderRadius: 8, width: '100%',
+                          border: '1.5px solid #86efac', background: '#f0fdf4', color: '#16a34a',
+                          cursor: shortlisting === r.id ? 'wait' : 'pointer', fontFamily: 'inherit', transition: 'all 0.15s', whiteSpace: 'nowrap',
+                        }}
+                      >
                         {shortlisting === r.id ? '…' : '✓ Shortlist'}
                       </button>
+                    ) : (
+                      <span style={{
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        height: 36, borderRadius: 8, width: '100%',
+                        fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em',
+                        background: status === 'rejected' ? '#fee2e2' : status === 'hired' ? '#dcfce7' : '#dbeafe',
+                        color: status === 'rejected' ? '#991b1b' : status === 'hired' ? '#166534' : '#1e40af',
+                        border: `1.5px solid ${status === 'rejected' ? '#fecaca' : status === 'hired' ? '#bbf7d0' : '#bfdbfe'}`,
+                      }}>
+                        {status === 'rejected' ? '✗' : '✓'} {status}
+                      </span>
                     )}
                   </div>
                 </div>
