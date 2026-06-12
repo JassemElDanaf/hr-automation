@@ -2,7 +2,7 @@
 
 Persistent source of truth for the project. Read this before making changes.
 
-> **Project status (April 2026):** Proof of concept, pre-finalization. All five phases are functional end to end but work remains before production rollout. A progress report for Diyar management lives at `report/report.pdf` (LaTeX source at `report/report.tex`, compiled with MiKTeX).
+> **Project status (June 2026):** Demo-ready, fully local. All six workflows functional end to end. Nav is 7 tabs: Dashboard · CV Pool · Job Openings · CV Evaluation · Shortlist · Emails · Interview (the Interview tab has Setup / Question Bank / Candidate Prep / Results sub-tabs — Results is the former AI Interviews page). A progress report for Diyar management lives at `report/report.pdf` (LaTeX source at `report/report.tex`, compiled with MiKTeX).
 
 ---
 
@@ -14,7 +14,7 @@ Persistent source of truth for the project. Read this before making changes.
 
 | Module | Job |
 |--------|-----|
-| Frontend — React (`frontend-react/`) | React + Vite app. 8 pages, shared state via Context, react-router. **The only frontend.** |
+| Frontend — React (`frontend-react/`) | React + Vite app. 9 page components across 7 nav tabs, shared state via Context, react-router. **The only frontend.** Vite dev server proxies `/webhook`→n8n and `/recording`→recording sidecar so candidate pages work same-origin. |
 | n8n workflows (`workflows/`) | One JSON per phase. Webhook-based HTTP API. Talks to PostgreSQL + Ollama + SMTP sidecar. |
 | PostgreSQL (Docker) | `hr_automation` database. Schema in `db/schema.sql`, migrations in `db/migrations/`. |
 | Ollama (local, port 11434) | Runs `qwen3:4b`. Used for JD generation, criteria generation, CV scoring. |
@@ -45,13 +45,15 @@ IMAP sidecar (:8902, polling) ---> IMAP server (Gmail)
 
 ## 2. Final Phase Order
 
-Phases are numbered by **user flow**, not build order:
+Phases are numbered by **user flow**, not build order. Current nav (7 tabs):
 
 1. **Dashboard** — landing page, KPIs across all jobs
-2. **Job Openings** — create + manage JDs (AI / manual / upload)
-3. **CV Evaluation** — 4-step wizard (select job → criteria → upload CVs → run + view results)
-4. **Shortlist** — track status: shortlisted → interviewed → hired, or rejected
-5. **Emails** — history of every email attempt with SMTP health
+2. **CV Pool** (`/talent-pool`, TalentPool.jsx) — Ctrl+F-style search across every uploaded CV; inline PDF dropdown; one-click shortlist
+3. **Job Openings** — create + manage JDs (AI / manual / upload)
+4. **CV Evaluation** — 4-step wizard (select job → criteria → upload CVs → run + view results)
+5. **Shortlist** — track status: shortlisted → interviewed → hired, or rejected
+6. **Emails** — history of every email attempt with SMTP health
+7. **Interview** (`/live-interview`, LiveInterview.jsx) — sub-tabs: **Setup** (build questions + generate candidate link), **Question Bank**, **Candidate Prep**, **Results** (embedded AIInterviews.jsx: scores, recordings with synced question overlay, transcripts, Re-evaluate, Email HM with attachments, Teams .vtt import)
 
 Workflow files on disk still use their original folder names (`phase1-job-opening/`, etc.) because renaming would break import scripts. The **workflow `name` field + tags inside each JSON** use the new numbering. `docs/n8n.md` has the full mapping.
 
@@ -371,6 +373,8 @@ Major bugs + how they were fixed. Use this to avoid re-introducing them.
 | 2026-06-11 | **Feature: Teams interview import.** Interviews held on Microsoft Teams had no way into the system — no transcript, no AI evaluation | New requirement | "⬆ Import Teams Transcript" button on AI Interviews. Parses Teams' exported `.vtt` (cues with `<v Speaker>` tags), groups consecutive cues into speaker turns, HR picks which speaker is the candidate, interviewer turns become `question` / candidate turns become `answer` (the exact shape IntEval + the transcript UI already use), then save-transcript → `/interview/evaluate` → save scores. Per-turn `t` (seconds) is kept so the overlay also works if a recording is attached later. All client-side parsing — no new sidecar |
 | 2026-06-11 | **Feature: recording consent + synced question overlay.** The recording only captured the candidate's camera+mic — the AI's spoken (TTS) questions are not in the audio, so HM playback was answers-with-no-questions. No recording consent was shown either | TTS plays through speakers; `speechSynthesis` audio cannot be routed into MediaRecorder | Each transcript entry now carries `t` = seconds-into-recording when its question was asked (`recordingStartRef`/`currentQStartRef` in CandidateInterview.jsx — rides inside the transcript jsonb, **no schema change**). New `RecordingPlayer` in AIInterviews overlays the current question on the video synced via `onTimeUpdate`; old recordings without timestamps show a subtle note instead. Intro screen now states the interview is recorded and that starting = consent |
 | 2026-06-11 | **Feature: Email HM from AI Interviews with selectable attachments.** No way to send interview results to the hiring manager, and the email pipeline couldn't attach files at all | SMTP sidecar built MIMEText only; `/send-email` had no attachment fields | Shared `EmailComposerModal` gains an optional `attachmentOptions` checkbox section (any combination selectable). "✉ Email HM" on each session opens it with: PDF interview report (generated client-side via **jspdf** — `utils/pdfReport.js`: scores, summary, requirements, transcript), candidate CV (when on file), interview recording. Plumbing: small files travel base64 through `/send-email` → sidecar (`attachments[]`); the recording goes by **filename only** and the sidecar reads it from `recordings/` itself, so large videos never hit n8n's payload limit (`recording_file`). Sidecar builds MIMEMultipart, skips anything putting the total over 18 MB and reports `attachments_skipped`; email_log body gets an `[Attached: …]` suffix (WF4 validate/log nodes patched). Verified end-to-end with a real send |
+| 2026-06-11 | Talent Pool UI iterations per user feedback: (a) "Read CV" expanded raw extracted text — user wanted the actual PDF inline; (b) action buttons misaligned across rows (View CV shifted left when Shortlist was present); (c) tab label/position felt wrong | First-pass design choices | (a) "View CV" now drops down the **original PDF in an inline iframe** with a header bar + "Open in new tab ↗" (same pattern as the Results CV panel); blob URLs cached per candidate; candidates without a stored PDF fall back to highlighted text, labeled as such. (b) Actions are a fixed two-slot grid (116px × 36px each): slot 1 always View CV, slot 2 always filled — Shortlist button or the status pill (moved out of the name line) — so buttons align vertically on every row. (c) Renamed **CV Pool**, moved to 2nd nav position right after Dashboard. Rows restyled: avatar initials, score block, amber snippet quotes, active-card border highlight |
+| 2026-06-11 | Nav had 8 tabs; AI Interviews logically belongs inside the interview flow | User request | **AI Interviews merged into the Interview tab** (Live Interview renamed "Interview") as a 4th sub-tab **Results**. `AIInterviews.jsx` gains an `embedded` prop (skips its own container/heading) and is rendered by `LiveInterview.jsx`; `/ai-interviews` now redirects to `/live-interview?tab=results` (the Interview page reads `?tab=` on mount for deep-linking). Nav is 7 tabs |
 
 ---
 
