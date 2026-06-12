@@ -271,11 +271,11 @@ export default function AIInterviews({ embedded = false }) {
 Sharing the AI interview results for ${s.candidateName || s.candidateEmail || 'the candidate'} — ${jobTitle}.
 
 Scores
-  Communication:  ${fmt(s.scoreComm)} / 10
-  Technical:      ${fmt(s.scoreTech)} / 10
-  Confidence:     ${fmt(s.scoreConf)} / 10
-  Culture fit:    ${fmt(s.scoreCulture)} / 10
-  Overall:        ${fmt(s.scoreOverall)} / 10
+• Communication: ${fmt(s.scoreComm)} / 10
+• Technical: ${fmt(s.scoreTech)} / 10
+• Confidence: ${fmt(s.scoreConf)} / 10
+• Culture fit: ${fmt(s.scoreCulture)} / 10
+• Overall: ${fmt(s.scoreOverall)} / 10
 
 ${s.summary ? 'AI summary\n' + s.summary + '\n\n' : ''}${s.recommendation ? 'Recommendation\n' + s.recommendation + '\n\n' : ''}The selected documents are attached. Let me know if you need anything else.
 

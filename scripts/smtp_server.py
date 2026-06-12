@@ -86,6 +86,9 @@ class Handler(BaseHTTPRequestHandler):
         # never travel through n8n's JSON payload limit.
         attachments = body.get('attachments') or []
         recording_file = (body.get('recording_file') or '').strip()
+        # Optional styled HTML version — sent as multipart/alternative so
+        # clients render the branded card and fall back to the plain text.
+        html_body = (body.get('html_body') or '').strip()
         skipped = []
 
         try:
@@ -119,13 +122,20 @@ class Handler(BaseHTTPRequestHandler):
                     part['Content-Disposition'] = f'attachment; filename="{fn}"'
                     parts.append(part)
 
+            if html_body:
+                content = MIMEMultipart('alternative')
+                content.attach(MIMEText(text, 'plain', 'utf-8'))
+                content.attach(MIMEText(html_body, 'html', 'utf-8'))
+            else:
+                content = MIMEText(text, 'plain', 'utf-8')
+
             if parts:
-                msg = MIMEMultipart()
-                msg.attach(MIMEText(text, 'plain', 'utf-8'))
+                msg = MIMEMultipart('mixed')
+                msg.attach(content)
                 for p in parts:
                     msg.attach(p)
             else:
-                msg = MIMEText(text, 'plain', 'utf-8')
+                msg = content
             msg['Subject'] = subject
             msg['From'] = from_addr
             msg['To'] = to

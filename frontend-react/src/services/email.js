@@ -1,5 +1,40 @@
 import { apiPost } from './api';
 
+function escapeHtml(s) {
+  return String(s || '').replace(/[&<>"']/g, c =>
+    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])
+  );
+}
+
+// Wraps the (user-edited, verbatim) plain-text body in a branded HTML card so
+// the email looks designed in the recipient's inbox instead of raw text.
+// Short label-only lines (e.g. "Scores", "Recommendation", "Strengths") are
+// rendered as bold section headings; everything else keeps its line breaks.
+export function buildEmailHtml(body) {
+  const esc = escapeHtml(body);
+  const withHeadings = esc
+    .split('\n')
+    .map(line => {
+      const t = line.trim();
+      const isHeading = t.length >= 2 && t.length <= 30 && /^[A-Za-z][A-Za-z /&-]*$/.test(t) && !/^(Hi|Hello|Dear)\b/i.test(t);
+      return isHeading
+        ? `<strong style="display:inline-block;margin-top:6px;color:#111827;">${t}</strong>`
+        : line;
+    })
+    .join('\n');
+  return `<!doctype html>
+<html><body style="margin:0;padding:0;background:#f3f4f6;">
+  <div style="max-width:640px;margin:24px auto;background:#ffffff;border-radius:12px;overflow:hidden;border:1px solid #e5e7eb;font-family:-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+    <div style="background:#1e40af;padding:18px 28px;">
+      <div style="color:#ffffff;font-size:16px;font-weight:700;">Diyar United Company</div>
+      <div style="color:#bfdbfe;font-size:12px;margin-top:2px;">Human Resources</div>
+    </div>
+    <div style="padding:26px 28px;color:#1f2937;font-size:14px;line-height:1.75;white-space:pre-wrap;">${withHeadings}</div>
+    <div style="padding:14px 28px;border-top:1px solid #f3f4f6;color:#9ca3af;font-size:11px;">Sent by Diyar HR Automation</div>
+  </div>
+</body></html>`;
+}
+
 export async function sendEmailRequest({ candidateId, jobId, emailType, recipientEmail, candidateName, jobTitle, subject, body, attachments, recordingFile }) {
   const payload = {
     candidate_id: candidateId,
@@ -15,6 +50,9 @@ export async function sendEmailRequest({ candidateId, jobId, emailType, recipien
   // goes by filename only — the SMTP sidecar reads it from recordings/ itself.
   if (Array.isArray(attachments) && attachments.length) payload.attachments = attachments;
   if (recordingFile) payload.recording_file = recordingFile;
+  // Every send also carries a styled HTML version of the same text (the
+  // recipient sees the branded card; plain text is logged + used as fallback).
+  if (body) payload.html_body = buildEmailHtml(body);
   const res = await apiPost('/send-email', payload);
   return res;
 }
