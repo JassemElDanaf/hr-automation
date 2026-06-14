@@ -16,13 +16,16 @@ const PLATFORMS = [
   { value: 'Phone',            label: 'Phone',     icon: '📞' },
 ];
 
-const CAT_LABELS = { hr: 'Behavioural', technical: 'Technical', salary: 'Compensation' };
-const CAT_COLOR  = { hr: '#2563eb',     technical: '#16a34a',   salary: '#d97706'       };
-const CAT_BG     = { hr: '#eff6ff',     technical: '#f0fdf4',   salary: '#fffbeb'       };
-const CAT_BORDER = { hr: '#bfdbfe',     technical: '#bbf7d0',   salary: '#fde68a'       };
-const CAT_TEXT   = { hr: '#1e40af',     technical: '#166534',   salary: '#92400e'       };
+const CAT_LABELS = { hr: 'Behavioural', technical: 'Technical', salary: 'Compensation', iqama: 'Iqama / Visa', notice: 'Notice Period', location: 'Location' };
+const CAT_COLOR  = { hr: '#2563eb',     technical: '#16a34a',   salary: '#d97706',        iqama: '#7c3aed',      notice: '#dc2626',         location: '#0891b2' };
+const CAT_BG     = { hr: '#eff6ff',     technical: '#f0fdf4',   salary: '#fffbeb',        iqama: '#f5f3ff',      notice: '#fef2f2',         location: '#ecfeff' };
+const CAT_BORDER = { hr: '#bfdbfe',     technical: '#bbf7d0',   salary: '#fde68a',        iqama: '#ddd6fe',      notice: '#fecaca',         location: '#a5f3fc' };
+const CAT_TEXT   = { hr: '#1e40af',     technical: '#166534',   salary: '#92400e',        iqama: '#5b21b6',      notice: '#991b1b',         location: '#155e75' };
 
-const CATEGORY_ORDER = { hr: 0, technical: 1, salary: 2 };
+// salary/iqama/notice/location questions become requirement checks in the AI
+// evaluation when given an expected answer — see IntEval REQ_CATEGORIES.
+const REQUIREMENT_CATS = ['salary', 'iqama', 'notice', 'location'];
+const CATEGORY_ORDER = { hr: 0, technical: 1, salary: 2, iqama: 3, notice: 4, location: 5 };
 function sortQuestionsByCategory(qs, notesArr) {
   const list = (qs || []).map((q, i) => ({ q, note: (notesArr || [])[i] || '' }));
   list.sort((a, b) => (CATEGORY_ORDER[a.q.category] ?? 99) - (CATEGORY_ORDER[b.q.category] ?? 99));
@@ -72,7 +75,7 @@ function buildWordBlob({ candidateName, jobTitle, department, meeting, questions
     return `
       <h3 style="margin-bottom:4px;">Q${i + 1}. <span style="font-weight:normal;color:#555;">[${escapeHtml(q.category)}]</span></h3>
       <p style="margin:4px 0 6px 0;">${escapeHtml(q.question)}</p>
-      ${q.hints ? `<p style="margin:0 0 8px 0;color:#666;font-style:italic;font-size:11pt;">Hint: ${escapeHtml(q.hints)}</p>` : ''}
+      ${(q.modelAnswer || q.hints) ? `<p style="margin:0 0 8px 0;color:#666;font-style:italic;font-size:11pt;">Expected answer: ${escapeHtml(q.modelAnswer || q.hints)}</p>` : ''}
       <p style="margin:4px 0 0 0;font-weight:bold;">Notes:</p>
       <p style="margin:0 0 14px 0;border:1px solid #ccc;padding:8px;min-height:40px;white-space:pre-wrap;">${escapeHtml(note) || '&nbsp;'}</p>
     `;
@@ -124,7 +127,7 @@ function ModalBankPicker({ onAdd }) {
   function handleAdd() {
     const selected = bank.filter(b => checked[b.id]);
     if (!selected.length) return;
-    onAdd(selected.map(b => ({ question: b.question, category: b.category || 'hr', hints: b.modelAnswer || '' })));
+    onAdd(selected.map(b => ({ question: b.question, category: b.category || 'hr', modelAnswer: b.modelAnswer || '' })));
     setChecked({});
   }
 
@@ -301,6 +304,11 @@ export default function InterviewQuestionsModal({ candidate, job, isOpen, onClos
     setNotes(prev => { const next = [...prev]; next[i] = value; return next; });
   }
 
+  // Edit a field on a question in place (used for the per-question model answer).
+  function updateQuestionField(i, field, value) {
+    setQuestions(prev => prev.map((q, idx) => idx === i ? { ...q, [field]: value } : q));
+  }
+
   // ── AI Generate ──
   async function generate() {
     if (!includeHr && !includeTechnical && !includeSalary) {
@@ -456,7 +464,7 @@ export default function InterviewQuestionsModal({ candidate, job, isOpen, onClos
     if (!questions.length) { showToast('Add questions first', 'error'); return; }
     const text = questions.map((q, i) => {
       const note = (notes[i] || '').trim();
-      return `Q${i + 1} [${q.category}]: ${q.question}${q.hints ? '\n  Hint: ' + q.hints : ''}${note ? '\n  Notes: ' + note : ''}`;
+      return `Q${i + 1} [${q.category}]: ${q.question}${(q.modelAnswer || q.hints) ? '\n  Expected answer: ' + (q.modelAnswer || q.hints) : ''}${note ? '\n  Notes: ' + note : ''}`;
     }).join('\n\n') + (generalNotes ? '\n\nGeneral notes:\n' + generalNotes : '');
     navigator.clipboard.writeText(text).then(
       () => showToast('Copied to clipboard', 'success'),
@@ -661,11 +669,22 @@ export default function InterviewQuestionsModal({ candidate, job, isOpen, onClos
                       >×</button>
                     </div>
                   </div>
-                  {q.hints && (
-                    <p style={{ margin: '0 0 6px 0', fontSize: '12px', color: 'var(--gray-400)', fontStyle: 'italic' }}>
-                      Hint: {q.hints}
-                    </p>
-                  )}
+                  {/* Expected answer / model answer — scored against the candidate's
+                      answer by the AI. For salary/iqama/notice/location questions it
+                      also drives the requirements check. Persisted with the question
+                      so it follows the candidate into the Interview Setup tab. */}
+                  <div style={{ marginBottom: '6px' }}>
+                    <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: '#6b7280', marginBottom: '3px' }}>
+                      Expected answer {REQUIREMENT_CATS.includes(q.category) ? '/ requirement' : ''} <span style={{ color: 'var(--gray-400)', fontWeight: 400 }}>(AI scores the candidate against this — optional)</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={q.modelAnswer || q.hints || ''}
+                      onChange={e => updateQuestionField(i, 'modelAnswer', e.target.value)}
+                      placeholder={REQUIREMENT_CATS.includes(q.category) ? 'e.g. Salary ≤ 5000 USD / Iqama transferable / 1-month notice' : 'What a strong answer looks like…'}
+                      style={{ width: '100%', fontSize: '12px', padding: '6px 8px', border: '1px solid #dbeafe', borderRadius: 6, outline: 'none', fontFamily: 'inherit', background: '#f8faff' }}
+                    />
+                  </div>
                   <textarea
                     value={notes[i] || ''}
                     onChange={e => updateNote(i, e.target.value)}

@@ -3,8 +3,8 @@ import { useState, useEffect, useCallback } from 'react';
 
 const tabs = [
   { path: '/', label: 'Dashboard' },
-  { path: '/talent-pool', label: 'CV Pool' },
   { path: '/jobs', label: 'Job Openings' },
+  { path: '/talent-pool', label: 'CV Pool' },
   { path: '/cv-eval', label: 'CV Evaluation' },
   { path: '/shortlist', label: 'Shortlist' },
   { path: '/emails', label: 'Emails' },
