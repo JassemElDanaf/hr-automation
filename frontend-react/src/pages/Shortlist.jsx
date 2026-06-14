@@ -156,14 +156,17 @@ export default function Shortlist() {
       job: { id: s.job_opening_id, title: jobTitle }, emailType: 'rejection',
       defaultSubject: tmpl.subject, defaultBody: tmpl.body,
       sendLabel: 'Reject Candidate', sendClass: 'btn-danger', showSendToggle: true,
-      onSend: async ({ subject, body, sendEmail }) => {
+      onSend: async ({ subject, body, sendEmail, recipientEmail: resolvedEmail }) => {
         await updateStatus(s.id, 'rejected');
-        if (sendEmail && s.email) {
-          const res = await sendEmailRequest({ candidateId: s.candidate_id, jobId: s.job_opening_id, emailType: 'rejection', recipientEmail: s.email, candidateName: s.candidate_name, jobTitle, subject, body });
+        // Use the address resolved by the composer (HR may have typed one for a
+        // candidate with no email on file) — not the empty closure variable.
+        const to = resolvedEmail || s.email;
+        if (sendEmail && to) {
+          const res = await sendEmailRequest({ candidateId: s.candidate_id, jobId: s.job_opening_id, emailType: 'rejection', recipientEmail: to, candidateName: s.candidate_name, jobTitle, subject, body });
           const status = res.data?.status;
-          const newEntry = { email_type: 'rejection', status: status || 'failed', sent_at: new Date().toISOString(), subject, body, recipient_email: s.email, error_message: res.data?.error || null, direction: 'outbound' };
+          const newEntry = { email_type: 'rejection', status: status || 'failed', sent_at: new Date().toISOString(), subject, body, recipient_email: to, error_message: res.data?.error || null, direction: 'outbound' };
           setEmailMap(prev => ({ ...prev, [s.candidate_id]: [newEntry, ...(prev[s.candidate_id] || [])] }));
-          if (status === 'sent') showToast(`Rejection email sent to ${s.email}`, 'error');
+          if (status === 'sent') showToast(`Rejection email sent to ${to}`, 'error');
           else if (status === 'logged') showToast('Rejected — SMTP not configured, email saved to log only.', 'error');
           else showToast(`Rejected — email failed: ${res.data?.error || 'unknown error'}`, 'error');
         } else {

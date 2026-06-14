@@ -7,8 +7,8 @@ const tabs = [
   { path: '/talent-pool', label: 'CV Pool' },
   { path: '/cv-eval', label: 'CV Evaluation' },
   { path: '/shortlist', label: 'Shortlist' },
-  { path: '/emails', label: 'Emails' },
   { path: '/live-interview', label: 'Interview' },
+  { path: '/emails', label: 'Emails' },
 ];
 
 const SERVICES = [

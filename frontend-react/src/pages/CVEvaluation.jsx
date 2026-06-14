@@ -420,19 +420,29 @@ export default function CVEvaluation() {
       job: { id: evalJobId, title: jobTitle }, emailType: 'rejection',
       defaultSubject: tmpl.subject, defaultBody: tmpl.body,
       sendLabel: 'Reject Candidate', sendClass: 'btn-danger', showSendToggle: true,
-      onSend: async ({ subject, body, sendEmail }) => {
+      onSend: async ({ subject, body, sendEmail, recipientEmail: resolvedEmail }) => {
         const slRes = await apiPost('/add-to-shortlist', { candidate_id: candidateId, job_opening_id: evalJobId, notes: 'Rejected from evaluation results' });
         if (slRes.data.success) {
           const entry = slRes.data.data;
           const entryId = entry.id || (Array.isArray(entry) && entry[0]?.id);
           if (entryId) await apiPost('/update-shortlist-status', { id: entryId, status: 'rejected' });
         }
-        if (sendEmail) await sendEmailRequest({ candidateId, jobId: evalJobId, emailType: 'rejection', recipientEmail: email, candidateName, jobTitle, subject, body });
         setShortlistMap(prev => ({ ...prev, [candidateId]: 'rejected' }));
         setRetainedInView(prev => new Set(prev).add(candidateId));
         setRecentlyChanged(prev => ({ ...prev, [candidateId]: true }));
         setTimeout(() => setRecentlyChanged(prev => { const n = { ...prev }; delete n[candidateId]; return n; }), 600);
-        showToast('Candidate rejected', 'error');
+        // Use the address resolved by the composer (HR may have typed one for a
+        // candidate with no email on file) — not the empty closure variable.
+        const to = resolvedEmail || email;
+        if (sendEmail && to) {
+          const res = await sendEmailRequest({ candidateId, jobId: evalJobId, emailType: 'rejection', recipientEmail: to, candidateName, jobTitle, subject, body });
+          const status = res.data?.status;
+          if (status === 'sent') showToast(`Candidate rejected — email sent to ${to}`, 'info');
+          else if (status === 'logged') showToast('Candidate rejected — SMTP not configured, email saved to log only', 'error');
+          else showToast(`Candidate rejected — email failed: ${res.data?.error || 'unknown error'}`, 'error');
+        } else {
+          showToast('Candidate rejected', 'error');
+        }
       },
     });
   }
