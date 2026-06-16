@@ -100,19 +100,30 @@ fi
 
 # ── 4. n8n ───────────────────────────────────────────────────────────────────
 echo "[4/6] n8n..."
-if curl -s http://localhost:5678/healthz > /dev/null 2>&1; then
-  echo "  n8n already running."
-else
+if ! curl -s http://localhost:5678/healthz > /dev/null 2>&1; then
   n8n start > /dev/null 2>&1 &
-  sleep 8
-  if curl -s http://localhost:5678/healthz > /dev/null 2>&1; then
-    echo "  n8n started."
-  else
-    sleep 5
-    curl -s http://localhost:5678/healthz > /dev/null 2>&1 \
-      && echo "  n8n started." \
-      || echo "  ERROR: n8n not responding — check logs."
-  fi
+fi
+# Poll for health (n8n can take 30-60s to boot on this machine — a fixed sleep
+# was the cause of the old false "n8n failed" report).
+tries=0
+until curl -s http://localhost:5678/healthz > /dev/null 2>&1; do
+  tries=$((tries + 1))
+  [ $tries -gt 60 ] && echo "  ERROR: n8n /healthz not responding after 2 min — check logs." && break
+  printf "."; sleep 2
+done
+if curl -s http://localhost:5678/healthz > /dev/null 2>&1; then
+  # Webhooks register ~15-30s AFTER /healthz turns ok. Wait for a known
+  # production webhook so the frontend doesn't load against dead endpoints
+  # (this is what looked like "n8n and the DB failed to load").
+  printf "\n  n8n up — waiting for webhooks to register"
+  wtries=0
+  until [ "$(curl -s -o /dev/null -w '%{http_code}' http://localhost:5678/webhook/job-openings 2>/dev/null)" = "200" ]; do
+    wtries=$((wtries + 1))
+    [ $wtries -gt 30 ] && echo "" && echo "  WARN: webhooks not registered after 60s — open n8n and toggle a workflow if the app shows no data." && break
+    printf "."; sleep 2
+  done
+  [ "$(curl -s -o /dev/null -w '%{http_code}' http://localhost:5678/webhook/job-openings 2>/dev/null)" = "200" ] \
+    && echo "" && echo "  n8n started — webhooks live."
 fi
 
 # ── 5. DB migrations ─────────────────────────────────────────────────────────
