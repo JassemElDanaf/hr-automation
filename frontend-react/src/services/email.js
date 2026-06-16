@@ -93,59 +93,35 @@ export function getOfferTemplate(candidateName, jobTitle) {
   };
 }
 
-export function getCandidateHandoffTemplate({ candidateName, candidateEmail, jobTitle, department, evaluation, status }) {
-  const e = evaluation || {};
-  const overall = e.overall_score != null ? Number(e.overall_score).toFixed(1) : '\u2014';
-  const skills = e.skills_score != null ? Number(e.skills_score).toFixed(1) : '\u2014';
-  const experience = e.experience_score != null ? Number(e.experience_score).toFixed(1) : '\u2014';
-  const education = e.education_score != null ? Number(e.education_score).toFixed(1) : '\u2014';
-  const fmtList = (raw) => {
-    if (!raw) return '  \u2014 None noted';
-    return raw.split(';').map(s => s.trim()).filter(Boolean).map(s => '  \u2022 ' + s).join('\n') || '  \u2014 None noted';
-  };
-  const strengths = fmtList(e.strengths);
-  const weaknesses = fmtList(e.weaknesses);
-  const reasoning = (e.reasoning || '').trim();
-  const stageLabel = status === 'interviewed' ? 'interviewed' : 'shortlisted';
-  const subject = `Handing off ${candidateName} \u2014 ${jobTitle}`;
-  const body =
-`Hi,
-
-${candidateName} has been ${stageLabel} for the ${jobTitle}${department ? ' (' + department + ')' : ''} role and I'm handing the rest of the process over to you.
-
-Candidate
-  Name:   ${candidateName}
-  Email:  ${candidateEmail || '\u2014'}
-
-Evaluation summary
-  Overall:     ${overall} / 10
-  Skills:      ${skills} / 10
-  Experience:  ${experience} / 10
-  Education:   ${education} / 10
-
-Strengths
-${strengths}
-
-Areas to probe
-${weaknesses}
-
-${reasoning ? 'Notes\n' + reasoning + '\n\n' : ''}From here you own scheduling the interview, sending the offer, and updating the status. Let me know if you need anything from HR.
-
-Best regards,
-HR Department`;
-  return { subject, body };
-}
-
 export function getInterviewPackTemplate({ candidateName, candidateEmail, jobTitle, department, meeting, questions, generalNotes, evaluation }) {
   const m = meeting || {};
-  const platformLabel = m.platform || 'Not specified';
-  const when = m.datetime ? new Date(m.datetime).toLocaleString() : 'TBD';
+  const platform = (m.platform || '').trim();
+  const when = m.datetime ? new Date(m.datetime).toLocaleString() : '';
   const link = (m.link || '').trim();
   const interviewers = (m.interviewers || '').trim();
-  const meetingBlock =
-`Meeting details
-  Platform:     ${platformLabel}
-  Date / time:  ${when}${link ? '\n  Link / room:  ' + link : ''}${interviewers ? '\n  Interviewer(s): ' + interviewers : ''}`;
+
+  // Spell out how/where the interview happens, adapted to the chosen platform —
+  // online platforms get a join link, In person gets a location, Phone gets a
+  // number — so the hiring manager sees it at a glance.
+  const ONLINE = ['Zoom', 'Microsoft Teams', 'Google Meet'];
+  let conductedLine, detailLine = '';
+  if (ONLINE.includes(platform)) {
+    conductedLine = `This interview will be conducted online via ${platform}.`;
+    detailLine = `Join link: ${link || '(to be shared)'}`;
+  } else if (platform === 'In person') {
+    conductedLine = 'This interview will be conducted in person.';
+    detailLine = `Location: ${link || '(to be confirmed)'}`;
+  } else if (platform === 'Phone') {
+    conductedLine = 'This interview will be conducted by phone.';
+    detailLine = `Phone number: ${link || '(to be shared)'}`;
+  } else {
+    conductedLine = 'Interview format to be confirmed.';
+    if (link) detailLine = `Details: ${link}`;
+  }
+  const meetingLines = ['Meeting details', '  ' + conductedLine, '  Date / time: ' + (when || '(to be confirmed)')];
+  if (detailLine) meetingLines.push('  ' + detailLine);
+  if (interviewers) meetingLines.push('  Interviewer(s): ' + interviewers);
+  const meetingBlock = meetingLines.join('\n');
 
   const e = evaluation || {};
   const hasEval = e.overall_score != null;

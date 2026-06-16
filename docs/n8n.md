@@ -222,7 +222,7 @@ db.commit()
 # Then restart n8n (taskkill /f /im node.exe, then start again)
 ```
 
-Updating only `workflow_entity.nodes` leaves the runtime unchanged — n8n keeps executing the old snapshot from `workflow_history`. See `scripts/patch_ollama_thinking.py` for the canonical example.
+Updating only `workflow_entity.nodes` leaves the runtime unchanged — n8n keeps executing the old snapshot from `workflow_history`. See `scripts/applied/patch_ollama_thinking.py` for the canonical example.
 
 The live DB path is always: `D:\n8n\.n8n\database.sqlite`
 

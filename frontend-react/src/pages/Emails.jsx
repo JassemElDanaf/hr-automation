@@ -21,16 +21,18 @@ export default function Emails() {
   const [statusFilter, setStatusFilter] = useState('all');
   const [loading, setLoading] = useState(false);
   const [showSmtpHelp, setShowSmtpHelp] = useState(false);
+  const [showTest, setShowTest] = useState(false);
+  const [testTo, setTestTo] = useState('');
+  const [testSending, setTestSending] = useState(false);
   const [expandedRow, setExpandedRow] = useState(null); // email id of expanded row
 
   useEffect(() => {
     loadJobs();
   }, []);
 
+  // Follow the global job picked in the header (applies universally across tabs).
   useEffect(() => {
-    if (selectedJob && !jobId) {
-      setJobId(String(selectedJob.id));
-    }
+    if (selectedJob) setJobId(String(selectedJob.id));
   }, [selectedJob]);
 
   useEffect(() => {
@@ -60,6 +62,31 @@ export default function Emails() {
       setEmailData((res.data || []).filter(e => e.id));
     } catch (err) { showToast('Failed to load emails', 'error'); }
     finally { setLoading(false); }
+  }
+
+  // Test-send straight to the SMTP sidecar (port 8901) — bypasses n8n and
+  // email_log so it doesn't pollute the candidate history. Proves the SMTP
+  // credential actually delivers before HR relies on it for real sends.
+  async function sendTestEmail() {
+    const to = testTo.trim();
+    if (!/@/.test(to) || !/\./.test(to.split('@').pop() || '')) { showToast('Enter a valid email address', 'error'); return; }
+    setTestSending(true);
+    try {
+      const res = await fetch('http://localhost:8901/', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          to,
+          subject: 'Diyar HR — SMTP test email',
+          body: 'This is a test email from the Diyar HR Automation app. If you received it, your SMTP credential is delivering correctly.',
+        }),
+      });
+      const j = await res.json().catch(() => ({}));
+      if (j.status === 'sent') { showToast(`Test email sent to ${to}`, 'success'); setShowTest(false); }
+      else if (j.status === 'logged') showToast('SMTP not configured — nothing was sent. See Setup Guide.', 'error');
+      else showToast(`Send failed: ${j.error || 'unknown error'}`, 'error');
+    } catch {
+      showToast('Could not reach the SMTP sidecar (port 8901). Is start.sh running?', 'error');
+    } finally { setTestSending(false); }
   }
 
   // Filter pills now include 'inbound' (replies pulled by the IMAP poller).
@@ -96,6 +123,7 @@ export default function Emails() {
           <div style={{ fontSize: '13px', fontWeight: 600 }}>{smtpText}</div>
           <div style={{ fontSize: '12px', color: 'var(--gray-500)' }}>{smtpHint}</div>
         </div>
+        <button className="btn btn-secondary btn-sm" onClick={() => setShowTest(true)}>Send Test Email</button>
         <button className="btn btn-secondary btn-sm" onClick={() => setShowSmtpHelp(true)}>Setup Guide</button>
       </div>
 
@@ -111,7 +139,12 @@ export default function Emails() {
         <label style={{ fontSize: '13px', fontWeight: 600 }}>Job:</label>
         <select value={jobId} onChange={e => handleJobChange(e.target.value)} style={{ maxWidth: '280px' }}>
           <option value="">-- Select a job --</option>
-          {jobs.map(j => <option key={j.id} value={j.id}>{j.job_title}</option>)}
+          {jobs.filter(j => j.is_active).map(j => <option key={j.id} value={j.id}>{j.job_title}</option>)}
+          {jobs.some(j => !j.is_active) && (
+            <optgroup label="Closed (reactivate in Job Openings to use)">
+              {jobs.filter(j => !j.is_active).map(j => <option key={j.id} value={j.id} disabled>{j.job_title}</option>)}
+            </optgroup>
+          )}
         </select>
         <div className="filter-tabs">
           {['all', 'sent', 'failed', 'inbound'].map(f => (
@@ -204,6 +237,22 @@ export default function Emails() {
           </table>
         )}
       </div>
+
+      {/* Test Email Modal */}
+      <Modal isOpen={showTest} onClose={() => setShowTest(false)} title="Send Test Email"
+        footer={<>
+          <button className="btn btn-secondary" onClick={() => setShowTest(false)} disabled={testSending}>Cancel</button>
+          <button className="btn btn-primary" onClick={sendTestEmail} disabled={testSending}>{testSending ? 'Sending…' : 'Send Test'}</button>
+        </>}>
+        <p style={{ fontSize: '13px', color: 'var(--gray-600)', marginBottom: '12px', lineHeight: 1.6 }}>
+          Sends a one-off test message through your configured SMTP credential to confirm delivery works.
+          It goes straight to the mail server and is <strong>not</strong> logged to candidate history.
+        </p>
+        <label style={{ fontSize: '13px', fontWeight: 600, display: 'block', marginBottom: '6px' }}>Send to</label>
+        <input type="email" value={testTo} onChange={e => setTestTo(e.target.value)} placeholder="you@example.com"
+          onKeyDown={e => { if (e.key === 'Enter') sendTestEmail(); }}
+          style={{ width: '100%', padding: '8px 10px', fontSize: '14px' }} autoFocus />
+      </Modal>
 
       {/* SMTP Help Modal */}
       <Modal isOpen={showSmtpHelp} onClose={() => setShowSmtpHelp(false)} title="SMTP Setup Guide" wide

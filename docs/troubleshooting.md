@@ -193,7 +193,7 @@ If you see a blank button with no error, verify the fix is in place and rebuild.
 ### Questions or JD output starts with "Okay, the user wants..."
 
 **Cause:** the preamble-stripping patch has not been applied to the n8n workflow nodes. `qwen3:4b` emits inline reasoning even when `think:false` is set.
-**Fix:** run `scripts/patch_ollama_thinking.py` (patches both `workflow_entity` and `workflow_history` in `D:\n8n\.n8n\database.sqlite`), then restart n8n.
+**Fix:** run `scripts/applied/patch_ollama_thinking.py` (patches both `workflow_entity` and `workflow_history` in `D:\n8n\.n8n\database.sqlite`), then restart n8n.
 
 ---
 
