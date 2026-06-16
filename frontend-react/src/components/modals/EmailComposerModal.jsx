@@ -1,5 +1,26 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useUI } from '../../state/uiState';
+
+const MAX_UPLOAD_BYTES = 18 * 1024 * 1024; // keep total email under provider caps
+
+function readFileAsAttachment(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = String(reader.result || '');
+      const comma = result.indexOf(',');
+      resolve({ filename: file.name, mime: file.type || 'application/octet-stream', size: file.size, content_b64: comma >= 0 ? result.slice(comma + 1) : result });
+    };
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
+}
+
+function fmtSize(b) {
+  if (b < 1024) return b + ' B';
+  if (b < 1024 * 1024) return (b / 1024).toFixed(0) + ' KB';
+  return (b / 1024 / 1024).toFixed(1) + ' MB';
+}
 
 const HM_LS_KEY = 'hr_hiring_manager_emails';
 
@@ -26,6 +47,9 @@ export default function EmailComposerModal() {
   const [sendPhase, setSendPhase] = useState('idle');
   // null = not initialized for this open; otherwise { key: bool }
   const [attachSel, setAttachSel] = useState(null);
+  // Files the user uploads from their PC ({filename, mime, size, content_b64})
+  const [uploadedFiles, setUploadedFiles] = useState([]);
+  const fileInputRef = useRef(null);
 
   const cfg = emailComposer;
   if (!cfg) return null;
@@ -65,7 +89,28 @@ export default function EmailComposerModal() {
     setEditedRecipient(null);
     setSendPhase('idle');
     setAttachSel(null);
+    setUploadedFiles([]);
   };
+
+  const onFilesPicked = async (e) => {
+    const picked = Array.from(e.target.files || []);
+    e.target.value = ''; // allow re-picking the same file
+    const added = [];
+    let runningTotal = uploadedFiles.reduce((s, f) => s + f.size, 0);
+    for (const file of picked) {
+      if (uploadedFiles.some(f => f.filename === file.name) || added.some(f => f.filename === file.name)) {
+        showToast(`"${file.name}" is already attached`, 'info'); continue;
+      }
+      if (runningTotal + file.size > MAX_UPLOAD_BYTES) {
+        showToast(`"${file.name}" skipped — attachments would exceed the email size limit`, 'error'); continue;
+      }
+      try { const att = await readFileAsAttachment(file); added.push(att); runningTotal += file.size; }
+      catch { showToast(`Couldn't read "${file.name}"`, 'error'); }
+    }
+    if (added.length) setUploadedFiles(prev => [...prev, ...added]);
+  };
+
+  const removeUpload = (name) => setUploadedFiles(prev => prev.filter(f => f.filename !== name));
 
   const handleClose = () => {
     if (sendPhase === 'sending' || sendPhase === 'sent') return;
@@ -96,7 +141,8 @@ export default function EmailComposerModal() {
     setSendPhase('sending');
     try {
       const selectedAttachments = attachmentOptions.filter(o => attachState[o.key] && !o.disabled).map(o => o.key);
-      await cfg.onSend({ subject: subj, body: bod, sendEmail: willSend, recipientEmail, attachments: selectedAttachments });
+      // attachmentFiles = files the user uploaded from their PC, ready to send.
+      await cfg.onSend({ subject: subj, body: bod, sendEmail: willSend, recipientEmail, attachments: selectedAttachments, attachmentFiles: uploadedFiles });
       setSendPhase('sent');
       setTimeout(() => {
         setSendPhase('closing');
@@ -118,7 +164,7 @@ export default function EmailComposerModal() {
     >
       <div
         className={`modal${isClosing ? ' modal-send-out' : ''}`}
-        style={{ maxWidth: '640px', position: 'relative' }}
+        style={{ maxWidth: '95vw', position: 'relative' }}
       >
         {sendPhase === 'sent' && <div className="modal-sent-flash" />}
 
@@ -127,7 +173,7 @@ export default function EmailComposerModal() {
           <button className="modal-close" onClick={handleClose}>&times;</button>
         </div>
 
-        <div className="modal-body" style={{ padding: '20px' }}>
+        <div className="modal-body" style={{ padding: '28px 32px' }}>
           <p style={{ marginBottom: '14px', color: 'var(--gray-600)' }}>{cfg.description}</p>
 
           {/* ── Recipient block ── */}
@@ -269,6 +315,27 @@ export default function EmailComposerModal() {
                   </div>
                 </div>
               )}
+
+              {/* Universal: attach files from the user's PC (offer letter, etc.) */}
+              <div style={{ marginTop: '12px', padding: '12px 14px', background: 'var(--gray-50)', border: '1px solid var(--gray-200)', borderRadius: 'var(--radius)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px', flexWrap: 'wrap' }}>
+                  <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--gray-700)' }}>📎 Attach files from your computer</div>
+                  <input ref={fileInputRef} type="file" multiple onChange={onFilesPicked} style={{ display: 'none' }} />
+                  <button type="button" className="btn btn-sm btn-secondary" onClick={() => fileInputRef.current?.click()}>+ Attach file</button>
+                </div>
+                {uploadedFiles.length > 0 && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '10px' }}>
+                    {uploadedFiles.map(f => (
+                      <div key={f.filename} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 10px', background: '#fff', border: '1px solid var(--gray-200)', borderRadius: '6px' }}>
+                        <span style={{ fontSize: '14px' }}>📄</span>
+                        <span style={{ flex: 1, fontSize: '13px', color: 'var(--gray-800)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{f.filename}</span>
+                        <span style={{ fontSize: '11px', color: 'var(--gray-400)', whiteSpace: 'nowrap' }}>{fmtSize(f.size)}</span>
+                        <button type="button" onClick={() => removeUpload(f.filename)} title="Remove" style={{ border: 'none', background: 'transparent', color: 'var(--gray-400)', cursor: 'pointer', fontSize: '16px', lineHeight: 1 }}>&times;</button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           )}
 

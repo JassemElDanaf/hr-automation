@@ -10,7 +10,6 @@ import Loading from '../components/common/Loading';
 import { sendEmailRequest, getShortlistTemplate, getInterviewTemplate, getOfferTemplate, getRejectionTemplate, getEmailStatus } from '../services/email';
 import { emailTypeLabel } from '../utils/helpers';
 import EvalDetailModal from '../components/modals/EvalDetailModal';
-import InterviewQuestionsModal from '../components/modals/InterviewQuestionsModal';
 
 const HM_LS_KEY = 'hr_hiring_manager_emails';
 function loadHMEmails() {
@@ -40,16 +39,14 @@ export default function Shortlist() {
   const [emailMap, setEmailMap] = useState({}); // candidate_id -> [{ email_type, status, sent_at, subject, body, recipient_email, error_message }, ...]
   const [expandedEmail, setExpandedEmail] = useState({}); // candidate_id -> true if email details expanded
   const [profileCandidate, setProfileCandidate] = useState(null); // candidate for detail modal
-  const [interviewPrep, setInterviewPrep] = useState(null); // { candidate, job } for the prep-before-handoff modal
   const [transitioning, setTransitioning] = useState({}); // id -> true while animation plays
   const [retainedInView, setRetainedInView] = useState(new Set()); // keep card visible after state change
 
   useEffect(() => { loadJobs(); }, []);
 
+  // Follow the global job picked in the header (applies universally across tabs).
   useEffect(() => {
-    if (selectedJob && !jobId) {
-      setJobId(String(selectedJob.id));
-    }
+    if (selectedJob) setJobId(String(selectedJob.id));
   }, [selectedJob]);
 
   useEffect(() => {
@@ -131,9 +128,9 @@ export default function Shortlist() {
       defaultSubject: tmpl.subject, defaultBody: tmpl.body,
       sendLabel: 'Send Email', sendClass: 'btn-success', showSendToggle: false,
       editableRecipient: !email, recipientLabel: 'Candidate',
-      onSend: async ({ subject, body, recipientEmail: resolvedEmail }) => {
+      onSend: async ({ subject, body, recipientEmail: resolvedEmail, attachmentFiles }) => {
         const to = resolvedEmail || email;
-        const res = await sendEmailRequest({ candidateId, jobId: jobOpeningId, emailType: sendType, recipientEmail: to, candidateName, jobTitle, subject, body });
+        const res = await sendEmailRequest({ candidateId, jobId: jobOpeningId, emailType: sendType, recipientEmail: to, candidateName, jobTitle, subject, body, attachments: attachmentFiles });
         const status = res.data?.status;
         const errMsg = res.data?.error_message || res.data?.error || null;
         const newEntry = { email_type: sendType, status: status || 'failed', sent_at: new Date().toISOString(), subject, body, recipient_email: to, error_message: errMsg, direction: 'outbound' };
@@ -156,13 +153,13 @@ export default function Shortlist() {
       job: { id: s.job_opening_id, title: jobTitle }, emailType: 'rejection',
       defaultSubject: tmpl.subject, defaultBody: tmpl.body,
       sendLabel: 'Reject Candidate', sendClass: 'btn-danger', showSendToggle: true,
-      onSend: async ({ subject, body, sendEmail, recipientEmail: resolvedEmail }) => {
+      onSend: async ({ subject, body, sendEmail, recipientEmail: resolvedEmail, attachmentFiles }) => {
         await updateStatus(s.id, 'rejected');
         // Use the address resolved by the composer (HR may have typed one for a
         // candidate with no email on file) — not the empty closure variable.
         const to = resolvedEmail || s.email;
         if (sendEmail && to) {
-          const res = await sendEmailRequest({ candidateId: s.candidate_id, jobId: s.job_opening_id, emailType: 'rejection', recipientEmail: to, candidateName: s.candidate_name, jobTitle, subject, body });
+          const res = await sendEmailRequest({ candidateId: s.candidate_id, jobId: s.job_opening_id, emailType: 'rejection', recipientEmail: to, candidateName: s.candidate_name, jobTitle, subject, body, attachments: attachmentFiles });
           const status = res.data?.status;
           const newEntry = { email_type: 'rejection', status: status || 'failed', sent_at: new Date().toISOString(), subject, body, recipient_email: to, error_message: res.data?.error || null, direction: 'outbound' };
           setEmailMap(prev => ({ ...prev, [s.candidate_id]: [newEntry, ...(prev[s.candidate_id] || [])] }));
@@ -176,30 +173,6 @@ export default function Shortlist() {
     });
   }
 
-  // Hand Off chains through the interview-prep modal (set meeting + generate questions)
-  // and then opens the email composer with the full pack. The HM email is the moment HR
-  // formally transfers ownership, so we want HR to walk through prep first instead of
-  // sending a bare evaluation summary.
-  function handOffToHM(s) {
-    const jobSel = jobs.find(j => j.id === parseInt(jobId)) || {};
-    const candidateForModal = {
-      id: s.candidate_id,
-      candidate_name: s.candidate_name,
-      email: s.email,
-      overall_score: s.overall_score,
-      skills_score: s.skills_score,
-      experience_score: s.experience_score,
-      education_score: s.education_score,
-      strengths: s.strengths,
-      weaknesses: s.weaknesses,
-      reasoning: s.reasoning,
-    };
-    setInterviewPrep({ candidate: candidateForModal, job: jobSel });
-  }
-
-  function handlePackSent(candidateId, newEntry) {
-    setEmailMap(prev => ({ ...prev, [candidateId]: [newEntry, ...(prev[candidateId] || [])] }));
-  }
 
   // Archive helpers
   const isSlArchived = (id) => !!slArchivedMap[id] || (slPendingArchive && slPendingArchive.id === id);
@@ -302,7 +275,12 @@ export default function Shortlist() {
         <label style={{ fontWeight: 600, fontSize: '14px', whiteSpace: 'nowrap' }}>Select Job:</label>
         <select value={jobId} onChange={e => handleJobChange(e.target.value)} style={{ maxWidth: '350px' }}>
           <option value="">-- Select a job opening --</option>
-          {jobs.map(j => <option key={j.id} value={j.id}>{j.job_title} &mdash; {j.department}</option>)}
+          {jobs.filter(j => j.is_active).map(j => <option key={j.id} value={j.id}>{j.job_title} &mdash; {j.department}</option>)}
+          {jobs.some(j => !j.is_active) && (
+            <optgroup label="Closed (reactivate in Job Openings to use)">
+              {jobs.filter(j => !j.is_active).map(j => <option key={j.id} value={j.id} disabled>{j.job_title} &mdash; {j.department}</option>)}
+            </optgroup>
+          )}
         </select>
         <button className="btn btn-secondary btn-sm" onClick={loadShortlist}>Refresh</button>
       </div>
@@ -453,25 +431,14 @@ export default function Shortlist() {
                       <span style={{ fontSize: '13px', color: 'var(--gray-400)', fontWeight: 600 }}>Archived ({slArchivedMap[s.id] || s.status})</span>
                       <button className="btn btn-sm btn-secondary" onClick={() => restoreSlArchive(s.id)}>Restore</button>
                     </>
-                  ) : handedOff ? (<>
-                    {/* Once handed off to HM, decisions belong here. Hire / Reject are
-                        the HM-driven verdicts. Re-send Pack lets HR forward the same
-                        materials again (e.g. after fixing an interviewer email). */}
-                    <button className="btn btn-sm btn-success" onClick={() => updateStatus(s.id, 'hired')}>{'\u2713'} Hire</button>
-                    <button className="btn btn-sm btn-secondary" onClick={() => sendEmail(s.candidate_id, s.job_opening_id, s.candidate_name, s.email, 'offer')}>Send Offer</button>
-                    <button className="btn btn-sm btn-danger" onClick={() => rejectFromShortlist(s)}>{'\u2717'} Reject</button>
-                    <button className="btn btn-sm btn-secondary" onClick={() => handOffToHM(s)}>Re-send Pack</button>
-                    <button className="btn btn-sm btn-ghost" onClick={() => archiveShortlistItem(s.id, s.status)}>Archive</button>
-                  </>) : (<>
+                  ) : (<>
                     {s.status === 'shortlisted' && <>
                       <button className="btn btn-sm btn-primary" onClick={() => updateStatus(s.id, 'interviewed')}>Mark Interviewed</button>
                       <button className="btn btn-sm btn-success" onClick={() => sendEmail(s.candidate_id, s.job_opening_id, s.candidate_name, s.email, 'shortlisted')}>Email Shortlist</button>
                       <button className="btn btn-sm btn-secondary" onClick={() => sendEmail(s.candidate_id, s.job_opening_id, s.candidate_name, s.email, 'interview_invite')}>Interview Invite</button>
-                      <button className="btn btn-sm btn-primary" onClick={() => handOffToHM(s)}>{'\u2709'} Hand Off to HM</button>
                       <button className="btn btn-sm btn-danger" onClick={() => rejectFromShortlist(s)}>{'\u2717'} Reject</button>
                     </>}
                     {s.status === 'interviewed' && <>
-                      <button className="btn btn-sm btn-primary" onClick={() => handOffToHM(s)}>{'\u2709'} Hand Off to HM</button>
                       <button className="btn btn-sm btn-secondary" onClick={() => updateStatus(s.id, 'shortlisted')}>Back to Shortlist</button>
                       <button className="btn btn-sm btn-danger" onClick={() => rejectFromShortlist(s)}>{'\u2717'} Reject</button>
                     </>}
@@ -503,13 +470,6 @@ export default function Shortlist() {
         onClose={() => setProfileCandidate(null)}
       />
 
-      <InterviewQuestionsModal
-        candidate={interviewPrep?.candidate}
-        job={interviewPrep?.job}
-        isOpen={!!interviewPrep}
-        onClose={() => setInterviewPrep(null)}
-        onPackSent={handlePackSent}
-      />
     </div>
   );
 }

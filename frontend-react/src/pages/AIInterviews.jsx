@@ -162,8 +162,9 @@ export default function AIInterviews({ embedded = false }) {
 
   useEffect(() => { loadJobs(); return () => clearInterval(pollingRef.current); }, []);
 
+  // Follow the global job picked in the header (applies universally across tabs).
   useEffect(() => {
-    if (!selectedJob || jobId || jobs.length === 0) return;
+    if (!selectedJob || jobs.length === 0 || String(selectedJob.id) === String(jobId)) return;
     const match = jobs.find(j => String(j.JobId) === String(selectedJob.id));
     if (match) handleJobChange(String(match.JobId));
   }, [selectedJob, jobs]);
@@ -173,7 +174,7 @@ export default function AIInterviews({ embedded = false }) {
     try {
       const res = await apiGet('/job-openings');
       const list = res.data || res || [];
-      setJobs(list.map(j => ({ JobId: j.id ?? j.JobId, job_title: j.job_title, department: j.department })));
+      setJobs(list.map(j => ({ JobId: j.id ?? j.JobId, job_title: j.job_title, department: j.department, is_active: j.is_active })));
     } catch { showToast('Failed to load jobs', 'error'); }
     finally { setLoadingJobs(false); }
   }
@@ -300,12 +301,12 @@ HR Department`;
         { key: 'cv', label: 'Candidate CV', sublabel: s.hasCv ? 'Original uploaded file' : 'No CV file on record for this candidate', checked: !!s.hasCv, disabled: !s.hasCv },
         { key: 'recording', label: 'Interview recording', sublabel: s.recordingPath ? 'Video (.webm) — skipped automatically if over the email size limit' : 'No recording for this session', checked: false, disabled: !s.recordingPath },
       ],
-      onSend: async ({ subject, body, recipientEmail, attachments: sel = [] }) => {
+      onSend: async ({ subject, body, recipientEmail, attachments: sel = [], attachmentFiles = [] }) => {
         if (!looksLikeEmail(recipientEmail)) {
           showToast('Enter a valid hiring manager email', 'error');
           throw new Error('invalid recipient');
         }
-        const files = [];
+        const files = [...attachmentFiles];
         if (sel.includes('pdf')) {
           const b64 = buildInterviewReportPdf({ session: s, qaPairs, perQuestion: perQ, requirements: reqs, jobTitle });
           files.push({ filename: `Interview Report - ${s.candidateName || 'candidate'}.pdf`, content_b64: b64, mime: 'application/pdf' });
@@ -350,7 +351,12 @@ HR Department`;
           <label>Job Opening</label>
           <select value={jobId} onChange={e => handleJobChange(e.target.value)} disabled={loadingJobs}>
             <option value="">{loadingJobs ? 'Loading…' : 'Select a job opening'}</option>
-            {jobs.map(j => <option key={j.JobId} value={j.JobId}>{j.job_title}{j.department ? ` — ${j.department}` : ''}</option>)}
+            {jobs.filter(j => j.is_active !== false).map(j => <option key={j.JobId} value={j.JobId}>{j.job_title}{j.department ? ` — ${j.department}` : ''}</option>)}
+            {jobs.some(j => j.is_active === false) && (
+              <optgroup label="Closed (reactivate in Job Openings to use)">
+                {jobs.filter(j => j.is_active === false).map(j => <option key={j.JobId} value={j.JobId} disabled>{j.job_title}{j.department ? ` — ${j.department}` : ''}</option>)}
+              </optgroup>
+            )}
           </select>
         </div>
         <button

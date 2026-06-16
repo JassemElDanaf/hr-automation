@@ -8,6 +8,7 @@ const tabs = [
   { path: '/cv-eval', label: 'CV Evaluation' },
   { path: '/shortlist', label: 'Shortlist' },
   { path: '/live-interview', label: 'Interview' },
+  { path: '/decision', label: 'Decision' },
   { path: '/emails', label: 'Emails' },
 ];
 

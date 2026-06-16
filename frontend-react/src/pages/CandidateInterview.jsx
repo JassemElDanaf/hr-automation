@@ -250,15 +250,17 @@ const CI_STYLES = `
   }
   .ci-card {
     background:#fff; border:1px solid #e5e7eb; border-radius:12px;
-    padding:36px 40px; max-width:520px; width:100%;
+    padding:36px 44px; max-width:660px; width:100%;
     box-shadow:0 4px 20px rgba(0,0,0,0.06); animation:ci-fadein 0.35s ease both;
   }
   .ci-eyebrow { font-size:11px; font-weight:700; letter-spacing:0.1em; text-transform:uppercase; color:#2563eb; margin-bottom:10px; }
   .ci-h1 { font-size:26px; font-weight:800; color:#111827; margin-bottom:6px; line-height:1.2; }
   .ci-sub { font-size:15px; color:#6b7280; margin-bottom:22px; line-height:1.55; }
-  .ci-list { list-style:none; padding:0; margin:0 0 26px; display:flex; flex-direction:column; gap:8px; }
-  .ci-list li { display:flex; align-items:flex-start; gap:10px; font-size:14px; color:#374151; line-height:1.5; }
-  .ci-list li::before { content:'›'; color:#2563eb; font-weight:700; font-size:16px; line-height:1.4; flex-shrink:0; }
+  .ci-list { list-style:none; padding:0; margin:0 0 26px; display:flex; flex-direction:column; gap:9px; }
+  /* position:relative + padding-left (not flex) so an inline <strong> and the
+     text after it flow together on one line instead of splitting into columns. */
+  .ci-list li { position:relative; padding-left:22px; font-size:14px; color:#374151; line-height:1.55; }
+  .ci-list li::before { position:absolute; left:2px; top:0; content:'›'; color:#2563eb; font-weight:700; font-size:16px; line-height:1.5; }
   .ci-go {
     width:100%; padding:13px; border:none; border-radius:8px; background:#2563eb;
     color:#fff; font-size:15px; font-weight:700; cursor:pointer; font-family:inherit; transition:background 0.15s;
@@ -301,9 +303,19 @@ export default function CandidateInterview() {
   const [micOn, setMicOn]           = useState(true);
   const [camOn, setCamOn]           = useState(false);
   const [hasSpeechAPI, setHasSpeechAPI] = useState(false);
+  const [sttFailed, setSttFailed] = useState(false); // speech recognition unavailable → show typing fallback
   const [manualAnswer, setManualAnswer] = useState('');
   const [chipStatus, setChipStatus] = useState('idle');
   const [submitting, setSubmitting] = useState(false);
+  // Pre-interview device check (intro screen)
+  const [speakerState, setSpeakerState] = useState('idle'); // idle | playing
+  const [devicesReady, setDevicesReady] = useState(false);
+  const [deviceError, setDeviceError] = useState('');
+  const [micLevel, setMicLevel] = useState(0);
+  const testStreamRef = useRef(null);
+  const testVideoRef  = useRef(null);
+  const audioCtxRef   = useRef(null);
+  const meterRafRef   = useRef(null);
 
   const videoRef        = useRef(null);
   const streamRef       = useRef(null);
@@ -354,6 +366,9 @@ export default function CandidateInterview() {
       phaseRef.current = 'error'; setPhase('error');
     } else { setTokenData(data); }
     setHasSpeechAPI(!!(window.SpeechRecognition || window.webkitSpeechRecognition));
+    // Preload TTS voices — getVoices() is empty on first call in Chrome until
+    // the voiceschanged event fires, so warm it up before the interview starts.
+    try { window.speechSynthesis?.getVoices(); } catch {}
     return () => cleanup();
   }, [token]);
 
@@ -368,7 +383,49 @@ export default function CandidateInterview() {
     if (feedRef.current) feedRef.current.scrollTop = feedRef.current.scrollHeight;
   }, [completedPairs, currentQ, loadingQ]);
 
-  function cleanup() { stopTimer(); stopSpeaking(); stopRecognition(); stopCamera(); }
+  function cleanup() { stopTimer(); stopSpeaking(); stopRecognition(); stopCamera(); stopDeviceTest(); }
+
+  // ── Pre-interview device check (intro screen) ────────────────────────────────
+  async function testSpeaker() {
+    if (speakerState === 'playing') return;
+    setSpeakerState('playing');
+    try { window.speechSynthesis?.resume(); } catch {}
+    await speak('Hi! If you can hear this clearly, your speaker is working and you are ready for the interview.');
+    setSpeakerState('idle');
+  }
+
+  async function testDevices() {
+    setDeviceError('');
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+      testStreamRef.current = stream;
+      setDevicesReady(true);
+      if (testVideoRef.current) testVideoRef.current.srcObject = stream;
+      const Ctx = window.AudioContext || window.webkitAudioContext;
+      if (Ctx) {
+        const ctx = new Ctx(); audioCtxRef.current = ctx;
+        const analyser = ctx.createAnalyser(); analyser.fftSize = 256;
+        ctx.createMediaStreamSource(stream).connect(analyser);
+        const data = new Uint8Array(analyser.frequencyBinCount);
+        const tick = () => {
+          analyser.getByteFrequencyData(data);
+          const avg = data.reduce((a, b) => a + b, 0) / data.length;
+          setMicLevel(Math.min(100, Math.round(avg * 1.6)));
+          meterRafRef.current = requestAnimationFrame(tick);
+        };
+        tick();
+      }
+    } catch {
+      setDeviceError('Could not access camera or microphone. Check your browser permissions and that no other app is using them.');
+    }
+  }
+
+  function stopDeviceTest() {
+    if (meterRafRef.current) { cancelAnimationFrame(meterRafRef.current); meterRafRef.current = null; }
+    if (audioCtxRef.current) { try { audioCtxRef.current.close(); } catch {} audioCtxRef.current = null; }
+    if (testStreamRef.current) { testStreamRef.current.getTracks().forEach(t => t.stop()); testStreamRef.current = null; }
+    setMicLevel(0);
+  }
 
   // Seconds into the recording — used to timestamp each question so the HM's
   // playback can overlay the question being asked at that moment.
@@ -469,25 +526,53 @@ export default function CandidateInterview() {
 
   function pickVoice() {
     const voices = window.speechSynthesis.getVoices();
-    const preferred = ['Google UK English Female','Google US English','Microsoft Zira - English (United States)','Samantha','Karen'];
-    for (const name of preferred) { const v = voices.find(v => v.name === name); if (v) return v; }
-    return voices.find(v => /en[-_](US|GB|AU)/i.test(v.lang) && !v.name.includes('eSpeak'))
-        || voices.find(v => v.lang.startsWith('en')) || null;
+    if (!voices.length) return null;
+    const en = voices.filter(v => /^en/i.test(v.lang) && !v.name.includes('eSpeak'));
+    // Prefer LOCAL (offline) voices first — network voices like "Google US English"
+    // produce no sound on a restricted/offline network, which is the usual cause
+    // of "I can't hear the AI". Local OS voices (e.g. Microsoft Zira/David on
+    // Windows) always work without internet.
+    const localEn = en.filter(v => v.localService);
+    const niceLocal = ['Microsoft Zira', 'Microsoft Aria', 'Microsoft Jenny', 'Microsoft David', 'Microsoft Mark', 'Samantha', 'Karen'];
+    for (const name of niceLocal) { const v = localEn.find(v => v.name.includes(name)); if (v) return v; }
+    if (localEn.length) return localEn[0];
+    // No local English voice — fall back to any English, then any voice at all.
+    return en[0] || voices[0] || null;
   }
   function stopSpeaking() {
     window.speechSynthesis?.cancel(); speakingRef.current = false; setIsSpeaking(false);
   }
   function speak(text) {
     return new Promise(resolve => {
-      if (!window.speechSynthesis) { resolve(); return; }
-      window.speechSynthesis.cancel();
-      const u = new SpeechSynthesisUtterance(text);
-      u.rate = 0.96; u.pitch = 1.05;
-      const v = pickVoice(); if (v) u.voice = v;
-      speakingRef.current = true; setIsSpeaking(true);
-      u.onend  = () => { speakingRef.current = false; setIsSpeaking(false); resolve(); };
-      u.onerror = () => { speakingRef.current = false; setIsSpeaking(false); resolve(); };
-      window.speechSynthesis.speak(u);
+      const synth = window.speechSynthesis;
+      if (!synth || !text) { resolve(); return; }
+      let done = false, timer = null, keepAlive = null;
+      const finish = () => {
+        if (done) return; done = true;
+        if (timer) clearTimeout(timer);
+        if (keepAlive) clearInterval(keepAlive);
+        speakingRef.current = false; setIsSpeaking(false);
+        resolve();
+      };
+      try {
+        synth.cancel();
+        const u = new SpeechSynthesisUtterance(text);
+        u.rate = 0.96; u.pitch = 1.05; u.lang = 'en-US';
+        const v = pickVoice(); if (v) u.voice = v;
+        u.onend = finish;
+        u.onerror = finish;
+        speakingRef.current = true; setIsSpeaking(true);
+        synth.speak(u);
+        // Chrome quirks: speech can get stuck "paused" after cancel(); resume() nudges it.
+        try { synth.resume(); } catch {}
+        keepAlive = setInterval(() => { try { if (synth.paused) synth.resume(); } catch {} }, 3000);
+        // CRITICAL safety net: if the browser silently drops the utterance (no
+        // voices, OS without TTS, autoplay block) onend never fires — without
+        // this the awaiting flow (incl. finishInterview → review screen) would
+        // hang forever. Resolve after a generous, length-based timeout so the
+        // interview always advances.
+        timer = setTimeout(finish, Math.min(20000, Math.max(4500, text.length * 90)));
+      } catch { finish(); }
     });
   }
 
@@ -520,8 +605,13 @@ export default function CandidateInterview() {
         setTimeout(() => { if (phaseRef.current === 'interview' && !loadingQRef.current && !speakingRef.current) startRecognition(); }, 300);
     };
     rec.onerror = (e) => {
-      if (e.error === 'not-allowed' || e.error === 'service-not-available') {
-        micOnRef.current = false; setMicOn(false); setIsListening(false);
+      // Chrome's speech recognition is a NETWORK service (audio → Google). On a
+      // restricted/offline network it fails with service-not-available/network;
+      // mic permission issues give not-allowed/audio-capture. In all these cases
+      // recognition can't capture answers, so fall back to letting the candidate
+      // TYPE — otherwise every answer ends up "(no response)".
+      if (['not-allowed', 'service-not-available', 'network', 'audio-capture'].includes(e.error)) {
+        micOnRef.current = false; setMicOn(false); setIsListening(false); setSttFailed(true);
       } else if (e.error !== 'no-speech' && e.error !== 'aborted') {
         setIsListening(false);
       }
@@ -553,6 +643,12 @@ export default function CandidateInterview() {
   async function startInterview() {
     if (!tokenData) return;
     setStarting(true);
+    // Unlock speech synthesis *inside* the click gesture. The first real speak()
+    // happens after `await startCamera()` (the camera permission prompt), by which
+    // point Chrome no longer sees an active user gesture and can silently block
+    // audio. Priming it here with an empty utterance keeps later speech audible.
+    try { window.speechSynthesis?.resume(); window.speechSynthesis?.speak(new SpeechSynthesisUtterance('')); } catch {}
+    stopDeviceTest(); // release the preview stream; startCamera re-acquires (permission already granted)
     try {
       await startCamera();
       startRecording(tokenData.candidateId, tokenData.jobId);
@@ -697,6 +793,37 @@ export default function CandidateInterview() {
         <li>All questions and your answers stay visible on screen as you go</li>
         <li><strong>This interview is recorded</strong> (video and audio) and may be reviewed by the hiring team</li>
       </ul>
+      {/* Device check — confirm speaker, camera and mic before starting */}
+      <div style={{ background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 10, padding: '16px 18px', marginBottom: 22 }}>
+        <div style={{ fontSize: 12, fontWeight: 700, color: '#374151', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 12 }}>Check your devices</div>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: devicesReady || deviceError ? 14 : 0 }}>
+          <button type="button" onClick={testSpeaker} disabled={speakerState === 'playing'}
+            style={{ flex: 1, minWidth: 150, padding: '10px 14px', borderRadius: 8, border: '1px solid #bfdbfe', background: '#fff', color: '#2563eb', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
+            {speakerState === 'playing' ? '🔊 Playing…' : '🔊 Test speaker'}
+          </button>
+          <button type="button" onClick={testDevices}
+            style={{ flex: 1, minWidth: 150, padding: '10px 14px', borderRadius: 8, border: '1px solid #bfdbfe', background: '#fff', color: '#2563eb', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
+            {devicesReady ? '🎥 Camera & mic ✓' : '🎥 Test camera & mic'}
+          </button>
+        </div>
+        {speakerState === 'playing' && (
+          <div style={{ fontSize: 12, color: '#6b7280', marginTop: 8 }}>You should hear a short message. No sound? Check your volume/output device, then retry.</div>
+        )}
+        {deviceError && <div style={{ fontSize: 12, color: '#b91c1c', marginTop: 8 }}>{deviceError}</div>}
+        {devicesReady && (
+          <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+            <video ref={testVideoRef} autoPlay playsInline muted style={{ width: 120, height: 90, objectFit: 'cover', borderRadius: 8, background: '#111827', flexShrink: 0 }} />
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 12, color: '#374151', marginBottom: 6 }}>Speak — your mic level should move:</div>
+              <div style={{ height: 8, background: '#e5e7eb', borderRadius: 4, overflow: 'hidden' }}>
+                <div style={{ height: '100%', width: `${micLevel}%`, background: micLevel > 8 ? '#16a34a' : '#9ca3af', transition: 'width 0.1s' }} />
+              </div>
+              <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 6 }}>Camera preview on the left. If both work, you're set.</div>
+            </div>
+          </div>
+        )}
+      </div>
+
       <button className="ci-go" onClick={startInterview} disabled={starting || !tokenData}>
         {starting ? 'Starting…' : 'Start Interview'}
       </button>
@@ -887,6 +1014,16 @@ export default function CandidateInterview() {
                   <span className="ci-wave-status">
                     {isSpeaking ? 'AI speaking…' : 'Listening for your answer…'}
                   </span>
+                  {/* Manual replay — a direct click always allows TTS even if the
+                      browser blocked the automatic speech. */}
+                  <button
+                    type="button"
+                    onClick={() => speak(currentQ.question)}
+                    title="Replay the question aloud"
+                    style={{ marginLeft: 'auto', border: '1px solid #bfdbfe', background: '#fff', color: '#2563eb', borderRadius: 6, padding: '4px 11px', fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}
+                  >
+                    🔊 Replay question
+                  </button>
                 </div>
 
                 {/* Answer panel — directly under question */}
@@ -895,7 +1032,7 @@ export default function CandidateInterview() {
                     {!isSpeaking && <span className="ci-ans-dot" />}
                     Your answer
                   </div>
-                  {hasSpeechAPI ? (
+                  {hasSpeechAPI && !sttFailed ? (
                     <div className="ci-ans-text">
                       {currentAnswer || liveText
                         ? <>{currentAnswer}{liveText && <span className="ci-ans-placeholder"> {liveText}</span>}</>
@@ -903,14 +1040,21 @@ export default function CandidateInterview() {
                       }
                     </div>
                   ) : (
-                    <input
-                      className="ci-manual-in"
-                      type="text"
-                      placeholder="Type your answer and press Enter…"
-                      value={manualAnswer}
-                      onChange={e => setManualAnswer(e.target.value)}
-                      onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); advanceQuestion(true); } }}
-                    />
+                    <>
+                      {sttFailed && (
+                        <div style={{ fontSize: 11, color: '#b45309', marginBottom: 6 }}>
+                          Voice capture isn't available on this device/network — please type your answer instead.
+                        </div>
+                      )}
+                      <input
+                        className="ci-manual-in"
+                        type="text"
+                        placeholder="Type your answer and press Enter…"
+                        value={manualAnswer}
+                        onChange={e => setManualAnswer(e.target.value)}
+                        onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); advanceQuestion(true); } }}
+                      />
+                    </>
                   )}
                 </div>
 

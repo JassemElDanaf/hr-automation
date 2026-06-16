@@ -5,6 +5,7 @@ import Header from './components/layout/Header';
 import NavTabs from './components/layout/NavTabs';
 import Toast from './components/common/Toast';
 import EmailComposerModal from './components/modals/EmailComposerModal';
+import ConfirmDialog from './components/modals/ConfirmDialog';
 import Dashboard from './pages/Dashboard';
 import JobOpenings from './pages/JobOpenings';
 import CVEvaluation from './pages/CVEvaluation';
@@ -13,6 +14,7 @@ import Emails from './pages/Emails';
 import LiveInterview from './pages/LiveInterview';
 import CandidateInterview from './pages/CandidateInterview';
 import TalentPool from './pages/TalentPool';
+import Decision from './pages/Decision';
 import './styles/global.css';
 
 function HRLayout() {
@@ -23,6 +25,7 @@ function HRLayout() {
       <Outlet />
       <Toast />
       <EmailComposerModal />
+      <ConfirmDialog />
     </>
   );
 }
@@ -45,6 +48,7 @@ export default function App() {
               <Route path="/emails" element={<Emails />} />
               <Route path="/talent-pool" element={<TalentPool />} />
               <Route path="/live-interview" element={<LiveInterview />} />
+              <Route path="/decision" element={<Decision />} />
               {/* AI Interviews now lives as the Results sub-tab of Interview */}
               <Route path="/ai-interviews" element={<Navigate to="/live-interview?tab=results" replace />} />
             </Route>

@@ -26,10 +26,9 @@ export default function Dashboard() {
     loadDashboard();
   }, []);
 
+  // Follow the global job picked in the header (applies universally across tabs).
   useEffect(() => {
-    if (selectedJob && !filterJobId) {
-      setFilterJobId(String(selectedJob.id));
-    }
+    if (selectedJob) setFilterJobId(String(selectedJob.id));
   }, [selectedJob]);
 
   async function loadDashboard() {

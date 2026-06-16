@@ -416,7 +416,7 @@ export default function InterviewQuestionsModal({ candidate, job, isOpen, onClos
       sendClass: 'btn-primary',
       onBack: () => {},
       backLabel: 'Back to Interview Pack',
-      onSend: async ({ subject, body, recipientEmail }) => {
+      onSend: async ({ subject, body, recipientEmail, attachmentFiles }) => {
         if (!looksLikeEmail(recipientEmail)) {
           showToast('Please enter a valid hiring manager email', 'error');
           throw new Error('invalid recipient');
@@ -424,7 +424,7 @@ export default function InterviewQuestionsModal({ candidate, job, isOpen, onClos
         const res = await sendEmailRequest({
           candidateId: candidate.id, jobId: job?.id, emailType: 'recommendation',
           recipientEmail, candidateName: candidate.candidate_name, jobTitle,
-          subject, body,
+          subject, body, attachments: attachmentFiles,
         });
         if (job?.id) saveHMEmail(job.id, recipientEmail);
         const status = getEmailStatus(res);
@@ -440,6 +440,10 @@ export default function InterviewQuestionsModal({ candidate, job, isOpen, onClos
             direction: 'outbound',
           });
         }
+        // On a successful send, close the Interview Pack modal too so HR lands
+        // back on the Shortlist (not stranded on the prep modal behind the
+        // composer). On failure/logged we leave it open so they can retry.
+        if (res.data?.status === 'sent') onClose();
       },
     });
   }
@@ -482,7 +486,7 @@ export default function InterviewQuestionsModal({ candidate, job, isOpen, onClos
 
   return (
     <div className="modal-overlay active" onClick={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="modal" style={{ maxWidth: 800, maxHeight: '92vh', display: 'flex', flexDirection: 'column' }}>
+      <div className="modal wide" style={{ maxWidth: '95vw', maxHeight: '92vh', display: 'flex', flexDirection: 'column' }}>
 
         {/* Header */}
         <div className="modal-header">
@@ -490,7 +494,7 @@ export default function InterviewQuestionsModal({ candidate, job, isOpen, onClos
           <button className="modal-close" onClick={onClose}>&times;</button>
         </div>
 
-        <div className="modal-body" style={{ padding: '20px', overflowY: 'auto', flex: 1 }}>
+        <div className="modal-body" style={{ padding: '28px 32px', overflowY: 'auto', flex: 1 }}>
 
           {/* ── Source selector ── */}
           <div style={{ background: 'var(--gray-50)', border: '1px solid var(--gray-200)', borderRadius: 'var(--radius)', padding: '14px', marginBottom: '16px' }}>

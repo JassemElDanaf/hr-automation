@@ -26,7 +26,7 @@ import { sendEmailRequest, getRejectionTemplate } from '../services/email';
 
 export default function CVEvaluation() {
   const { selectedJob, setSelectedJob } = useSelectedJob();
-  const { showToast, openEmailComposer } = useUI();
+  const { showToast, openEmailComposer, showConfirm } = useUI();
 
   const [step, setStep] = useState(1);
   const [jobsCache, setJobsCache] = useState([]);
@@ -87,13 +87,17 @@ export default function CVEvaluation() {
     } catch {}
   }
 
-  // Auto-select global job on mount
+  // Follow the global job picked in the header. This wizard is the exception to
+  // "apply everywhere instantly": we adopt the global job when nothing's chosen
+  // yet or while still on Step 1, but never yank the user onto a different job
+  // mid-wizard (Steps 2-4) — that would lose their criteria/upload progress.
   useEffect(() => {
-    if (!evalSelectedJob && selectedJob && jobsCache.length > 0) {
-      const match = jobsCache.find(j => j.id === selectedJob.id);
-      if (match) selectJob(match);
-    }
-  }, [selectedJob, jobsCache]);
+    if (!selectedJob || jobsCache.length === 0) return;
+    if (evalSelectedJob && evalSelectedJob.id === selectedJob.id) return;
+    if (evalSelectedJob && step !== 1) return;
+    const match = jobsCache.find(j => j.id === selectedJob.id);
+    if (match) selectJob(match);
+  }, [selectedJob, jobsCache, step]);
 
   async function fetchJobState(jobId) {
     try {
@@ -189,7 +193,7 @@ export default function CVEvaluation() {
 
   async function generateAICriteria() {
     if (!evalSelectedJob || generating) return;
-    if (criteriaText && !confirm('This will replace the current draft. Continue?')) return;
+    if (criteriaText && !(await showConfirm({ title: 'Replace current draft?', message: 'This will replace the current criteria draft with newly generated criteria. Continue?', confirmLabel: 'Replace', cancelLabel: 'Keep current' }))) return;
     setGenerating(true);
     setGenStatus('Calling Ollama (qwen3:4b)\u2026 30-90 seconds');
     const previous = criteriaText;
@@ -398,7 +402,11 @@ export default function CVEvaluation() {
     const confirmMsg = isReject
       ? 'Revert the rejection? The candidate will return to pending and can be re-evaluated, shortlisted, or rejected again.'
       : 'Remove this candidate from the shortlist? They will return to pending.';
-    if (!confirm(confirmMsg)) return;
+    if (!(await showConfirm({
+      title: isReject ? 'Revert rejection?' : 'Remove from shortlist?',
+      message: confirmMsg,
+      confirmLabel: isReject ? 'Revert rejection' : 'Remove',
+    }))) return;
     try {
       const res = await apiPost('/remove-from-shortlist', { candidate_id: candidateId, job_opening_id: evalJobId });
       if (res.data.success) {
@@ -420,7 +428,7 @@ export default function CVEvaluation() {
       job: { id: evalJobId, title: jobTitle }, emailType: 'rejection',
       defaultSubject: tmpl.subject, defaultBody: tmpl.body,
       sendLabel: 'Reject Candidate', sendClass: 'btn-danger', showSendToggle: true,
-      onSend: async ({ subject, body, sendEmail, recipientEmail: resolvedEmail }) => {
+      onSend: async ({ subject, body, sendEmail, recipientEmail: resolvedEmail, attachmentFiles }) => {
         const slRes = await apiPost('/add-to-shortlist', { candidate_id: candidateId, job_opening_id: evalJobId, notes: 'Rejected from evaluation results' });
         if (slRes.data.success) {
           const entry = slRes.data.data;
@@ -435,7 +443,7 @@ export default function CVEvaluation() {
         // candidate with no email on file) — not the empty closure variable.
         const to = resolvedEmail || email;
         if (sendEmail && to) {
-          const res = await sendEmailRequest({ candidateId, jobId: evalJobId, emailType: 'rejection', recipientEmail: to, candidateName, jobTitle, subject, body });
+          const res = await sendEmailRequest({ candidateId, jobId: evalJobId, emailType: 'rejection', recipientEmail: to, candidateName, jobTitle, subject, body, attachments: attachmentFiles });
           const status = res.data?.status;
           if (status === 'sent') showToast(`Candidate rejected — email sent to ${to}`, 'info');
           else if (status === 'logged') showToast('Candidate rejected — SMTP not configured, email saved to log only', 'error');

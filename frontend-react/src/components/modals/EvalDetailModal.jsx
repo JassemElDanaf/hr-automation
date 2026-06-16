@@ -144,12 +144,12 @@ export default function EvalDetailModal({ candidate, allCandidates, job, isOpen,
       defaultBody: tmpl.body,
       sendLabel: 'Send Recommendation',
       sendClass: 'btn-primary',
-      onSend: async ({ subject, body, recipientEmail }) => {
+      onSend: async ({ subject, body, recipientEmail, attachmentFiles }) => {
         if (!looksLikeEmail(recipientEmail)) { showToast('Please enter a valid hiring manager email', 'error'); throw new Error('invalid recipient'); }
         const res = await sendEmailRequest({
           candidateId: c.id, jobId: job?.id, emailType: 'recommendation',
           recipientEmail, candidateName: c.candidate_name, jobTitle,
-          subject, body,
+          subject, body, attachments: attachmentFiles,
         });
         if (job?.id) saveHMEmail(job.id, recipientEmail);
         const status = getEmailStatus(res);

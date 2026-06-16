@@ -84,8 +84,9 @@ export default function LiveInterview() {
     setPendingPrep(null);
   }, [candidates, pendingPrep]);
 
+  // Follow the global job picked in the header (applies universally across tabs).
   useEffect(() => {
-    if (!selectedJob || jobId || jobs.length === 0) return;
+    if (!selectedJob || jobs.length === 0 || String(selectedJob.id) === String(jobId)) return;
     const match = jobs.find(j => String(j.JobId) === String(selectedJob.id));
     if (match) handleJobChange(String(match.JobId));
   }, [selectedJob, jobs]);
@@ -766,6 +767,7 @@ function CandidatePrepTab({ showToast, jobs, selectedJob, onUseForInterview }) {
 // ── QuestionBankTab ───────────────────────────────────────────────────────────
 
 function QuestionBankTab({ showToast }) {
+  const { showConfirm } = useUI();
   const [rows, setRows]         = useState([]);
   const [loading, setLoading]   = useState(true);
   const [search, setSearch]     = useState('');
@@ -826,7 +828,7 @@ function QuestionBankTab({ showToast }) {
   }
 
   async function deleteRow(id) {
-    if (!window.confirm('Delete this question from the bank?')) return;
+    if (!(await showConfirm({ title: 'Delete question?', message: 'Delete this question from the bank? This cannot be undone.', confirmLabel: 'Delete', danger: true }))) return;
     setDeleting(id);
     try {
       await fetch(`${QBANK_URL}?id=${id}`, {

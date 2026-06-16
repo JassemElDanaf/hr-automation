@@ -21,7 +21,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const query = $input.first().json.query || {};\nconst jobId = parseInt(query.job_id);\nif (!jobId || isNaN(jobId) || jobId < 1) {\n  return [{ json: { error: true, message: 'Valid job_id query parameter is required', status: 400 } }];\n}\nreturn [{ json: { error: false, sql: 'SELECT s.id, s.candidate_id, s.job_opening_id, s.status, s.notes, s.shortlisted_at, s.updated_at, c.candidate_name, c.email, c.cv_text, c.cv_file_name, c.submitted_at, e.overall_score, e.skills_score, e.experience_score, e.education_score, e.reasoning, e.strengths, e.weaknesses, e.evaluated_at FROM shortlist s INNER JOIN candidates c ON c.id = s.candidate_id LEFT JOIN evaluations e ON e.candidate_id = s.candidate_id AND e.job_opening_id = s.job_opening_id WHERE s.job_opening_id = ' + jobId + ' ORDER BY CASE s.status WHEN \\'shortlisted\\' THEN 1 WHEN \\'interviewed\\' THEN 2 WHEN \\'hired\\' THEN 3 WHEN \\'rejected\\' THEN 4 END, e.overall_score DESC' } }];"
+        "jsCode": "const query = $input.first().json.query || {};\nconst jobId = parseInt(query.job_id);\nif (!jobId || isNaN(jobId) || jobId < 1) {\n  return [{ json: { error: true, message: 'Valid job_id query parameter is required', status: 400 } }];\n}\nreturn [{ json: { error: false, sql: \"SELECT s.id, s.candidate_id, s.job_opening_id, s.status, s.notes, s.shortlisted_at, s.updated_at, s.hm_verdict, s.hm_notes, s.hm_reviewed_at, c.candidate_name, c.email, c.cv_text, c.cv_file_name, c.submitted_at, e.overall_score, e.skills_score, e.experience_score, e.education_score, e.reasoning, e.strengths, e.weaknesses, e.evaluated_at FROM shortlist s INNER JOIN candidates c ON c.id = s.candidate_id LEFT JOIN evaluations e ON e.candidate_id = s.candidate_id AND e.job_opening_id = s.job_opening_id WHERE s.job_opening_id = \" + jobId + \" ORDER BY CASE s.status WHEN 'shortlisted' THEN 1 WHEN 'interviewed' THEN 2 WHEN 'hired' THEN 3 WHEN 'rejected' THEN 4 END, e.overall_score DESC\" } }];"
       },
       "id": "build-shortlist-query",
       "name": "ListSL - Build Query",
@@ -476,6 +476,75 @@
         1140,
         1820
       ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "shortlist-hm-review",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "wh-hm-review",
+      "name": "HMReview - Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        250,
+        1100
+      ],
+      "webhookId": "shortlist-hm-review"
+    },
+    {
+      "parameters": {
+        "jsCode": "const b = $input.first().json.body || {};\nconst esc = s => String(s == null ? '' : s).replace(/'/g, \"''\");\nconst id = parseInt(b.id);\nconst candId = parseInt(b.candidate_id);\nconst jobId = parseInt(b.job_opening_id);\nconst verdict = ['hire','hold','reject'].includes((b.verdict||'').toLowerCase()) ? b.verdict.toLowerCase() : null;\nconst notes = esc(b.notes || '');\nlet where;\nif (id && !isNaN(id)) where = 'id = ' + id;\nelse if (candId && jobId) where = 'candidate_id = ' + candId + ' AND job_opening_id = ' + jobId;\nelse return [{ json: { error: true, message: 'id or candidate_id+job_opening_id required' } }];\nconst sql = \"UPDATE shortlist SET hm_verdict = \" + (verdict ? \"'\" + verdict + \"'\" : 'hm_verdict') + \", hm_notes = '\" + notes + \"', hm_reviewed_at = NOW() WHERE \" + where + ' RETURNING id, hm_verdict, hm_notes, hm_reviewed_at';\nreturn [{ json: { error: false, sql } }];"
+      },
+      "id": "build-hm-review",
+      "name": "HMReview - Build",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        470,
+        1100
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "={{ $json.sql }}",
+        "options": {}
+      },
+      "id": "update-hm-review",
+      "name": "HMReview - Update",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        690,
+        1100
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "postgres": {
+          "id": "1",
+          "name": "HR PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ success: true, data: $input.first().json }) }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "resp-hm-review",
+      "name": "HMReview - Respond",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        910,
+        1100
+      ]
     }
   ],
   "connections": {
@@ -677,6 +746,39 @@
         [
           {
             "node": "RemoveSL - Success Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HMReview - Webhook": {
+      "main": [
+        [
+          {
+            "node": "HMReview - Build",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HMReview - Build": {
+      "main": [
+        [
+          {
+            "node": "HMReview - Update",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HMReview - Update": {
+      "main": [
+        [
+          {
+            "node": "HMReview - Respond",
             "type": "main",
             "index": 0
           }
