@@ -129,75 +129,6 @@
     },
     {
       "parameters": {
-        "httpMethod": "GET",
-        "path": "interview/saved-questions",
-        "responseMode": "responseNode",
-        "options": {}
-      },
-      "id": "wh-intv-sq",
-      "name": "IntSQ - Webhook",
-      "type": "n8n-nodes-base.webhook",
-      "typeVersion": 2,
-      "position": [
-        250,
-        500
-      ],
-      "webhookId": "interview-saved-questions"
-    },
-    {
-      "parameters": {
-        "jsCode": "const evalId = parseInt($input.first().json.query?.evaluationId) || 0;\nreturn [{ json: { evalId } }];"
-      },
-      "id": "prep-intv-sq",
-      "name": "IntSQ - Validate",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        480,
-        500
-      ]
-    },
-    {
-      "parameters": {
-        "operation": "executeQuery",
-        "query": "SELECT question_number, category AS \"Category\", question AS \"Question\", hints FROM interview_questions WHERE evaluation_id = {{ $json.evalId }}::integer ORDER BY question_number",
-        "options": {}
-      },
-      "id": "fetch-intv-sq",
-      "name": "IntSQ - Query",
-      "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2.5,
-      "position": [
-        710,
-        500
-      ],
-      "alwaysOutputData": true,
-      "credentials": {
-        "postgres": {
-          "id": "1",
-          "name": "HR PostgreSQL"
-        }
-      }
-    },
-    {
-      "parameters": {
-        "respondWith": "json",
-        "responseBody": "={{ JSON.stringify($input.all().map(i => i.json).filter(i => i.Question)) }}",
-        "options": {
-          "responseCode": 200
-        }
-      },
-      "id": "resp-intv-sq",
-      "name": "IntSQ - Response",
-      "type": "n8n-nodes-base.respondToWebhook",
-      "typeVersion": 1.1,
-      "position": [
-        940,
-        500
-      ]
-    },
-    {
-      "parameters": {
         "httpMethod": "POST",
         "path": "interview/next-question",
         "responseMode": "responseNode",
@@ -969,39 +900,6 @@
         [
           {
             "node": "IntCand - Response",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "IntSQ - Webhook": {
-      "main": [
-        [
-          {
-            "node": "IntSQ - Validate",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "IntSQ - Validate": {
-      "main": [
-        [
-          {
-            "node": "IntSQ - Query",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "IntSQ - Query": {
-      "main": [
-        [
-          {
-            "node": "IntSQ - Response",
             "type": "main",
             "index": 0
           }
