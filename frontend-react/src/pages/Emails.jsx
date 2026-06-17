@@ -7,6 +7,7 @@ import Badge from '../components/common/Badge';
 import EmptyState from '../components/common/EmptyState';
 import Loading from '../components/common/Loading';
 import Modal from '../components/modals/Modal';
+import { sendEmailRequest, getEmailStatus } from '../services/email';
 import { formatDate, emailTypeLabel as baseEmailTypeLabel } from '../utils/helpers';
 
 // Emails tab uses a shorter label for the recommendation/handoff type.
@@ -25,6 +26,11 @@ export default function Emails() {
   const [testTo, setTestTo] = useState('');
   const [testSending, setTestSending] = useState(false);
   const [expandedRow, setExpandedRow] = useState(null); // email id of expanded row
+  // Compose new email
+  const [showCompose, setShowCompose] = useState(false);
+  const [candidates, setCandidates] = useState([]);
+  const [compose, setCompose] = useState({ candidateId: '', to: '', subject: '', body: '' });
+  const [composing, setComposing] = useState(false);
 
   useEffect(() => {
     loadJobs();
@@ -52,6 +58,44 @@ export default function Emails() {
       const job = jobs.find(j => j.id === parseInt(val));
       if (job) setSelectedJob(job);
     }
+  }
+
+  // Compose a new email to a candidate of the selected job. Tied to a candidate
+  // so it logs to email_log (which requires candidate_id + job_opening_id) and
+  // appears in the history below.
+  async function openCompose() {
+    if (!jobId) { showToast('Select a job first', 'error'); return; }
+    setCompose({ candidateId: '', to: '', subject: '', body: '' });
+    setShowCompose(true);
+    try {
+      const res = await apiGet(`/candidates?job_id=${jobId}`);
+      setCandidates(res.data || []);
+    } catch { setCandidates([]); }
+  }
+
+  function onComposeCandidate(cid) {
+    const c = candidates.find(c => String(c.id) === String(cid));
+    setCompose(p => ({ ...p, candidateId: cid, to: c?.email || p.to }));
+  }
+
+  async function sendCompose() {
+    const { candidateId, to, subject, body } = compose;
+    if (!candidateId) { showToast('Pick a candidate', 'error'); return; }
+    if (!/@/.test(to) || !/\./.test(to.split('@').pop() || '')) { showToast('Enter a valid recipient email', 'error'); return; }
+    if (!subject.trim() || !body.trim()) { showToast('Subject and message are required', 'error'); return; }
+    const cand = candidates.find(c => String(c.id) === String(candidateId));
+    const jobTitle = jobs.find(j => j.id === parseInt(jobId))?.job_title || '';
+    setComposing(true);
+    try {
+      const res = await sendEmailRequest({
+        candidateId, jobId, emailType: 'custom', recipientEmail: to,
+        candidateName: cand?.candidate_name || cand?.full_name || '', jobTitle, subject, body,
+      });
+      const st = getEmailStatus(res);
+      showToast(st.message, st.type);
+      if (res.data?.status === 'sent' || res.data?.status === 'logged') { setShowCompose(false); loadEmails(); }
+    } catch { showToast('Failed to send email', 'error'); }
+    finally { setComposing(false); }
   }
 
   async function loadEmails() {
@@ -132,7 +176,10 @@ export default function Emails() {
           <h2 style={{ fontSize: '18px', fontWeight: 700 }}>Email History</h2>
           <p style={{ fontSize: '13px', color: 'var(--gray-500)' }}>All emails sent and logged across candidates.</p>
         </div>
-        <button className="btn btn-secondary btn-sm" onClick={loadEmails}>Refresh</button>
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <button className="btn btn-primary btn-sm" onClick={openCompose}>✉ New Email</button>
+          <button className="btn btn-secondary btn-sm" onClick={loadEmails}>Refresh</button>
+        </div>
       </div>
 
       <div style={{ display: 'flex', gap: '12px', alignItems: 'center', marginBottom: '16px' }}>
@@ -237,6 +284,36 @@ export default function Emails() {
           </table>
         )}
       </div>
+
+      {/* Compose New Email Modal */}
+      <Modal isOpen={showCompose} onClose={() => setShowCompose(false)} title="New Email" wide
+        footer={<>
+          <button className="btn btn-secondary" onClick={() => setShowCompose(false)} disabled={composing}>Cancel</button>
+          <button className="btn btn-primary" onClick={sendCompose} disabled={composing}>{composing ? 'Sending…' : 'Send Email'}</button>
+        </>}>
+        <div style={{ display: 'grid', gap: '12px' }}>
+          <div>
+            <label style={{ fontSize: '13px', fontWeight: 600, display: 'block', marginBottom: '5px' }}>Candidate</label>
+            <select value={compose.candidateId} onChange={e => onComposeCandidate(e.target.value)} style={{ width: '100%', padding: '8px 10px', fontSize: '14px' }}>
+              <option value="">— Select a candidate —</option>
+              {candidates.map(c => <option key={c.id} value={c.id}>{(c.candidate_name || c.full_name || 'Candidate')}{c.email ? ` · ${c.email}` : ''}</option>)}
+            </select>
+            <div style={{ fontSize: '12px', color: 'var(--gray-400)', marginTop: '4px' }}>From the currently selected job. The email is logged to this candidate's history.</div>
+          </div>
+          <div>
+            <label style={{ fontSize: '13px', fontWeight: 600, display: 'block', marginBottom: '5px' }}>To</label>
+            <input type="email" value={compose.to} onChange={e => setCompose(p => ({ ...p, to: e.target.value }))} placeholder="recipient@example.com" style={{ width: '100%', padding: '8px 10px', fontSize: '14px' }} />
+          </div>
+          <div>
+            <label style={{ fontSize: '13px', fontWeight: 600, display: 'block', marginBottom: '5px' }}>Subject</label>
+            <input type="text" value={compose.subject} onChange={e => setCompose(p => ({ ...p, subject: e.target.value }))} placeholder="Subject" style={{ width: '100%', padding: '8px 10px', fontSize: '14px' }} />
+          </div>
+          <div>
+            <label style={{ fontSize: '13px', fontWeight: 600, display: 'block', marginBottom: '5px' }}>Message</label>
+            <textarea value={compose.body} onChange={e => setCompose(p => ({ ...p, body: e.target.value }))} placeholder="Write your message…" style={{ width: '100%', minHeight: '160px', padding: '8px 10px', fontSize: '14px', fontFamily: 'inherit', resize: 'vertical' }} />
+          </div>
+        </div>
+      </Modal>
 
       {/* Test Email Modal */}
       <Modal isOpen={showTest} onClose={() => setShowTest(false)} title="Send Test Email"

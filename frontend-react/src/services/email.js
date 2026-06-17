@@ -22,16 +22,40 @@ export function buildEmailHtml(body) {
         : line;
     })
     .join('\n');
+  // Table-based, mobile-first layout. Critical for phones: the viewport meta
+  // (without it mobile mail clients render at a fixed desktop width and zoom
+  // out), a fluid width:100% + max-width container, and word-break so long URLs
+  // (e.g. interview links) wrap instead of forcing horizontal scroll.
   return `<!doctype html>
-<html><body style="margin:0;padding:0;background:#f3f4f6;">
-  <div style="max-width:640px;margin:24px auto;background:#ffffff;border-radius:12px;overflow:hidden;border:1px solid #e5e7eb;font-family:-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
-    <div style="background:#1e40af;padding:18px 28px;">
-      <div style="color:#ffffff;font-size:16px;font-weight:700;">Diyar United Company</div>
-      <div style="color:#bfdbfe;font-size:12px;margin-top:2px;">Human Resources</div>
-    </div>
-    <div style="padding:26px 28px;color:#1f2937;font-size:14px;line-height:1.75;white-space:pre-wrap;">${withHeadings}</div>
-    <div style="padding:14px 28px;border-top:1px solid #f3f4f6;color:#9ca3af;font-size:11px;">Sent by Diyar HR Automation</div>
-  </div>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="x-apple-disable-message-reformatting">
+<meta http-equiv="x-ua-compatible" content="ie=edge">
+<title>Diyar United Company</title>
+</head>
+<body style="margin:0;padding:0;background:#f3f4f6;-webkit-text-size-adjust:100%;-ms-text-size-adjust:100%;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#f3f4f6;">
+    <tr>
+      <td align="center" style="padding:16px;">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:600px;background:#ffffff;border-radius:12px;overflow:hidden;border:1px solid #e5e7eb;font-family:-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+          <tr>
+            <td style="background:#1e40af;padding:18px 24px;">
+              <div style="color:#ffffff;font-size:16px;font-weight:700;">Diyar United Company</div>
+              <div style="color:#bfdbfe;font-size:12px;margin-top:2px;">Human Resources</div>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:24px;color:#1f2937;font-size:15px;line-height:1.7;white-space:pre-wrap;word-break:break-word;overflow-wrap:break-word;">${withHeadings}</td>
+          </tr>
+          <tr>
+            <td style="padding:14px 24px;border-top:1px solid #f3f4f6;color:#9ca3af;font-size:11px;">Sent by Diyar HR Automation</td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
 </body></html>`;
 }
 
@@ -79,10 +103,14 @@ export function getShortlistTemplate(candidateName, jobTitle) {
   };
 }
 
-export function getInterviewTemplate(candidateName, jobTitle) {
+export function getInterviewTemplate(candidateName, jobTitle, link) {
+  // `link` is the AI self-interview link generated in the Interview tab. If HR
+  // hasn't generated one yet, a clear placeholder is inserted so they can paste
+  // it in before sending (the composer body is fully editable).
+  const linkLine = link ? link : '[PASTE INTERVIEW LINK HERE]';
   return {
     subject: 'Interview Invitation - ' + jobTitle,
-    body: `Dear ${candidateName},\n\nWe are pleased to inform you that after reviewing your application for the ${jobTitle} position, we would like to invite you for an interview.\n\nPlease reply to this email with your availability for the coming week, and we will schedule a convenient time.\n\nWe look forward to speaking with you.\n\nBest regards,\nHR Department`,
+    body: `Dear ${candidateName},\n\nCongratulations! After reviewing your application for the ${jobTitle} position, we would like to invite you to the next stage: a short online interview that you can complete on your own time.\n\nPlease use your personal interview link below to begin. It works in any modern browser and will guide you through the questions one by one — no scheduling needed.\n\nYour interview link:\n${linkLine}\n\nPlease aim to complete it within the next few days. If you have any trouble opening the link, just reply to this email.\n\nWe look forward to learning more about you.\n\nBest regards,\nHR Department`,
   };
 }
 
