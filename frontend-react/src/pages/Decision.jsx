@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { apiGet, apiPost } from '../services/api';
 import { useSelectedJob } from '../state/selectedJob';
 import { useUI } from '../state/uiState';
@@ -24,6 +24,31 @@ function ScoreCell({ value, label }) {
     </div>
   );
 }
+// Per-dimension score as a bordered chip (used in the expanded eval panels).
+function StatChip({ value, label }) {
+  const n = value != null ? parseFloat(value) : null;
+  return (
+    <div style={{ flex: 1, minWidth: 56, background: 'var(--gray-50)', border: '1px solid var(--gray-200)', borderRadius: 8, padding: '8px 6px', textAlign: 'center' }}>
+      <div style={{ fontSize: 17, fontWeight: 800, color: scoreColor(n), lineHeight: 1 }}>{n != null && !isNaN(n) ? n.toFixed(1) : '—'}</div>
+      <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--gray-400)', textTransform: 'uppercase', letterSpacing: '0.04em', marginTop: 4 }}>{label}</div>
+    </div>
+  );
+}
+// Tinted callout for strengths / weaknesses / summary text.
+function Callout({ label, text, tone = 'neutral' }) {
+  const tones = {
+    pos:     { border: '#86efac', bg: '#f0fdf4', label: '#166534' },
+    neg:     { border: '#fca5a5', bg: '#fef2f2', label: '#991b1b' },
+    neutral: { border: '#cbd5e1', bg: '#f8fafc', label: 'var(--gray-500)' },
+  };
+  const t = tones[tone] || tones.neutral;
+  return (
+    <div style={{ borderLeft: `3px solid ${t.border}`, background: t.bg, borderRadius: '0 6px 6px 0', padding: '8px 12px', margin: '10px 0 0' }}>
+      <div style={{ fontSize: 10, fontWeight: 700, color: t.label, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 3 }}>{label}</div>
+      <div style={{ fontSize: 13, color: 'var(--gray-700)', lineHeight: 1.55 }}>{text}</div>
+    </div>
+  );
+}
 
 const COL_LABEL = { fontSize: 9.5, fontWeight: 600, color: 'var(--gray-400)', textTransform: 'uppercase', letterSpacing: '0.05em', marginTop: 4 };
 
@@ -35,11 +60,11 @@ export default function Decision() {
   const [rows, setRows] = useState([]);        // shortlist rows (carry CV scores)
   const [sessions, setSessions] = useState([]); // interview_sessions
   const [loading, setLoading] = useState(false);
-  const [weight, setWeight] = useState(50);     // interview weight % (CV = 100 - weight)
+  const [weight, setWeight] = useState(50);       // committed weight — drives ranking + combined score
+  const [sliderVal, setSliderVal] = useState(50); // live slider position + % display (decoupled so dragging is smooth)
+  const weightCommitRef = useRef(null);
   const [expanded, setExpanded] = useState(null);
   const [sentToHM, setSentToHM] = useState(new Set());   // candidate_ids with a sent recommendation email
-  const [hmDraft, setHmDraft] = useState({});            // shortlistId -> { verdict, notes }
-  const [savingHM, setSavingHM] = useState({});          // shortlistId -> bool
   const [compareIds, setCompareIds] = useState(new Set()); // candidate_ids picked for side-by-side
   const [showCompare, setShowCompare] = useState(false);
 
@@ -127,10 +152,10 @@ export default function Decision() {
       const s = v == null ? '' : String(v);
       return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
     };
-    const headers = ['Rank', 'Candidate', 'Email', 'CV score', 'Interview score', `Combined (CV ${100 - weight}% / Int ${weight}%)`, 'Status', 'HM verdict', 'HM notes'];
+    const headers = ['Rank', 'Candidate', 'Email', 'CV score', 'Interview score', `Combined (CV ${100 - weight}% / Int ${weight}%)`, 'Status'];
     const lines = ranked.map((r, i) => [
       i + 1, r.candidate_name, r.email || '', fmt(r._cv), fmt(r._intv), fmt(r._combined),
-      r.status || 'pending', r.hm_verdict || '', r.hm_notes || '',
+      r.status || 'pending',
     ].map(esc).join(','));
     const csv = [headers.map(esc).join(','), ...lines].join('\n');
     const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
@@ -255,22 +280,6 @@ HR Department`;
     });
   }
 
-  // HR logs the hiring manager's final-interview verdict + notes (stored on the shortlist row).
-  async function submitHMReview(r) {
-    const draft = hmDraft[r.id] || {};
-    const verdict = draft.verdict != null ? draft.verdict : (r.hm_verdict || '');
-    const notes = draft.notes != null ? draft.notes : (r.hm_notes || '');
-    setSavingHM(p => ({ ...p, [r.id]: true }));
-    try {
-      const res = await apiPost('/shortlist-hm-review', { id: r.id, verdict, notes });
-      if (res.data.success) {
-        setRows(prev => prev.map(x => x.id === r.id ? { ...x, hm_verdict: verdict || null, hm_notes: notes, hm_reviewed_at: new Date().toISOString() } : x));
-        showToast('Manager feedback saved', 'success');
-      } else showToast(res.data.error || 'Failed to save', 'error');
-    } catch { showToast('Failed to save manager feedback', 'error'); }
-    finally { setSavingHM(p => ({ ...p, [r.id]: false })); }
-  }
-
   async function viewCV(r) {
     const win = window.open('about:blank', '_blank');
     try {
@@ -326,17 +335,32 @@ HR Department`;
 
           {/* Blend weight slider */}
           <div style={{ background: '#fff', border: '1px solid var(--gray-200)', borderRadius: 'var(--radius)', padding: '14px 20px', marginBottom: 16 }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8, flexWrap: 'wrap', gap: 8 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4, flexWrap: 'wrap', gap: 8 }}>
               <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--gray-700)' }}>Combined score weighting</span>
               <span style={{ fontSize: 13, color: 'var(--gray-600)' }}>
-                CV <strong style={{ color: '#2563eb' }}>{100 - weight}%</strong>
+                CV <strong style={{ color: '#2563eb' }}>{100 - sliderVal}%</strong>
                 <span style={{ margin: '0 8px', color: 'var(--gray-300)' }}>·</span>
-                Interview <strong style={{ color: '#16a34a' }}>{weight}%</strong>
+                Interview <strong style={{ color: '#16a34a' }}>{sliderVal}%</strong>
               </span>
             </div>
-            <input type="range" min="0" max="100" step="5" value={weight} onChange={e => setWeight(Number(e.target.value))} style={{ width: '100%' }} />
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--gray-400)', marginTop: 2 }}>
-              <span>All CV</span><span>Balanced</span><span>All interview</span>
+            <input
+              type="range" min="0" max="100" step="1" value={sliderVal}
+              className="weight-slider"
+              style={{ background: `linear-gradient(to right, #2563eb 0%, #2563eb ${sliderVal}%, var(--gray-200) ${sliderVal}%, var(--gray-200) 100%)` }}
+              onChange={e => {
+                const v = Number(e.target.value);
+                setSliderVal(v);
+                // Re-rank only after the user pauses/releases, so cards don't jump on every drag tick.
+                clearTimeout(weightCommitRef.current);
+                weightCommitRef.current = setTimeout(() => setWeight(v), 120);
+              }}
+              onPointerUp={e => { clearTimeout(weightCommitRef.current); setWeight(Number(e.currentTarget.value)); }}
+              onKeyUp={e => { clearTimeout(weightCommitRef.current); setWeight(Number(e.currentTarget.value)); }}
+            />
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', fontSize: 11, color: 'var(--gray-400)', marginTop: 2 }}>
+              <span style={{ textAlign: 'left' }}>All CV</span>
+              <span style={{ textAlign: 'center' }}>Balanced</span>
+              <span style={{ textAlign: 'right' }}>All interview</span>
             </div>
           </div>
 
@@ -362,9 +386,7 @@ HR Department`;
             const reqs = Array.isArray(sess?.requirementsMatch) ? sess.requirementsMatch : (() => { try { return JSON.parse(sess?.requirementsMatch || '[]'); } catch { return []; } })();
             const decided = r.status === 'hired' || r.status === 'rejected';
             const tint = r.status === 'hired' ? '#f0fdf4' : r.status === 'rejected' ? '#fef2f2' : '#fff';
-            const hmV = r.hm_verdict; // 'hire' | 'hold' | 'reject' | null
-            const isSent = sentToHM.has(r.candidate_id) || !!hmV;
-            const HM_COLORS = { hire: ['#dcfce7', '#166534'], hold: ['#fef9c3', '#854d0e'], reject: ['#fee2e2', '#991b1b'] };
+            const isSent = sentToHM.has(r.candidate_id);
             return (
               <div key={r.id} style={{
                 background: tint,
@@ -409,13 +431,7 @@ HR Department`;
                     </div>
                   </div>
                   <div onClick={e => e.stopPropagation()} style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0, flexWrap: 'wrap' }}>
-                    {/* HM stage chip */}
-                    {!decided && hmV && (
-                      <span style={{ fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', padding: '3px 9px', borderRadius: 10, background: (HM_COLORS[hmV] || ['#ede9fe', '#5b21b6'])[0], color: (HM_COLORS[hmV] || ['#ede9fe', '#5b21b6'])[1] }}>
-                        HM: {hmV}
-                      </span>
-                    )}
-                    {!decided && !hmV && isSent && (
+                    {!decided && isSent && (
                       <span style={{ fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', padding: '3px 9px', borderRadius: 10, background: '#ede9fe', color: '#5b21b6' }}>✉ Sent to HM</span>
                     )}
                     {decided ? (
@@ -427,7 +443,7 @@ HR Department`;
                       </>
                     ) : (
                       <>
-                        {!isSent && <button className="btn btn-sm btn-primary" onClick={() => sendToHM(r)} title="Send the full screening pack to the hiring manager">✉ Send to HM</button>}
+                        <button className="btn btn-sm btn-primary" onClick={() => sendToHM(r)} title="Send the full screening pack (CV + interview scores · recording · transcript · PDF report) to the hiring manager">✉ {isSent ? 'Re-send to HM' : 'Send to HM'}</button>
                         <button className="btn btn-sm btn-success" onClick={() => updateStatus(r.id, 'hired')}>Hire</button>
                         <button className="btn btn-sm btn-danger" onClick={() => rejectCandidate(r)}>Reject</button>
                       </>
@@ -440,69 +456,46 @@ HR Department`;
                 <div style={{ display: 'grid', gridTemplateRows: isOpen ? '1fr' : '0fr', transition: 'grid-template-rows 0.28s ease' }}>
                   <div style={{ overflow: 'hidden' }}>
                     <div style={{ borderTop: '1px solid var(--gray-100)', background: '#fafbff', padding: '18px' }}>
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24 }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
                       {/* CV side */}
-                      <div>
-                        <div style={{ fontSize: 11, fontWeight: 700, color: '#2563eb', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10 }}>CV Evaluation</div>
-                        <div style={{ display: 'flex', gap: 18, marginBottom: 10 }}>
-                          <ScoreCell value={r.skills_score} label="Skills" />
-                          <ScoreCell value={r.experience_score} label="Experience" />
-                          <ScoreCell value={r.education_score} label="Education" />
+                      <div style={{ background: '#fff', border: '1px solid var(--gray-200)', borderRadius: 10, padding: 16 }}>
+                        <div style={{ fontSize: 11, fontWeight: 700, color: '#2563eb', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 12 }}>CV Evaluation</div>
+                        <div style={{ display: 'flex', gap: 8 }}>
+                          <StatChip value={r.skills_score} label="Skills" />
+                          <StatChip value={r.experience_score} label="Experience" />
+                          <StatChip value={r.education_score} label="Education" />
                         </div>
-                        {r.strengths && <p style={{ fontSize: 13, color: 'var(--gray-700)', margin: '6px 0', lineHeight: 1.6 }}><strong style={{ color: '#166534' }}>Strengths:</strong> {r.strengths}</p>}
-                        {r.weaknesses && <p style={{ fontSize: 13, color: 'var(--gray-700)', margin: '6px 0', lineHeight: 1.6 }}><strong style={{ color: '#991b1b' }}>Weaknesses:</strong> {r.weaknesses}</p>}
-                        <button className="btn btn-sm btn-secondary" style={{ marginTop: 8 }} onClick={() => viewCV(r)}>📄 View CV</button>
+                        {r.strengths && <Callout label="Strengths" text={r.strengths} tone="pos" />}
+                        {r.weaknesses && <Callout label="Weaknesses" text={r.weaknesses} tone="neg" />}
+                        <button className="btn btn-sm btn-secondary" style={{ marginTop: 12 }} onClick={() => viewCV(r)}>📄 View CV</button>
                       </div>
                       {/* Interview side */}
-                      <div style={{ borderLeft: '1px solid var(--gray-200)', paddingLeft: 24 }}>
-                        <div style={{ fontSize: 11, fontWeight: 700, color: '#16a34a', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10 }}>Interview Evaluation</div>
+                      <div style={{ background: '#fff', border: '1px solid var(--gray-200)', borderRadius: 10, padding: 16 }}>
+                        <div style={{ fontSize: 11, fontWeight: 700, color: '#16a34a', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 12 }}>Interview Evaluation</div>
                         {sess ? (
                           <>
-                            <div style={{ display: 'flex', gap: 18, marginBottom: 10, flexWrap: 'wrap' }}>
-                              <ScoreCell value={sess.scoreComm} label="Comm" />
-                              <ScoreCell value={sess.scoreTech} label="Technical" />
-                              <ScoreCell value={sess.scoreConf} label="Confidence" />
-                              <ScoreCell value={sess.scoreCulture} label="Culture" />
+                            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                              <StatChip value={sess.scoreComm} label="Comm" />
+                              <StatChip value={sess.scoreTech} label="Technical" />
+                              <StatChip value={sess.scoreConf} label="Confidence" />
+                              <StatChip value={sess.scoreCulture} label="Culture" />
                             </div>
                             {reqs.length > 0 && (
-                              <div style={{ fontSize: 12, color: 'var(--gray-600)', margin: '6px 0' }}>
+                              <div style={{ fontSize: 12, color: 'var(--gray-700)', marginTop: 10, padding: '7px 11px', borderRadius: 6, background: reqs.every(x => x.met) ? '#f0fdf4' : '#fff7ed', border: `1px solid ${reqs.every(x => x.met) ? '#bbf7d0' : '#fed7aa'}` }}>
                                 <strong>Requirements:</strong> {reqs.filter(x => x.met).length}/{reqs.length} met
                                 {reqs.filter(x => !x.met).length > 0 && <span style={{ color: '#991b1b' }}> — missing: {reqs.filter(x => !x.met).map(x => x.category || x.requirement).join(', ')}</span>}
                               </div>
                             )}
-                            {sess.summary && <p style={{ fontSize: 13, color: 'var(--gray-700)', margin: '6px 0', lineHeight: 1.6 }}><strong>Summary:</strong> {sess.summary}</p>}
-                            {sess.recommendation && <p style={{ fontSize: 13, color: 'var(--gray-700)', margin: '6px 0', lineHeight: 1.6 }}><strong>Recommendation:</strong> {sess.recommendation}</p>}
-                            {sess.recordingPath && <a className="btn btn-sm btn-secondary" style={{ marginTop: 8, textDecoration: 'none' }} href={`${RECORDING_SERVER}/recording/${sess.recordingPath}`} target="_blank" rel="noreferrer">🎥 Watch recording</a>}
+                            {sess.summary && <Callout label="Summary" text={sess.summary} tone="neutral" />}
+                            {sess.recommendation && <Callout label="Recommendation" text={sess.recommendation} tone="neutral" />}
+                            {sess.recordingPath && <a className="btn btn-sm btn-secondary" style={{ marginTop: 12, textDecoration: 'none' }} href={`${RECORDING_SERVER}/recording/${sess.recordingPath}`} target="_blank" rel="noreferrer">🎥 Watch recording</a>}
                           </>
                         ) : (
-                          <p style={{ fontSize: 13, color: 'var(--gray-400)', fontStyle: 'italic', lineHeight: 1.6 }}>
+                          <p style={{ fontSize: 13, color: 'var(--gray-400)', fontStyle: 'italic', lineHeight: 1.6, margin: 0 }}>
                             Not interviewed yet. Send an interview link from the Interview tab to get a second signal.
                           </p>
                         )}
                       </div>
-                      </div>
-
-                      {/* Hiring Manager — hand-off (post-interview) + HR-logged manager feedback */}
-                      <div style={{ marginTop: 18, paddingTop: 16, borderTop: '1px solid var(--gray-200)' }}>
-                        <div style={{ fontSize: 11, fontWeight: 700, color: '#7c3aed', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10 }}>Hiring Manager — final interview</div>
-                        <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', marginBottom: 12 }}>
-                          <button className="btn btn-sm btn-primary" onClick={() => sendToHM(r)}>{'✉'} {isSent ? 'Re-send full pack' : 'Send full pack to HM'}</button>
-                          {isSent && <span style={{ fontSize: 12, color: '#166534', fontWeight: 600 }}>{'✓'} Sent to hiring manager</span>}
-                          <span style={{ fontSize: 12, color: 'var(--gray-400)' }}>includes CV + interview scores · recording · transcript · PDF report</span>
-                        </div>
-                        <div style={{ display: 'grid', gridTemplateColumns: '190px 1fr', gap: 10, alignItems: 'start' }}>
-                          <select value={(hmDraft[r.id]?.verdict ?? r.hm_verdict) || ''} onChange={e => setHmDraft(p => ({ ...p, [r.id]: { ...(p[r.id] || {}), verdict: e.target.value } }))}>
-                            <option value="">{'—'} Manager's verdict {'—'}</option>
-                            <option value="hire">Recommend hire</option>
-                            <option value="hold">Hold / unsure</option>
-                            <option value="reject">Recommend reject</option>
-                          </select>
-                          <textarea placeholder="Manager's notes from the final interview…" value={hmDraft[r.id]?.notes ?? (r.hm_notes || '')} onChange={e => setHmDraft(p => ({ ...p, [r.id]: { ...(p[r.id] || {}), notes: e.target.value } }))} style={{ minHeight: 46, fontSize: 13, width: '100%' }} />
-                        </div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 8 }}>
-                          <button className="btn btn-sm btn-secondary" onClick={() => submitHMReview(r)} disabled={savingHM[r.id]}>{savingHM[r.id] ? 'Saving…' : 'Save manager feedback'}</button>
-                          {r.hm_reviewed_at && <span style={{ fontSize: 11, color: 'var(--gray-400)' }}>Last saved {new Date(r.hm_reviewed_at).toLocaleString()}</span>}
-                        </div>
                       </div>
                     </div>
                   </div>
@@ -584,10 +577,6 @@ function CompareGrid({ list, weight }) {
               const reqs = reqsOf(r._sess);
               return <td key={r.id} style={cell}>{reqs.length ? `${reqs.filter(x => x.met).length}/${reqs.length}` : '—'}</td>;
             })}
-          </tr>
-          <tr>
-            <td style={labelCell}>HM verdict</td>
-            {list.map(r => <td key={r.id} style={{ ...cell, textTransform: 'capitalize' }}>{r.hm_verdict || '—'}</td>)}
           </tr>
         </tbody>
       </table>

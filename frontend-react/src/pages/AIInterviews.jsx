@@ -117,27 +117,27 @@ function formatDate(ts) {
   if (!ts) return '—';
   return new Date(ts).toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
-function ScoreBar({ score, color }) {
-  const n = parseFloat(score);
-  const pct = isNaN(n) ? 0 : Math.min(100, Math.max(0, (n / 10) * 100));
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-      <div style={{ flex: 1, height: 5, background: '#f3f4f6', borderRadius: 3, overflow: 'hidden' }}>
-        <div style={{ width: `${pct}%`, height: '100%', background: color, borderRadius: 3, transition: 'width 0.4s' }} />
-      </div>
-      <span style={{ fontSize: 12, fontWeight: 700, color: '#374151', minWidth: 24 }}>{isNaN(n) ? '—' : n.toFixed(1)}</span>
-    </div>
-  );
-}
 function RecoPill({ text }) {
   if (!text) return null;
   const t = text.toLowerCase();
   const isHire = t.includes('hire') && !t.includes("don't") && !t.includes('not');
   const isDont = t.includes("don't") || t.includes('not recommend');
-  const bg    = isHire ? '#dcfce7' : isDont ? '#fee2e2' : '#fef9c3';
-  const color = isHire ? '#16a34a' : isDont ? '#dc2626' : '#b45309';
-  const label = isHire ? '✓ Hire' : isDont ? "✗ Don't Recommend" : '~ Consider';
-  return <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 9px', borderRadius: 99, background: bg, color }}>{label}</span>;
+  const cfg = isHire
+    ? { bg: '#ecfdf5', border: '#a7f3d0', color: '#047857', dot: '#10b981', label: 'Recommended' }
+    : isDont
+    ? { bg: '#fef2f2', border: '#fecaca', color: '#b91c1c', dot: '#ef4444', label: 'Not Recommended' }
+    : { bg: '#fffbeb', border: '#fde68a', color: '#b45309', dot: '#f59e0b', label: 'Consider' };
+  return (
+    <span style={{
+      display: 'inline-flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap',
+      fontSize: 11, fontWeight: 700, letterSpacing: '0.02em',
+      padding: '4px 11px', borderRadius: 99,
+      background: cfg.bg, color: cfg.color, border: `1px solid ${cfg.border}`,
+    }}>
+      <span style={{ width: 7, height: 7, borderRadius: '50%', background: cfg.dot, flexShrink: 0 }} />
+      {cfg.label}
+    </span>
+  );
 }
 
 // `embedded` renders without the page container/heading so the whole view can
@@ -159,6 +159,21 @@ export default function AIInterviews({ embedded = false }) {
   const [manualEditing, setManualEditing] = useState({}); // sessionId → { comm, tech, conf, culture, overall, recommendation, summary }
   const [showTeamsImport, setShowTeamsImport] = useState(false);
   const pollingRef = useRef(null);
+  const autoEvalRef = useRef(new Set()); // session ids we've already auto-evaluated (no loops)
+
+  // Auto-evaluate: whenever a pending session with a transcript appears (the
+  // candidate's background eval may have failed or never run), kick off the
+  // evaluation HR-side automatically — no manual "Re-evaluate" click needed.
+  useEffect(() => {
+    for (const s of sessions) {
+      if (!isPending(s)) continue;
+      if (autoEvalRef.current.has(s.id) || reEvaluating[s.id]) continue;
+      const qa = parseJSON(s.qaPairs);
+      if (!Array.isArray(qa) || qa.length === 0) continue; // nothing to score
+      autoEvalRef.current.add(s.id);
+      reEvaluate(s);
+    }
+  }, [sessions]);
 
   useEffect(() => { loadJobs(); return () => clearInterval(pollingRef.current); }, []);
 
@@ -428,17 +443,24 @@ HR Department`;
                     </div>
 
                     {pending ? (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                        {polling && !reEvaluating[s.id] && (
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                            <div style={{ width: 7, height: 7, borderRadius: '50%', background: '#f59e0b', animation: 'pulse 1.5s ease-in-out infinite' }} />
-                            <span style={{ fontSize: 12, color: '#b45309', fontWeight: 600 }}>Evaluating…</span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 220, justifyContent: 'flex-end' }}>
+                        {reEvaluating[s.id] || polling ? (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 5, minWidth: 160 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                              <div style={{ width: 7, height: 7, borderRadius: '50%', background: '#f59e0b', animation: 'pulse 1.5s ease-in-out infinite' }} />
+                              <span style={{ fontSize: 12, color: '#b45309', fontWeight: 600 }}>AI evaluating…</span>
+                            </div>
+                            {/* indeterminate progress bar */}
+                            <div style={{ height: 5, width: '100%', background: '#fef3c7', borderRadius: 3, overflow: 'hidden' }}>
+                              <div style={{ height: '100%', width: '40%', background: '#f59e0b', borderRadius: 3, animation: 'indeterminate 1.2s ease-in-out infinite' }} />
+                            </div>
                           </div>
+                        ) : (
+                          <button onClick={e => { e.stopPropagation(); reEvaluate(s); }}
+                            style={{ fontSize: 12, padding: '5px 12px', borderRadius: 6, border: '1px solid #d97706', background: '#fff', color: '#b45309', cursor: 'pointer', fontFamily: 'inherit', fontWeight: 600 }}>
+                            ↻ Retry evaluation
+                          </button>
                         )}
-                        <button onClick={e => { e.stopPropagation(); reEvaluate(s); }} disabled={reEvaluating[s.id]}
-                          style={{ fontSize: 12, padding: '5px 12px', borderRadius: 6, border: '1px solid #d97706', background: '#fff', color: '#b45309', cursor: reEvaluating[s.id] ? 'not-allowed' : 'pointer', fontFamily: 'inherit', fontWeight: 600 }}>
-                          {reEvaluating[s.id] ? 'Evaluating…' : 'Re-evaluate'}
-                        </button>
                       </div>
                     ) : (
                       <>
@@ -467,43 +489,41 @@ HR Department`;
                   {isOpen && (
                     <div style={{ borderTop: '1px solid var(--gray-100)' }}>
 
-                      {/* Media toolbar */}
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 20px', borderBottom: '1px solid var(--gray-100)', background: '#fafafa' }}>
-                        <button onClick={() => toggleRecording(s.id)} disabled={!hasRec}
-                          title={hasRec ? '' : 'No recording available for this session'}
-                          style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 600, padding: '7px 16px', borderRadius: 7, border: `1.5px solid ${mp.recording ? '#7c3aed' : 'var(--gray-300)'}`, background: mp.recording ? '#f5f3ff' : '#fff', color: mp.recording ? '#7c3aed' : hasRec ? 'var(--gray-700)' : 'var(--gray-300)', cursor: hasRec ? 'pointer' : 'not-allowed', fontFamily: 'inherit', transition: 'all 0.15s' }}>
-                          🎥 {mp.recording ? 'Hide Recording' : 'Watch Recording'}
-                        </button>
+                      {/* Media + share toolbar */}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '12px 20px', borderBottom: '1px solid var(--gray-100)', background: '#fafafa', flexWrap: 'wrap' }}>
+                        {/* Left — media. Only render what's actually attached (no dead buttons). */}
                         {hasRec && (
-                          <a
-                            href={recUrl}
-                            download={s.recordingPath}
-                            style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 600, padding: '7px 16px', borderRadius: 7, border: '1.5px solid var(--gray-300)', background: '#fff', color: 'var(--gray-700)', cursor: 'pointer', fontFamily: 'inherit', textDecoration: 'none' }}
-                          >
-                            ⬇ Download
-                          </a>
+                          <>
+                            <button onClick={() => toggleRecording(s.id)}
+                              style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 600, padding: '7px 14px', borderRadius: 7, border: `1.5px solid ${mp.recording ? '#7c3aed' : 'var(--gray-300)'}`, background: mp.recording ? '#f5f3ff' : '#fff', color: mp.recording ? '#7c3aed' : 'var(--gray-700)', cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.15s' }}>
+                              🎥 {mp.recording ? 'Hide Recording' : 'Watch Recording'}
+                            </button>
+                            <a href={recUrl} download={s.recordingPath}
+                              style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 600, padding: '7px 14px', borderRadius: 7, border: '1.5px solid var(--gray-300)', background: '#fff', color: 'var(--gray-700)', textDecoration: 'none', fontFamily: 'inherit' }}>
+                              ⬇ Download
+                            </a>
+                          </>
                         )}
-                        <button onClick={() => s.hasCv && toggleCV(s)}
-                          disabled={!s.hasCv}
-                          title={s.hasCv ? '' : 'No CV on file for this candidate'}
-                          style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 600, padding: '7px 16px', borderRadius: 7, border: `1.5px solid ${!s.hasCv ? 'var(--gray-200)' : mp.cv ? '#2563eb' : 'var(--gray-300)'}`, background: !s.hasCv ? '#f9fafb' : mp.cv ? '#eff6ff' : '#fff', color: !s.hasCv ? 'var(--gray-300)' : mp.cv ? '#2563eb' : 'var(--gray-700)', cursor: s.hasCv ? 'pointer' : 'not-allowed', fontFamily: 'inherit', transition: 'all 0.15s' }}>
-                          📄 {mp.cvLoading ? 'Loading CV…' : mp.cv ? 'Hide CV' : 'View CV'}
-                        </button>
-                        <button
-                          onClick={() => emailHM(s)}
-                          style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 600, padding: '7px 16px', borderRadius: 7, border: '1.5px solid #2563eb', background: '#eff6ff', color: '#2563eb', cursor: 'pointer', fontFamily: 'inherit', marginLeft: 'auto' }}
-                        >
-                          ✉ Email HM
-                        </button>
-                        <button
-                          onClick={() => { setExpandedId(s.id); setTimeout(() => window.print(), 100); }}
-                          style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 600, padding: '7px 16px', borderRadius: 7, border: '1.5px solid var(--gray-300)', background: '#fff', color: 'var(--gray-700)', cursor: 'pointer', fontFamily: 'inherit' }}
-                        >
-                          🖨 Export PDF
-                        </button>
-                        {!hasRec && (
-                          <span style={{ fontSize: 12, color: 'var(--gray-400)', marginLeft: 4 }}>No recording — interview was completed before recording was enabled</span>
+                        {s.hasCv && (
+                          <button onClick={() => toggleCV(s)}
+                            style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 600, padding: '7px 14px', borderRadius: 7, border: `1.5px solid ${mp.cv ? '#2563eb' : 'var(--gray-300)'}`, background: mp.cv ? '#eff6ff' : '#fff', color: mp.cv ? '#2563eb' : 'var(--gray-700)', cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.15s' }}>
+                            📄 {mp.cvLoading ? 'Loading CV…' : mp.cv ? 'Hide CV' : 'View CV'}
+                          </button>
                         )}
+                        {!hasRec && !s.hasCv && (
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7, fontSize: 12.5, color: 'var(--gray-400)', background: '#fff', border: '1px dashed var(--gray-200)', borderRadius: 7, padding: '6px 12px' }}>
+                            <span style={{ fontSize: 14, opacity: 0.7 }}>🎬</span> No recording or CV attached
+                          </span>
+                        )}
+
+                        {/* Right — Export PDF for HR's own record. The HM hand-off (with all
+                            attachments) lives in the Decision tab, not here — Results is HR-level review. */}
+                        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <button onClick={() => { setExpandedId(s.id); setTimeout(() => window.print(), 100); }}
+                            style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 600, padding: '7px 16px', borderRadius: 7, border: '1.5px solid var(--gray-300)', background: '#fff', color: 'var(--gray-700)', cursor: 'pointer', fontFamily: 'inherit' }}>
+                            🖨 Export PDF
+                          </button>
+                        </div>
                       </div>
 
                       {/* Media panels — side by side when both open */}
@@ -529,78 +549,6 @@ HR Department`;
                       )}
 
                       <div style={{ padding: '20px 24px', background: '#fafafa' }}>
-
-                        {/* Score bars */}
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '10px 24px', marginBottom: 20, background: '#fff', border: '1px solid var(--gray-200)', borderRadius: 8, padding: '16px 20px' }}>
-                          {[
-                            { label: 'Communication', score: s.scoreComm,    color: '#2563eb' },
-                            { label: 'Technical',     score: s.scoreTech,    color: '#16a34a' },
-                            { label: 'Confidence',    score: s.scoreConf,    color: '#d97706' },
-                            { label: 'Culture Fit',   score: s.scoreCulture, color: '#7c3aed' },
-                          ].map(d => (
-                            <div key={d.label}>
-                              <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--gray-500)', marginBottom: 6 }}>{d.label}</div>
-                              <ScoreBar score={d.score} color={d.color} />
-                            </div>
-                          ))}
-                        </div>
-
-                        {/* Re-evaluate + Manual eval */}
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
-                          <button
-                            onClick={() => reEvaluate(s)}
-                            disabled={reEvaluating[s.id]}
-                            style={{ fontSize: 12, padding: '5px 12px', borderRadius: 6, border: '1px solid #d97706', background: '#fff', color: '#b45309', cursor: reEvaluating[s.id] ? 'not-allowed' : 'pointer', fontFamily: 'inherit', fontWeight: 600 }}>
-                            {reEvaluating[s.id] ? 'Evaluating…' : '↻ Re-evaluate with AI'}
-                          </button>
-                        </div>
-
-                        {!manualEditing[s.id] ? (
-                          <button
-                            onClick={() => setManualEditing(p => ({ ...p, [s.id]: {
-                              comm: parseFloat(s.scoreComm) || '',
-                              tech: parseFloat(s.scoreTech) || '',
-                              conf: parseFloat(s.scoreConf) || '',
-                              culture: parseFloat(s.scoreCulture) || '',
-                              overall: parseFloat(s.scoreOverall) || '',
-                              recommendation: s.recommendation || '',
-                              summary: s.summary || '',
-                            }}))}
-                            style={{ fontSize: 12, fontWeight: 600, padding: '5px 14px', borderRadius: 6, border: '1px solid var(--gray-300)', background: '#fff', color: 'var(--gray-600)', cursor: 'pointer', fontFamily: 'inherit', marginBottom: 16 }}
-                          >
-                            ✏️ Edit Evaluation Manually
-                          </button>
-                        ) : (
-                          <ManualEvalForm
-                            data={manualEditing[s.id]}
-                            onChange={(field, val) => setManualEditing(p => ({ ...p, [s.id]: { ...p[s.id], [field]: val } }))}
-                            onCancel={() => setManualEditing(p => { const n = { ...p }; delete n[s.id]; return n; })}
-                            onSave={async () => {
-                              const d = manualEditing[s.id];
-                              // Key names must match what the n8n IntTx - Prep node reads
-                              // (communication/technical/confidence/cultureFit/overall) —
-                              // anything else silently saves as 0.
-                              const scores = {
-                                communication: parseFloat(d.comm) || 0, technical: parseFloat(d.tech) || 0,
-                                confidence: parseFloat(d.conf) || 0, cultureFit: parseFloat(d.culture) || 0,
-                                overall: parseFloat(d.overall) || 0,
-                                summary: d.summary, recommendation: d.recommendation,
-                                perQuestion: parseJSON(s.perQuestion),
-                              };
-                              await apiPost('/interview/save-transcript', {
-                                jobId: s.jobOpeningId, evaluationId: s.evaluationId,
-                                candidateId: s.candidateId, candidateName: s.candidateName,
-                                transcript: parseJSON(s.qaPairs), durationSeconds: s.durationSeconds,
-                                scores, recordingPath: s.recordingPath || '',
-                                requirementsMatch: parseJSON(s.requirementsMatch),
-                              });
-                              showToast('Evaluation updated', 'success');
-                              setManualEditing(p => { const n = { ...p }; delete n[s.id]; return n; });
-                              const res = await apiGet(`/interview/sessions?jobId=${jobId}`);
-                              setSessions(res.data || res || []);
-                            }}
-                          />
-                        )}
 
                         {/* Requirements check */}
                         {reqs.length > 0 && (
@@ -640,18 +588,67 @@ HR Department`;
 
                         {/* AI Summary */}
                         {s.summary && (
-                          <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 8, padding: '12px 16px', marginBottom: 20, fontSize: 14, color: '#1e40af', lineHeight: 1.7 }}>
+                          <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 8, padding: '12px 16px', marginBottom: 12, fontSize: 14, color: '#1e40af', lineHeight: 1.7 }}>
                             <strong style={{ display: 'block', marginBottom: 4, fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#3b82f6' }}>AI Summary</strong>
                             {s.summary}
                           </div>
                         )}
 
-                        {/* Recommendation */}
-                        {s.recommendation && (
-                          <div style={{ fontSize: 13, color: 'var(--gray-600)', marginBottom: 20, display: 'flex', alignItems: 'flex-start', gap: 8 }}>
-                            <RecoPill text={s.recommendation} />
-                            <span style={{ lineHeight: 1.6, paddingTop: 2 }}>{s.recommendation.replace(/^(Hire|Consider|Don't Recommend)\s*[—-]\s*/i, '')}</span>
-                          </div>
+                        {/* Evaluation actions — re-evaluate + manual edit, side by side under the summary */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 20, flexWrap: 'wrap' }}>
+                          <button
+                            onClick={() => reEvaluate(s)}
+                            disabled={reEvaluating[s.id]}
+                            style={{ fontSize: 12, padding: '5px 12px', borderRadius: 6, border: '1px solid #d97706', background: '#fff', color: '#b45309', cursor: reEvaluating[s.id] ? 'not-allowed' : 'pointer', fontFamily: 'inherit', fontWeight: 600 }}>
+                            {reEvaluating[s.id] ? 'Evaluating…' : '↻ Re-evaluate with AI'}
+                          </button>
+                          {!manualEditing[s.id] && (
+                            <button
+                              onClick={() => setManualEditing(p => ({ ...p, [s.id]: {
+                                comm: parseFloat(s.scoreComm) || '',
+                                tech: parseFloat(s.scoreTech) || '',
+                                conf: parseFloat(s.scoreConf) || '',
+                                culture: parseFloat(s.scoreCulture) || '',
+                                overall: parseFloat(s.scoreOverall) || '',
+                                recommendation: s.recommendation || '',
+                                summary: s.summary || '',
+                              }}))}
+                              style={{ fontSize: 12, fontWeight: 600, padding: '5px 14px', borderRadius: 6, border: '1px solid var(--gray-300)', background: '#fff', color: 'var(--gray-600)', cursor: 'pointer', fontFamily: 'inherit' }}
+                            >
+                              ✏️ Edit Evaluation Manually
+                            </button>
+                          )}
+                        </div>
+                        {manualEditing[s.id] && (
+                          <ManualEvalForm
+                            data={manualEditing[s.id]}
+                            onChange={(field, val) => setManualEditing(p => ({ ...p, [s.id]: { ...p[s.id], [field]: val } }))}
+                            onCancel={() => setManualEditing(p => { const n = { ...p }; delete n[s.id]; return n; })}
+                            onSave={async () => {
+                              const d = manualEditing[s.id];
+                              // Key names must match what the n8n IntTx - Prep node reads
+                              // (communication/technical/confidence/cultureFit/overall) —
+                              // anything else silently saves as 0.
+                              const scores = {
+                                communication: parseFloat(d.comm) || 0, technical: parseFloat(d.tech) || 0,
+                                confidence: parseFloat(d.conf) || 0, cultureFit: parseFloat(d.culture) || 0,
+                                overall: parseFloat(d.overall) || 0,
+                                summary: d.summary, recommendation: d.recommendation,
+                                perQuestion: parseJSON(s.perQuestion),
+                              };
+                              await apiPost('/interview/save-transcript', {
+                                jobId: s.jobOpeningId, evaluationId: s.evaluationId,
+                                candidateId: s.candidateId, candidateName: s.candidateName,
+                                transcript: parseJSON(s.qaPairs), durationSeconds: s.durationSeconds,
+                                scores, recordingPath: s.recordingPath || '',
+                                requirementsMatch: parseJSON(s.requirementsMatch),
+                              });
+                              showToast('Evaluation updated', 'success');
+                              setManualEditing(p => { const n = { ...p }; delete n[s.id]; return n; });
+                              const res = await apiGet(`/interview/sessions?jobId=${jobId}`);
+                              setSessions(res.data || res || []);
+                            }}
+                          />
                         )}
 
                         {/* Transcript */}
@@ -883,9 +880,9 @@ function ManualEvalForm({ data, onChange, onCancel, onSave }) {
         <select value={data.recommendation} onChange={e => onChange('recommendation', e.target.value)}
           style={{ width: '100%', padding: '8px 10px', border: '1px solid var(--gray-200)', borderRadius: 6, fontSize: 13, fontFamily: 'inherit', outline: 'none' }}>
           <option value="">— Select —</option>
-          <option value="Hire — Strong candidate, recommend proceeding.">✓ Hire</option>
-          <option value="Consider — Candidate shows potential but has gaps.">~ Consider</option>
-          <option value="Don't Recommend — Candidate does not meet requirements.">✗ Don't Recommend</option>
+          <option value="Hire — Strong candidate, recommend proceeding.">Recommended</option>
+          <option value="Consider — Candidate shows potential but has gaps.">Consider</option>
+          <option value="Don't Recommend — Candidate does not meet requirements.">Not Recommended</option>
         </select>
       </div>
       <div style={{ display: 'flex', gap: 8 }}>

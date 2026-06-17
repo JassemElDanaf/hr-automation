@@ -378,6 +378,14 @@ export default function CandidateInterview() {
       videoRef.current.srcObject = streamRef.current;
   }, [phase]);
 
+  // Wire the device-test preview AFTER the <video> mounts. Setting srcObject
+  // in testDevices() ran before React rendered the element (gated on
+  // devicesReady), so testVideoRef was still null → black preview.
+  useEffect(() => {
+    if (devicesReady && testVideoRef.current && testStreamRef.current)
+      testVideoRef.current.srcObject = testStreamRef.current;
+  }, [devicesReady]);
+
   // Auto-scroll feed to bottom when new content appears
   useEffect(() => {
     if (feedRef.current) feedRef.current.scrollTop = feedRef.current.scrollHeight;

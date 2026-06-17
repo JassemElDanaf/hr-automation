@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { apiGet, apiPost } from '../services/api';
 import { useUI } from '../state/uiState';
 import { useSelectedJob } from '../state/selectedJob';
@@ -23,6 +24,7 @@ let _nextId = 1;
 function emptyQ() { return { id: _nextId++, text: '', category: 'hr', selected: true }; }
 
 export default function LiveInterview() {
+  const navigate = useNavigate();
   const { showToast } = useUI();
   const { selectedJob } = useSelectedJob();
 
@@ -66,6 +68,24 @@ export default function LiveInterview() {
   }, [candidateId, qMode, generatedQs, customQs, bankSelectedQs]);
 
   useEffect(() => { loadJobs(); }, []);
+
+  // Deep-link from the Shortlist "Set Up Interview" button:
+  // /live-interview?setupCandidate=<id>&setupJob=<id> — open Setup, load the
+  // job, then queue the candidate so the pendingPrep effect below auto-selects
+  // them once candidates load. Applied once; the URL is then cleaned.
+  const setupAppliedRef = useRef(false);
+  useEffect(() => {
+    if (setupAppliedRef.current || jobs.length === 0) return;
+    const params = new URLSearchParams(window.location.search);
+    const setupCand = params.get('setupCandidate');
+    const setupJob = params.get('setupJob');
+    if (!setupCand) return;
+    setupAppliedRef.current = true;
+    setMainTab('setup');
+    if (setupJob) handleJobChange(String(setupJob));
+    setPendingPrep({ candidateId: setupCand, questions: [] });
+    window.history.replaceState({}, '', '/live-interview');
+  }, [jobs]);
 
   // When candidates load and there's a pending prep auto-select, apply it
   useEffect(() => {
@@ -228,8 +248,12 @@ export default function LiveInterview() {
     // HR opened the app (generate from the tunnel URL for remote candidates);
     // VITE_PUBLIC_URL in .env overrides it for a stable public address.
     const origin = (import.meta.env.VITE_PUBLIC_URL || window.location.origin).replace(/\/$/, '');
-    setLink(`${origin}/interview/${encodeInterviewToken(payload)}`);
+    const url = `${origin}/interview/${encodeInterviewToken(payload)}`;
+    setLink(url);
     setCopied(false);
+    // Stash the link per-candidate so the Shortlist "Interview Invite" email can
+    // auto-fill it — HR generates here, then sends the invite from Shortlist.
+    try { localStorage.setItem(`hr_interview_link_${candidateId}`, url); } catch {}
   }
 
   async function copyLink() {
@@ -439,6 +463,15 @@ export default function LiveInterview() {
 
             {link && (
               <div style={{ marginTop: 16 }}>
+                <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8 }}>
+                  <button
+                    className="btn btn-secondary btn-sm"
+                    onClick={() => navigate(`/shortlist?emailInvite=${candidateId}&job=${jobId}`)}
+                    title="Go back to Shortlist and open the invitation email with this link filled in"
+                  >
+                    ← Back to Shortlist
+                  </button>
+                </div>
                 <div style={{ display: 'flex', gap: 8 }}>
                   <input
                     type="text" readOnly value={link} onClick={e => e.target.select()}

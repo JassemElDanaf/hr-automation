@@ -422,6 +422,50 @@ textarea { resize: vertical; min-height: 120px; }
 }
 @keyframes spin { to { transform: rotate(360deg); } }
 
+/* Pulsing status dot (used by "AI evaluating…" indicators). */
+@keyframes pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%      { opacity: 0.35; transform: scale(0.8); }
+}
+
+/* Indeterminate progress bar — slides a segment across the track. */
+@keyframes indeterminate {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(350%); }
+}
+
+/* Combined-score weighting slider (Decision tab) — polished range input.
+   The blue-fill-to-thumb look comes from an inline gradient background set on
+   the element (depends on the live value). */
+.weight-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 6px;
+  border-radius: 999px;
+  outline: none;
+  cursor: pointer;
+  margin: 8px 0;
+}
+.weight-slider::-webkit-slider-runnable-track { height: 6px; border-radius: 999px; background: transparent; }
+.weight-slider::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none;
+  width: 18px; height: 18px; margin-top: -6px;
+  border-radius: 50%; background: #fff; border: 2px solid #2563eb;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.18);
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
+}
+.weight-slider:hover::-webkit-slider-thumb { transform: scale(1.12); }
+.weight-slider:active::-webkit-slider-thumb { transform: scale(1.12); box-shadow: 0 2px 10px rgba(37, 99, 235, 0.45); }
+.weight-slider::-moz-range-track { height: 6px; border-radius: 999px; background: transparent; }
+.weight-slider::-moz-range-thumb {
+  width: 18px; height: 18px;
+  border-radius: 50%; background: #fff; border: 2px solid #2563eb;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.18);
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
+}
+.weight-slider:hover::-moz-range-thumb { transform: scale(1.12); }
+
 .empty-state { text-align: center; padding: 60px; color: var(--gray-400); }
 
 /* Wizard */
@@ -689,22 +733,6 @@ textarea { resize: vertical; min-height: 120px; }
   background: #d1fae5; color: #065f46;
   border: 1px solid #a7f3d0;
 }
-/* Handed off to HM — distinct blue treatment so HR can tell at a glance which
-   candidates are awaiting an HM verdict. */
-.candidate-card--handed-off {
-  background: #fff;
-  border-color: var(--gray-200);
-  box-shadow: none;
-  border-left: 4px solid #3b82f6;
-}
-.card-handoff-chip {
-  display: inline-flex; align-items: center; gap: 3px;
-  padding: 2px 8px; border-radius: 12px;
-  font-size: 11px; font-weight: 600;
-  background: #dbeafe; color: #1e40af;
-  border: 1px solid #93c5fd;
-}
-
 /* Card transition animation — plays once on state change */
 .candidate-card--transitioning {
   animation: cardStateChange 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
@@ -812,11 +840,11 @@ textarea { resize: vertical; min-height: 120px; }
 .sl-email-status {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
+  gap: 7px;
+  padding: 6px 11px;
   border-radius: var(--radius);
-  font-size: 13px;
-  line-height: 1.4;
+  font-size: 12.5px;
+  line-height: 1.35;
   background: var(--gray-100);
   color: var(--gray-600);
   border: 1px solid var(--gray-200);
@@ -848,7 +876,7 @@ textarea { resize: vertical; min-height: 120px; }
   border-color: #e9d5ff;
 }
 .sl-email-icon {
-  font-size: 16px;
+  font-size: 14px;
   flex-shrink: 0;
 }
 .sl-email-time {
