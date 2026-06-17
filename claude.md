@@ -2,7 +2,7 @@
 
 Persistent source of truth for the project. Read this before making changes.
 
-> **Project status (June 2026):** Demo-ready, fully local. All six workflows functional end to end. Nav is 7 tabs: Dashboard · CV Pool · Job Openings · CV Evaluation · Shortlist · Emails · Interview (the Interview tab has Setup / Question Bank / Candidate Prep / Results sub-tabs — Results is the former AI Interviews page). A progress report for Diyar management lives at `report/report.pdf` (LaTeX source at `report/report.tex`, compiled with MiKTeX).
+> **Project status (June 2026):** Demo-ready, fully local. All six workflows functional end to end. **App login + RBAC is live** (admin / recruiter / viewer) — see §12. Nav is 8 tabs: Dashboard · Job Openings · CV Pool · CV Evaluation · Shortlist · Interview · **Decision** · Emails (plus an admin-only **Users** tab). The Interview tab has Setup / Question Bank / Candidate Prep / Results sub-tabs (Results is the former AI Interviews page). The **Decision** tab blends CV + interview scores into one ranking and is the single point where HR sends the full pack to the hiring manager (the HM hand-off was removed from Shortlist; HR no longer records the HM's verdict — that's the manager's job, done over email). A progress report for Diyar management lives at `report/report.pdf` (LaTeX source at `report/report.tex`, compiled with MiKTeX).
 
 ---
 
@@ -20,7 +20,9 @@ Persistent source of truth for the project. Read this before making changes.
 | Ollama (local, port 11434) | Runs `qwen3:4b`. Used for JD generation, criteria generation, CV scoring. |
 | SMTP sidecar (`scripts/smtp_server.py`) | Tiny Python HTTP server on `127.0.0.1:8901`. n8n POSTs here, it relays via `smtplib`. Generates a Message-ID per send and returns it so the outbound `email_log` row stores it for later in-reply-to matching. |
 | IMAP sidecar (`scripts/imap_server.py`) | Tiny Python daemon on `127.0.0.1:8902`. Polls the configured Gmail mailbox every `IMAP_POLL_SEC` for UNSEEN messages, parses each, and POSTs the payload to n8n's `/inbound-email` webhook so the reply lands in `email_log` with `direction='inbound'`, threaded to the original outbound row by Message-ID. Without `IMAP_HOST` set the daemon stays running but skips polling. |
-| Launcher (`start.sh` / `launch.bat`) | Brings up everything in the right order (Docker → Postgres → Ollama → SMTP → n8n → React frontend) and opens http://localhost:3001. n8n auth is disabled via env vars. All data lives on **D:\\** — see §11 Drive Layout. |
+| Recording sidecar (`scripts/recording_server.py`) | Python HTTP server on `127.0.0.1:8903`. Stores/serves candidate interview recordings; Vite proxies `/recording`→here. |
+| Auth sidecar (`scripts/auth_server.py`) | Python HTTP server on `127.0.0.1:8904` — **app login + RBAC**. Connects to Postgres via psycopg2; passwords are bcrypt-hashed by Postgres (pgcrypto), sessions are opaque UUID tokens in `auth_sessions`. Vite proxies `/auth`→here. See §12. |
+| Launcher (`start.sh` / `launch.bat`) | Brings up everything in the right order (Docker → Postgres → Ollama → SMTP/IMAP/Recording/Auth sidecars → n8n → React frontend) and opens http://localhost:3001 (login required). n8n's own editor auth is disabled via env vars (separate from the app login). All data lives on **D:\\** — see §11 Drive Layout. |
 
 **How the pieces fit**
 
@@ -100,6 +102,8 @@ No custom backend — the "backend" is n8n. Each HTTP endpoint is a webhook node
 - `migrations/009-email-direction.sql` — adds `direction` (`outbound`/`inbound` CHECK, default `'outbound'`), `message_id`, `in_reply_to` columns + matching indexes on `email_log` so inbound replies pulled by the IMAP sidecar can be threaded to the parent outbound row
 - `migrations/013-question-bank.sql` — `question_bank` table for reusable interview questions
 - `migrations/014-candidate-prepared-questions.sql` — `candidate_prepared_questions` table with UNIQUE(candidate_id, job_opening_id) for persisting per-candidate interview prep (questions, notes, meeting details) so they follow the candidate everywhere
+- `migrations/015-hm-review.sql` — added `hm_verdict`/`hm_notes`/`hm_reviewed_at` to `shortlist` for the Decision tab's HM-verdict form. **That form was later removed (HR doesn't record the manager's verdict), so these columns are now unused/dead** but left in place (additive, harmless)
+- `migrations/016-users-auth.sql` — **auth**: `users` (email, bcrypt `password_hash` via pgcrypto, `role` CHECK admin/recruiter/viewer, is_active, last_login_at) + `auth_sessions` (opaque UUID token, expires_at). Enables `pgcrypto`. See §12
 
 Full table map is in `docs/database.md`.
 
@@ -291,6 +295,12 @@ Major bugs + how they were fixed. Use this to avoid re-introducing them.
 
 | Date | Bug | Root cause | Fix |
 |------|-----|------------|-----|
+| 2026-06-17 | **Feature: app login + RBAC** (admin/recruiter/viewer). | Stakeholder/security need — app had no auth | New auth sidecar + migration 016 + React login/gating. Full details in **§12**. UI-gated (webhooks stay open). |
+| 2026-06-17 | **Flow cleanup: removed redundancy created by the Decision tab.** (a) Shortlist "Handed off" stage (stat card + filter pill + `isHandedOff` derivation + card tint/chip) — HM hand-off now lives only in Decision. (b) Decision's duplicate header "Send to HM" + the HR-side HM-verdict/notes form (manager's job, done over email) — incl. the `hmDraft`/`savingHM`/`submitHMReview` code and the header verdict chip. (c) "Email HM" removed from the Interview **Results** toolbar (HM hand-off is a Decision action, not a review-stage one). (d) Deleted orphaned `InterviewQuestionsModal.jsx` + dead handed-off CSS | These all duplicated the single HM-handoff point after the Decision tab landed | Removed across `Shortlist.jsx`, `Decision.jsx`, `AIInterviews.jsx`. Migration-015 `hm_verdict` columns left as dead-but-harmless. Result: Shortlist is a clean Shortlisted→Interviewed→Hired/Rejected pipeline; Decision is the one place HR sends the full pack to the HM |
+| 2026-06-17 | **Removed 2 dead n8n endpoints** `POST /shortlist-hm-review` (WF3) + `GET /interview/saved-questions` (WF6) | Both unreachable after flow changes (HM verdict form removed; saved-questions table never written) | Removed the webhook node-chains from live sqlite (`workflow_entity`+`workflow_history`) **and** the cached `webhook_entity` rows (else the dead path 500s, not 404s — `Cannot read properties of null (reading 'disabled')`), restarted n8n, re-exported repo JSONs. Verified 404 + all live endpoints 200 |
+| 2026-06-17 | **Shortlist auto-advances to "Interviewed"** when a candidate has a completed interview session (removes the manual "Mark Interviewed" button) | Finishing the AI interview never updated `shortlist.status` — the stage was hand-maintained and drifted | `loadShortlist` fetches `/interview/sessions`; shortlisted candidates with a session are reflected as interviewed immediately + persisted in the background |
+| 2026-06-17 | **Emails: mobile rendering + compose + UX.** (a) Emails rendered fine on desktop but unparsed/zoomed-out on phones. (b) No way to compose a new email. (c) Compose was locked to a job's candidates. (d) Job dropdown couldn't select closed jobs. (e) SMTP banner too tall | (a) `buildEmailHtml` had no viewport meta + non-fluid 640px div + long interview links overflowed. (b/c/d/e) gaps | (a) Rewrote `buildEmailHtml` table-based + viewport + `max-width:600px` + `word-break`. (b) "New Email" composer. (c) "To" is free-form (send to anyone); linking a candidate is optional (logs to history, else one-off via SMTP sidecar). (d) all jobs selectable. (e) compact single-line banner |
+| 2026-06-17 | **Shortlist card redesign** — 5 buttons → 1–2 primary + a `⋯` overflow menu (`OverflowMenu` in `Shortlist.jsx`); "Set Up Interview" deep-links to the Interview tab with the candidate pre-selected; "Send Invite" auto-fills the generated link (stashed per-candidate in localStorage); "← Back to Shortlist" returns + opens the invite draft | UI clutter / no link handoff | Per §4 the action row is now Primary + overflow. CandidateInterview camera-preview black-box also fixed (wire stream in an effect after `<video>` mounts) |
 | 2026-06-16 | **Launcher false-reported "n8n / DB failed to load".** Pressing `launch.bat` often showed n8n and the DB as failed even though both came up seconds later | `start.sh` waited a fixed ~13s for n8n, but n8n takes 30-60s to boot here AND its webhooks register another 15-30s AFTER `/healthz` turns ok. The frontend (and its DB status pill, which probes *through* an n8n webhook) loaded against not-yet-registered webhooks → looked like n8n+DB were dead | Replaced the fixed sleeps in `start.sh` §4 with two poll loops: (1) poll `/healthz` up to 2 min, (2) then poll `/webhook/job-openings` until it returns 200 (up to 60s) so the launcher only reports "webhooks live" once the data path actually works. No false failures |
 | 2026-06-16 | **Leaked n8n owner password (`Diyar2024!`) in public git history** | Committed in plain text in early commits (8dab9c7, a06c343); scrubbed from HEAD but lives in history of the public repo | Rotated: generated a new strong password, bcrypt-hashed it with n8n's own bcryptjs (cost 10), updated the `user` table for `j.danaf@diyarme.com` in the live n8n sqlite, and updated `N8N_REST_PASSWORD` in `.env` (gitignored). Verified new password validates and old no longer does. The history exposure is now inert — the leaked string no longer authenticates. (Full history purge via filter-repo/force-push was intentionally NOT done — destructive on a public repo; rotation makes the secret useless without rewriting history) |
 | 2026-06-16 | **Cleanup + quick wins.** (a) Dead `getCandidateHandoffTemplate` removed from `services/email.js` (unused since the Decision refactor moved HM hand-off post-interview). (b) The 12 applied one-shot `patch_*.py` scripts moved to `scripts/applied/` (with a README) — they're applied to live sqlite AND exported to repo JSONs, so they're reference-only; doc references in CLAUDE.md/docs updated to the new path. (c) Empty legacy `frontend/` dir confirmed gone | Housekeeping — accumulated dead code + a flat `scripts/` dir mixing live sidecars with spent patchers | No behavior change. `export-live-workflows.py` + the 4 sidecars stay at `scripts/` top level; only spent patchers archived |
@@ -413,7 +423,7 @@ Major bugs + how they were fixed. Use this to avoid re-introducing them.
 - **Email templates.** Right now rejection emails use a hardcoded template. Add a template manager with variables (`{{candidate_name}}`, `{{job_title}}`).
 - **Analytics improvements.** Dashboard is basic counts. Could add funnel visualization (applied → scored → shortlisted → hired), time-to-hire, source-of-hire if that data were tracked.
 - **SMTP test endpoints.** Sidecar needs `POST /test-connection` and `POST /send-test` for the Emails page buttons.
-- **Multi-user auth.** Everything assumes one HR user on localhost. Adding real auth means enabling `N8N_USER_MANAGEMENT_DISABLED=false` and wiring a login.
+- ~~**Multi-user auth.**~~ **DONE 2026-06-17** — app login + RBAC (admin/recruiter/viewer) via the auth sidecar. See §12. Remaining upgrade if ever exposed beyond localhost: **harden the n8n webhooks** (Level 2 — every endpoint validates the session token + role). Today the webhooks are still open; RBAC is enforced at the React/`apiPost` layer only.
 
 ---
 
@@ -476,3 +486,28 @@ curl -b /tmp/n8n.txt http://localhost:5678/rest/workflows/WF_ID/activate \
   -d '{"versionId":"VERSION_ID"}'
 ```
 VERSION_ID comes from `workflow_history` (latest row for the workflow). **CRITICAL:** calling `/deactivate` via REST clears `activeVersionId` in `workflow_entity`. Always re-patch the DB (set `active=1, activeVersionId=<ver>`) after any deactivate/activate cycle, then call activate with the versionId.
+
+**Sidecar ports:** SMTP `8901` · IMAP `8902` · Recording `8903` · **Auth `8904`**. Frontend `3001`, n8n `5678`, Ollama `11434`, Postgres `5432`.
+
+**Infra gotcha — webhooks hang (curl 000) while /healthz=200:** usually a wedged Docker/WSL2 backend (Postgres TCP port "open" but the protocol times out; `docker` CLI also hangs; n8n logs "clock skew / Database not ready / task offer expired"). Fix: `wsl --shutdown`, relaunch Docker Desktop, `docker start hr-postgres`. n8n auto-reconnects. (Distinct from the normal post-restart 15-30s webhook registration delay, which shows 404 not 000.)
+
+---
+
+## 12. App Login + RBAC (the app's own auth — separate from n8n editor auth)
+
+Added 2026-06-17. **UI-gated** RBAC: real hashed credentials in Postgres + role-based UI, but the n8n webhooks themselves are still open (acceptable for localhost; hardening every endpoint is the documented Level-2 upgrade in §10).
+
+**Backend — auth sidecar** (`scripts/auth_server.py`, port `8904`, Vite proxies `/auth`→8904):
+- Postgres via **psycopg2** (start.sh `pip install`s it once; it's the project's only non-stdlib Python dep).
+- Passwords hashed by **Postgres pgcrypto** — `crypt(pw, gen_salt('bf', 12))` on write, `password_hash = crypt(pw, password_hash)` on verify. Never hashed/compared in app code, never plain text.
+- Sessions = **opaque random UUID** tokens in `auth_sessions` (12h expiry), validated server-side on every `/auth/me`. No client-side JWT to forge. A non-UUID token must be rejected up front (querying the UUID column with garbage 500s otherwise — see `is_uuid()`).
+- Endpoints: `POST /auth/login` → `{token,user}`; `GET /auth/me` (Bearer); `POST /auth/logout`; admin-only `GET/POST/PATCH /auth/users`.
+- Seeds an initial admin **on first run if `users` is empty** (creds printed to `logs/auth_server.log`), so no password lives in the repo. Default seed: `admin@diyarme.com / ChangeMe123!` — change after first login. Login emails are **just usernames** (nothing is emailed to them; independent of the SMTP sender).
+
+**Frontend:**
+- `state/auth.jsx` — `AuthProvider`/`useAuth` (token in `localStorage` `hr_auth_token`, current `user`/`role`, `isAdmin`/`canWrite`). `services/auth.js` is the API client.
+- `App.jsx` — `RequireAuth` gates the whole HR app behind `pages/Login.jsx`. **The candidate `/interview/:token` route is mounted OUTSIDE the gate — candidates never see a login wall.** `/users` is wrapped in `AdminOnly`.
+- `Header.jsx` has an **account/settings menu** (avatar-initials + name + role + ⚙, top-right) — a dropdown with the user's details, **Users & Access** (admin only → `/users`), **Log out**, and an app-info footer. (Users is **not** a nav tab — it lives here.) `pages/Users.jsx` = admin user management (create, change role, reset password, enable/disable). `/users` is still route-guarded by `AdminOnly` in `App.jsx`.
+- **Viewer read-only = one chokepoint:** `apiPost` in `services/api.js` blocks all writes when `role==='viewer'` and toasts "Read-only access". `AuthProvider` registers the role via `setAuthRole`; `UIProvider` registers the toast via `setToastFn`. (Direct-`fetch` writes that bypass `apiPost` — the Emails one-off send + test email — are the only gaps; minor.)
+
+**Roles:** `admin` (everything + Users), `recruiter` (full pipeline), `viewer` (read-only). The hiring manager is **not** an app role — they interact only via email.
