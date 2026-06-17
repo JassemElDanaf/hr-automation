@@ -65,7 +65,14 @@ else
 fi
 
 # ── 3. Python sidecars ───────────────────────────────────────────────────────
-echo "[3/6] Python sidecars (SMTP / IMAP / Recording)..."
+echo "[3/6] Python sidecars (SMTP / IMAP / Recording / Auth)..."
+
+# Auth sidecar needs psycopg2 (DB driver). Install once if missing — quick no-op
+# when already present.
+python -c "import psycopg2" > /dev/null 2>&1 || {
+  echo "  Installing psycopg2-binary for the auth sidecar..."
+  python -m pip install --quiet psycopg2-binary > /dev/null 2>&1 || echo "  WARNING: psycopg2 install failed — auth login won't work."
+}
 
 if curl -s http://127.0.0.1:8901/ > /dev/null 2>&1; then
   echo "  SMTP sidecar already running."
@@ -96,6 +103,16 @@ else
   curl -s http://127.0.0.1:8903/ > /dev/null 2>&1 \
     && echo "  Recording server started (port 8903)." \
     || echo "  WARNING: Recording server failed."
+fi
+
+if curl -s http://127.0.0.1:8904/ > /dev/null 2>&1; then
+  echo "  Auth sidecar already running."
+else
+  python "$SCRIPT_DIR/scripts/auth_server.py" >> "$SCRIPT_DIR/logs/auth_server.log" 2>&1 &
+  sleep 1
+  curl -s http://127.0.0.1:8904/ > /dev/null 2>&1 \
+    && echo "  Auth sidecar started (port 8904)." \
+    || echo "  WARNING: Auth sidecar failed (check logs/auth_server.log)."
 fi
 
 # ── 4. n8n ───────────────────────────────────────────────────────────────────

@@ -1,9 +1,17 @@
 import { useState, useEffect, useRef } from 'react';
 import { useSelectedJob } from '../../state/selectedJob';
+import { useAuth } from '../../state/auth';
 import { apiGet } from '../../services/api';
+
+const ROLE_META = {
+  admin:     ['Admin', '#5b21b6'],
+  recruiter: ['Recruiter', '#1e40af'],
+  viewer:    ['Viewer · read-only', '#475569'],
+};
 
 export default function Header() {
   const { selectedJob, setSelectedJob, clearSelectedJob } = useSelectedJob();
+  const { user, role, logout } = useAuth();
   const [jobs, setJobs] = useState([]);
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
@@ -99,6 +107,19 @@ export default function Header() {
           );
         })()}
       </div>
+
+      {user && (() => {
+        const [rlabel, rcolor] = ROLE_META[role] || ['', 'var(--gray-500)'];
+        return (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginLeft: 'auto' }}>
+            <div style={{ textAlign: 'right', lineHeight: 1.25 }}>
+              <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--gray-800)' }}>{user.full_name || user.email}</div>
+              <div style={{ fontSize: 11, fontWeight: 600, color: rcolor }}>{rlabel}</div>
+            </div>
+            <button className="btn btn-secondary btn-sm" onClick={logout} title="Sign out">Logout</button>
+          </div>
+        );
+      })()}
     </div>
   );
 }

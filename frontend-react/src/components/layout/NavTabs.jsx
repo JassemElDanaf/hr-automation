@@ -1,5 +1,6 @@
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useState, useEffect, useCallback } from 'react';
+import { useAuth } from '../../state/auth';
 
 const tabs = [
   { path: '/', label: 'Dashboard' },
@@ -182,6 +183,8 @@ function ServicePill({ svc, status }) {
 export default function NavTabs() {
   const location = useLocation();
   const navigate = useNavigate();
+  const { isAdmin } = useAuth();
+  const visibleTabs = isAdmin ? [...tabs, { path: '/users', label: 'Users' }] : tabs;
   const { statuses, recheck } = useServiceStatuses();
   const [rechecking, setRechecking] = useState(false);
 
@@ -196,7 +199,7 @@ export default function NavTabs() {
   return (
     <div className="nav-tabs" style={{ justifyContent: 'space-between' }}>
       <div style={{ display: 'flex' }}>
-        {tabs.map(tab => (
+        {visibleTabs.map(tab => (
           <button
             key={tab.path}
             className={`nav-tab ${location.pathname === tab.path ? 'active' : ''}`}

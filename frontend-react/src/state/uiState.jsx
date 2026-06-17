@@ -1,4 +1,5 @@
-import { createContext, useContext, useState, useCallback, useRef } from 'react';
+import { createContext, useContext, useState, useCallback, useRef, useEffect } from 'react';
+import { setToastFn } from '../services/api';
 
 const UIContext = createContext(null);
 
@@ -24,6 +25,9 @@ export function UIProvider({ children }) {
     setToastState({ msg, type });
     toastTimerRef.current = setTimeout(() => { setToastState(null); toastTimerRef.current = null; }, duration);
   }, []);
+
+  // Let the API-layer read-only gate (apiPost) surface a toast for viewers.
+  useEffect(() => { setToastFn(showToast); }, [showToast]);
 
   const openEmailComposer = useCallback((config) => {
     setEmailComposer(config);

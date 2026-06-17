@@ -16,6 +16,7 @@ export default defineConfig({
     proxy: {
       '/webhook': 'http://localhost:5678',
       '/recording': 'http://localhost:8903',
+      '/auth': 'http://localhost:8904',
     },
   },
 })
