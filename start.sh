@@ -172,13 +172,14 @@ fi
 echo ""
 echo "═══════════════════════════════════════════"
 echo "  HR Automation ready!"
-echo "  App:       http://localhost:3001"
+echo "  App:       http://localhost:3001  (login required)"
 echo "  n8n:       http://localhost:5678"
 echo "  Ollama:    http://localhost:11434"
 echo "  DB:        localhost:5432"
 echo "  SMTP:      http://127.0.0.1:8901"
 echo "  IMAP:      http://127.0.0.1:8902"
 echo "  Recording: http://127.0.0.1:8903"
+echo "  Auth:      http://127.0.0.1:8904"
 echo "═══════════════════════════════════════════"
 
 if [ "$1" != "--no-open" ]; then
