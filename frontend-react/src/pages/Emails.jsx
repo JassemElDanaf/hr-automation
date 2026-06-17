@@ -7,7 +7,7 @@ import Badge from '../components/common/Badge';
 import EmptyState from '../components/common/EmptyState';
 import Loading from '../components/common/Loading';
 import Modal from '../components/modals/Modal';
-import { sendEmailRequest, getEmailStatus } from '../services/email';
+import { sendEmailRequest, getEmailStatus, buildEmailHtml } from '../services/email';
 import { formatDate, emailTypeLabel as baseEmailTypeLabel } from '../utils/helpers';
 
 // Emails tab uses a shorter label for the recommendation/handoff type.
@@ -64,37 +64,53 @@ export default function Emails() {
   // so it logs to email_log (which requires candidate_id + job_opening_id) and
   // appears in the history below.
   async function openCompose() {
-    if (!jobId) { showToast('Select a job first', 'error'); return; }
     setCompose({ candidateId: '', to: '', subject: '', body: '' });
     setShowCompose(true);
-    try {
-      const res = await apiGet(`/candidates?job_id=${jobId}`);
-      setCandidates(res.data || []);
-    } catch { setCandidates([]); }
+    // Load the selected job's candidates for the optional "link to candidate"
+    // dropdown. No job selected is fine — you can still send a one-off email.
+    if (jobId) {
+      try { const res = await apiGet(`/candidates?job_id=${jobId}`); setCandidates(res.data || []); }
+      catch { setCandidates([]); }
+    } else setCandidates([]);
   }
 
   function onComposeCandidate(cid) {
     const c = candidates.find(c => String(c.id) === String(cid));
+    // Picking a candidate fills the recipient with their email (still editable).
     setCompose(p => ({ ...p, candidateId: cid, to: c?.email || p.to }));
   }
 
   async function sendCompose() {
     const { candidateId, to, subject, body } = compose;
-    if (!candidateId) { showToast('Pick a candidate', 'error'); return; }
     if (!/@/.test(to) || !/\./.test(to.split('@').pop() || '')) { showToast('Enter a valid recipient email', 'error'); return; }
     if (!subject.trim() || !body.trim()) { showToast('Subject and message are required', 'error'); return; }
-    const cand = candidates.find(c => String(c.id) === String(candidateId));
-    const jobTitle = jobs.find(j => j.id === parseInt(jobId))?.job_title || '';
     setComposing(true);
     try {
-      const res = await sendEmailRequest({
-        candidateId, jobId, emailType: 'custom', recipientEmail: to,
-        candidateName: cand?.candidate_name || cand?.full_name || '', jobTitle, subject, body,
-      });
-      const st = getEmailStatus(res);
-      showToast(st.message, st.type);
-      if (res.data?.status === 'sent' || res.data?.status === 'logged') { setShowCompose(false); loadEmails(); }
-    } catch { showToast('Failed to send email', 'error'); }
+      if (candidateId) {
+        // Linked to a candidate → route through /send-email so it logs to
+        // email_log and shows in this candidate's history.
+        const cand = candidates.find(c => String(c.id) === String(candidateId));
+        const jobTitle = jobs.find(j => j.id === parseInt(jobId))?.job_title || '';
+        const res = await sendEmailRequest({
+          candidateId, jobId, emailType: 'custom', recipientEmail: to,
+          candidateName: cand?.candidate_name || cand?.full_name || '', jobTitle, subject, body,
+        });
+        const st = getEmailStatus(res);
+        showToast(st.message, st.type);
+        if (res.data?.status === 'sent' || res.data?.status === 'logged') { setShowCompose(false); loadEmails(); }
+      } else {
+        // One-off to anyone → send straight through the SMTP sidecar (branded
+        // HTML, not tied to a candidate so it isn't logged to a candidate's history).
+        const r = await fetch('http://localhost:8901/', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ to, subject, body, html_body: buildEmailHtml(body) }),
+        });
+        const j = await r.json().catch(() => ({}));
+        if (j.status === 'sent') { showToast(`Email sent to ${to}`, 'success'); setShowCompose(false); }
+        else if (j.status === 'logged') showToast('SMTP not configured — nothing was sent. See Setup Guide.', 'error');
+        else showToast(`Send failed: ${j.error || 'unknown error'}`, 'error');
+      }
+    } catch { showToast('Failed to send email — is the SMTP sidecar running?', 'error'); }
     finally { setComposing(false); }
   }
 
@@ -160,12 +176,12 @@ export default function Emails() {
 
   return (
     <div className="container">
-      {/* SMTP Banner */}
-      <div className="criteria-bar" style={{ marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '12px' }}>
-        <span style={{ fontSize: '18px' }}>{smtpIcon}</span>
-        <div style={{ flex: 1 }}>
-          <div style={{ fontSize: '13px', fontWeight: 600 }}>{smtpText}</div>
-          <div style={{ fontSize: '12px', color: 'var(--gray-500)' }}>{smtpHint}</div>
+      {/* SMTP Banner — compact single-line status */}
+      <div className="criteria-bar" style={{ marginBottom: '14px', padding: '7px 14px', display: 'flex', alignItems: 'center', gap: '9px' }}>
+        <span style={{ fontSize: '14px', lineHeight: 1 }}>{smtpIcon}</span>
+        <div style={{ flex: 1, display: 'flex', alignItems: 'baseline', gap: '7px', flexWrap: 'wrap' }}>
+          <span style={{ fontSize: '13px', fontWeight: 600 }}>{smtpText}</span>
+          <span style={{ fontSize: '12px', color: 'var(--gray-500)' }}>· {smtpHint}</span>
         </div>
         <button className="btn btn-secondary btn-sm" onClick={() => setShowTest(true)}>Send Test Email</button>
         <button className="btn btn-secondary btn-sm" onClick={() => setShowSmtpHelp(true)}>Setup Guide</button>
@@ -186,12 +202,8 @@ export default function Emails() {
         <label style={{ fontSize: '13px', fontWeight: 600 }}>Job:</label>
         <select value={jobId} onChange={e => handleJobChange(e.target.value)} style={{ maxWidth: '280px' }}>
           <option value="">-- Select a job --</option>
-          {jobs.filter(j => j.is_active).map(j => <option key={j.id} value={j.id}>{j.job_title}</option>)}
-          {jobs.some(j => !j.is_active) && (
-            <optgroup label="Closed (reactivate in Job Openings to use)">
-              {jobs.filter(j => !j.is_active).map(j => <option key={j.id} value={j.id} disabled>{j.job_title}</option>)}
-            </optgroup>
-          )}
+          {/* Emails are viewable for any job (active or closed), so all are selectable. */}
+          {jobs.map(j => <option key={j.id} value={j.id}>{j.job_title}{!j.is_active ? ' (closed)' : ''}</option>)}
         </select>
         <div className="filter-tabs">
           {['all', 'sent', 'failed', 'inbound'].map(f => (
@@ -293,16 +305,17 @@ export default function Emails() {
         </>}>
         <div style={{ display: 'grid', gap: '12px' }}>
           <div>
-            <label style={{ fontSize: '13px', fontWeight: 600, display: 'block', marginBottom: '5px' }}>Candidate</label>
-            <select value={compose.candidateId} onChange={e => onComposeCandidate(e.target.value)} style={{ width: '100%', padding: '8px 10px', fontSize: '14px' }}>
-              <option value="">— Select a candidate —</option>
-              {candidates.map(c => <option key={c.id} value={c.id}>{(c.candidate_name || c.full_name || 'Candidate')}{c.email ? ` · ${c.email}` : ''}</option>)}
-            </select>
-            <div style={{ fontSize: '12px', color: 'var(--gray-400)', marginTop: '4px' }}>From the currently selected job. The email is logged to this candidate's history.</div>
+            <label style={{ fontSize: '13px', fontWeight: 600, display: 'block', marginBottom: '5px' }}>To</label>
+            <input type="email" value={compose.to} onChange={e => setCompose(p => ({ ...p, to: e.target.value }))} placeholder="anyone@example.com" style={{ width: '100%', padding: '8px 10px', fontSize: '14px' }} autoFocus />
+            <div style={{ fontSize: '12px', color: 'var(--gray-400)', marginTop: '4px' }}>Send to any email address.</div>
           </div>
           <div>
-            <label style={{ fontSize: '13px', fontWeight: 600, display: 'block', marginBottom: '5px' }}>To</label>
-            <input type="email" value={compose.to} onChange={e => setCompose(p => ({ ...p, to: e.target.value }))} placeholder="recipient@example.com" style={{ width: '100%', padding: '8px 10px', fontSize: '14px' }} />
+            <label style={{ fontSize: '13px', fontWeight: 600, display: 'block', marginBottom: '5px' }}>Link to candidate <span style={{ color: 'var(--gray-400)', fontWeight: 400 }}>(optional)</span></label>
+            <select value={compose.candidateId} onChange={e => onComposeCandidate(e.target.value)} style={{ width: '100%', padding: '8px 10px', fontSize: '14px' }} disabled={!jobId}>
+              <option value="">— None (one-off email) —</option>
+              {candidates.map(c => <option key={c.id} value={c.id}>{(c.candidate_name || c.full_name || 'Candidate')}{c.email ? ` · ${c.email}` : ''}</option>)}
+            </select>
+            <div style={{ fontSize: '12px', color: 'var(--gray-400)', marginTop: '4px' }}>{jobId ? 'Pick a candidate to log this to their history. Leave as None for a one-off.' : 'Select a job in the filter below to link this email to a candidate.'}</div>
           </div>
           <div>
             <label style={{ fontSize: '13px', fontWeight: 600, display: 'block', marginBottom: '5px' }}>Subject</label>
