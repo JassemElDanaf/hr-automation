@@ -397,34 +397,23 @@ export default function LiveInterview() {
           {/* Section 1 */}
           <div style={cardStyle}>
             <SectionTitle number={1} title="Select Candidate" />
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-              <div className="form-group" style={{ marginBottom: 0 }}>
-                <label>Job Opening</label>
-                <select value={jobId} onChange={e => handleJobChange(e.target.value)} disabled={loadingJobs}>
-                  <option value="">{loadingJobs ? 'Loading…' : '— Select a job opening —'}</option>
-                  {jobs.map(j => (
-                    <option key={j.JobId} value={j.JobId}>{j.job_title}{j.department ? ` — ${j.department}` : ''}</option>
-                  ))}
-                </select>
-              </div>
-              <div className="form-group" style={{ marginBottom: 0 }}>
-                <label>Candidate</label>
-                <select value={candidateId} onChange={e => handleCandidateChange(e.target.value)} disabled={!jobId || loadingCands}>
-                  <option value="">
-                    {loadingCands ? 'Loading…' : !jobId ? 'Select a job first' : candidates.length === 0 ? 'No shortlisted candidates' : '— Select a candidate —'}
-                  </option>
-                  {[...candidates]
-                    .sort((a, b) => (interviewedIds.has(String(a.CandidateId)) ? 1 : 0) - (interviewedIds.has(String(b.CandidateId)) ? 1 : 0))
-                    .map(c => {
-                      const done = interviewedIds.has(String(c.CandidateId));
-                      return (
-                        <option key={c.CandidateId} value={c.CandidateId}>
-                          {done ? '✓ ' : ''}{c.FullName}{c.OverallScore ? ` — Score: ${c.OverallScore}` : ''}{done ? ' (interviewed)' : ''}
-                        </option>
-                      );
-                    })}
-                </select>
-              </div>
+            <div className="form-group" style={{ marginBottom: 0 }}>
+              <label>Candidate {jobTitle && <span style={{ fontWeight: 500, color: 'var(--gray-400)' }}>· {jobTitle}</span>}</label>
+              <select value={candidateId} onChange={e => handleCandidateChange(e.target.value)} disabled={!jobId || loadingCands}>
+                <option value="">
+                  {loadingCands ? 'Loading…' : !jobId ? 'Pick a job from the “Current Job” selector at the top' : candidates.length === 0 ? 'No shortlisted candidates' : '— Select a candidate —'}
+                </option>
+                {[...candidates]
+                  .sort((a, b) => (interviewedIds.has(String(a.CandidateId)) ? 1 : 0) - (interviewedIds.has(String(b.CandidateId)) ? 1 : 0))
+                  .map(c => {
+                    const done = interviewedIds.has(String(c.CandidateId));
+                    return (
+                      <option key={c.CandidateId} value={c.CandidateId}>
+                        {done ? '✓ ' : ''}{c.FullName}{c.OverallScore ? ` — Score: ${c.OverallScore}` : ''}{done ? ' (interviewed)' : ''}
+                      </option>
+                    );
+                  })}
+              </select>
             </div>
             {candidateName && interviewedIds.has(String(candidateId)) && (
               <div style={{ marginTop: 12, padding: '9px 14px', background: '#fef3c7', border: '1px solid #fde68a', borderRadius: 6, fontSize: 12.5, color: '#92400e' }}>

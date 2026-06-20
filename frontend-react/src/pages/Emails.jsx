@@ -20,6 +20,7 @@ export default function Emails() {
   const { showToast } = useUI();
   const [jobs, setJobs] = useState([]);
   const [jobId, setJobId] = useState('');
+  const [allJobs, setAllJobs] = useState(false); // "All jobs" cross-view (Emails-only)
   const [emailData, setEmailData] = useState([]);
   const [statusFilter, setStatusFilter] = useState('all');
   const [loading, setLoading] = useState(false);
@@ -38,10 +39,12 @@ export default function Emails() {
     loadJobs();
   }, []);
 
-  // Follow the global job picked in the header (applies universally across tabs).
+  // Follow the global job picked in the header (applies universally across tabs),
+  // unless the "All jobs" cross-view toggle is on.
   useEffect(() => {
+    if (allJobs) return;
     if (selectedJob) setJobId(String(selectedJob.id));
-  }, [selectedJob]);
+  }, [selectedJob, allJobs]);
 
   useEffect(() => {
     if (jobId) loadEmails();
@@ -190,21 +193,17 @@ export default function Emails() {
   return (
     <div className="container tab-fade-in">
       <div style={{ display: 'flex', gap: '12px', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap' }}>
-        <label style={{ fontSize: '13px', fontWeight: 600 }}>Job:</label>
-        <Select
-          value={jobId}
-          onChange={handleJobChange}
-          placeholder="Select a job…"
-          style={{ minWidth: 240, maxWidth: 320 }}
-          options={[
-            { value: 'all', label: 'All jobs' },
-            // Same look as the Decision/Shortlist pickers (department + inactive
-            // badge), but inactive jobs stay selectable here so HR can read a
-            // closed job's email history.
-            ...jobs.filter(j => j.is_active).map(j => ({ value: j.id, label: `${j.job_title}${j.department ? ` — ${j.department}` : ''}` })),
-            ...jobs.filter(j => !j.is_active).map(j => ({ value: j.id, label: `${j.job_title}${j.department ? ` — ${j.department}` : ''}`, badge: 'inactive' })),
-          ]}
-        />
+        {/* Job comes from the global "Current Job" picker. The one Emails-only
+            extra is the cross-job "All jobs" view (merged inbox). */}
+        <button
+          className={`filter-tab ${allJobs ? 'active' : ''}`}
+          onClick={() => {
+            const next = !allJobs;
+            setAllJobs(next);
+            setJobId(next ? 'all' : (selectedJob ? String(selectedJob.id) : ''));
+          }}
+          title="Show email history merged across every job"
+        >🌐 All jobs</button>
         <div className="filter-tabs">
           {['all', 'sent', 'failed', 'inbound'].map(f => (
             <button key={f} className={`filter-tab ${statusFilter === f ? 'active' : ''}`} onClick={() => setStatusFilter(f)}>
@@ -233,7 +232,7 @@ export default function Emails() {
       </div>
 
       <div className="table-wrap">
-        {loading ? <Loading /> : !jobId ? <EmptyState>Select a job opening to view email history.</EmptyState> : filtered.length === 0 ? <EmptyState>No emails match the current filter.</EmptyState> : (
+        {loading ? <Loading /> : !jobId ? <EmptyState>Pick a job from the “Current Job” selector at the top (or toggle “All jobs”) to view email history.</EmptyState> : filtered.length === 0 ? <EmptyState>No emails match the current filter.</EmptyState> : (
           <table>
             <thead><tr><th>Date</th><th>Candidate</th><th>Type</th><th>Recipient</th><th>Subject</th><th>Status</th><th style={{ width: '28px' }}></th></tr></thead>
             <tbody>

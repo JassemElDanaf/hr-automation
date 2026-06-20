@@ -319,22 +319,11 @@ HR Department`;
     || (statusFilter === 'sent-hm' ? sentToHM.has(r.candidate_id) : r.status === statusFilter);
 
   return (
-    <div className="container">
+    <div className="container tab-fade-in">
       <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 16, flexWrap: 'wrap' }}>
-        <label style={{ fontWeight: 600, fontSize: 14 }}>Job:</label>
-        <Select
-          value={jobId}
-          onChange={handleJobChange}
-          placeholder="Select a job opening…"
-          style={{ minWidth: 280, maxWidth: 360 }}
-          options={[
-            ...jobs.filter(j => j.is_active).map(j => ({ value: j.id, label: `${j.job_title} — ${j.department}` })),
-            ...jobs.filter(j => !j.is_active).map(j => ({ value: j.id, label: `${j.job_title} — ${j.department}`, badge: 'inactive', disabled: true })),
-          ]}
-        />
-        <button className="btn btn-secondary btn-sm" onClick={loadData}>Refresh</button>
+        <button className="btn btn-secondary btn-sm" onClick={loadData}>↻ Refresh</button>
 
-        {/* Combined-score weighting — sits inline on the right of the job row to
+        {/* Combined-score weighting — sits inline on the right of the row to
             save vertical space. Step of 5 + a snap to 50 make a balanced 50/50
             split easy to hit. */}
         {jobId && rows.length > 0 && (
@@ -395,7 +384,7 @@ HR Department`;
         </>
       )}
 
-      {loading ? <Loading /> : !jobId ? <EmptyState>Select a job opening to compare candidates.</EmptyState> : rows.length === 0 ? <EmptyState>No shortlisted candidates for this job yet.</EmptyState> : (
+      {loading ? <Loading /> : !jobId ? <EmptyState>Pick a job from the “Current Job” selector at the top to compare candidates.</EmptyState> : rows.length === 0 ? <EmptyState>No shortlisted candidates for this job yet.</EmptyState> : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           {ranked.filter(matchesFilter).length === 0 && (
             <EmptyState>{statusFilter === 'sent-hm' ? 'No candidates have been sent to the hiring manager yet.' : `No ${statusFilter === 'all' ? '' : statusFilter + ' '}candidates for this job.`}</EmptyState>

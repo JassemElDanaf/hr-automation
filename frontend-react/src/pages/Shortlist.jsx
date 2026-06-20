@@ -400,21 +400,7 @@ export default function Shortlist() {
   const rejected = data.filter(d => d.status === 'rejected').length;
 
   return (
-    <div className="container">
-      <div style={{ display: 'flex', gap: '12px', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap' }}>
-        <label style={{ fontWeight: 600, fontSize: '14px', whiteSpace: 'nowrap' }}>Select Job:</label>
-        <Select
-          value={jobId}
-          onChange={handleJobChange}
-          placeholder="Select a job opening…"
-          style={{ minWidth: 280, maxWidth: 360 }}
-          options={[
-            ...jobs.filter(j => j.is_active).map(j => ({ value: j.id, label: `${j.job_title} — ${j.department}` })),
-            ...jobs.filter(j => !j.is_active).map(j => ({ value: j.id, label: `${j.job_title} — ${j.department}`, badge: 'inactive', disabled: true })),
-          ]}
-        />
-        <button className="btn btn-secondary btn-sm" onClick={loadShortlist}>Refresh</button>
-      </div>
+    <div className="container tab-fade-in">
 
       {!loading && jobId && data.length > 0 && (
         <div className="results-filter-bar">
@@ -441,11 +427,12 @@ export default function Shortlist() {
               <option value="score">Highest score</option>
               <option value="name">Name (A–Z)</option>
             </select>
+            <button onClick={loadShortlist} title="Refresh" className="btn btn-sm btn-secondary" style={{ flexShrink: 0 }}>↻</button>
           </div>
         </div>
       )}
 
-      {loading ? <Loading /> : !jobId ? <EmptyState>Select a job opening to view shortlisted candidates.</EmptyState> : data.length === 0 ? <EmptyState>No shortlisted candidates yet. Go to CV Evaluation to shortlist candidates.</EmptyState> : filteredData.length === 0 ? <EmptyState>No candidates match this filter.</EmptyState> : (
+      {loading ? <Loading /> : !jobId ? <EmptyState>Pick a job from the “Current Job” selector at the top to view shortlisted candidates.</EmptyState> : data.length === 0 ? <EmptyState>No shortlisted candidates yet. Go to CV Evaluation to shortlist candidates.</EmptyState> : filteredData.length === 0 ? <EmptyState>No candidates match this filter.</EmptyState> : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           {filteredData.map(s => {
             const archived = isSlArchived(s.id);
