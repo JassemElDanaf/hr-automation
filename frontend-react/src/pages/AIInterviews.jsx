@@ -467,15 +467,15 @@ HR Department`;
                       <>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 18, flexShrink: 0 }}>
                           {[
-                            { lbl: 'Comm', score: s.scoreComm },
+                            { lbl: 'Communication', score: s.scoreComm },
                             { lbl: 'Technical', score: s.scoreTech },
                             { lbl: 'Confidence', score: s.scoreConf },
                           ].map(({ lbl, score }) => {
                             const n = parseFloat(score);
                             return (
-                              <div key={lbl} style={{ textAlign: 'center', minWidth: 42 }}>
+                              <div key={lbl} style={{ textAlign: 'center', minWidth: 64 }}>
                                 <div style={{ fontWeight: 800, fontSize: 16, color: scoreColor(score) }}>{isNaN(n) ? '—' : n.toFixed(1)}</div>
-                                <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--gray-400)', textTransform: 'uppercase', letterSpacing: '0.05em', marginTop: 3 }}>{lbl}</div>
+                                <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--gray-400)', textTransform: 'uppercase', letterSpacing: '0.05em', marginTop: 3, whiteSpace: 'nowrap' }}>{lbl}</div>
                               </div>
                             );
                           })}
