@@ -119,28 +119,6 @@ function formatDate(ts) {
   if (!ts) return '—';
   return new Date(ts).toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
-function RecoPill({ text }) {
-  if (!text) return null;
-  const t = text.toLowerCase();
-  const isHire = t.includes('hire') && !t.includes("don't") && !t.includes('not');
-  const isDont = t.includes("don't") || t.includes('not recommend');
-  const cfg = isHire
-    ? { bg: '#ecfdf5', border: '#a7f3d0', color: '#047857', dot: '#10b981', label: 'Recommended' }
-    : isDont
-    ? { bg: '#fef2f2', border: '#fecaca', color: '#b91c1c', dot: '#ef4444', label: 'Not Recommended' }
-    : { bg: '#fffbeb', border: '#fde68a', color: '#b45309', dot: '#f59e0b', label: 'Consider' };
-  return (
-    <span style={{
-      display: 'inline-flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap',
-      fontSize: 11, fontWeight: 700, letterSpacing: '0.02em',
-      padding: '4px 11px', borderRadius: 99,
-      background: cfg.bg, color: cfg.color, border: `1px solid ${cfg.border}`,
-    }}>
-      <span style={{ width: 7, height: 7, borderRadius: '50%', background: cfg.dot, flexShrink: 0 }} />
-      {cfg.label}
-    </span>
-  );
-}
 
 // `embedded` renders without the page container/heading so the whole view can
 // live as the "Results" sub-tab inside the Interview page.
@@ -460,7 +438,6 @@ HR Department`;
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                         <strong style={{ fontSize: 15, color: 'var(--gray-900)' }}>{s.candidateName || s.candidateEmail}</strong>
                         {hasRec && <span title="Recording available" style={{ fontSize: 12, color: '#7c3aed' }}>🎥</span>}
-                        {!pending && <RecoPill text={s.recommendation} />}
                       </div>
                       <div style={{ fontSize: 12, color: 'var(--gray-400)', marginTop: 2 }}>
                         {s.candidateName && s.candidateEmail ? `${s.candidateEmail} · ` : ''}{s.completedAt ? formatDate(s.completedAt) : ''}{!pending ? ` · ⏱ ${formatDuration(s.durationSeconds)}` : ''}

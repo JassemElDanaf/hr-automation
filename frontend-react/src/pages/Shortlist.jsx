@@ -93,7 +93,7 @@ export default function Shortlist() {
   const [jobId, setJobId] = useState('');
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [slFilter, setSlFilter] = useState('shortlisted');
+  const [slFilter, setSlFilter] = useState('all');
   const [slArchivedMap, setSlArchivedMap] = useState(() => {
     try { return JSON.parse(localStorage.getItem('hr_shortlist_archived') || '{}'); } catch { return {}; }
   });

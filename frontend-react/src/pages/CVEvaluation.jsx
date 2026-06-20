@@ -89,7 +89,7 @@ export default function CVEvaluation() {
   const [detailCandidate, setDetailCandidate] = useState(null);
   const [shortlistMap, setShortlistMap] = useState({}); // candidateId -> status string
   const [recentlyChanged, setRecentlyChanged] = useState({}); // candidateId -> true (for animation)
-  const [resultsFilter, setResultsFilter] = useState('active'); // 'active' | 'shortlisted' | 'rejected' | 'archived' | 'all'
+  const [resultsFilter, setResultsFilter] = useState('all'); // 'all' | 'active' | 'shortlisted' | 'rejected' | 'archived'
   const [expandedRow, setExpandedRow] = useState(null); // candidate id of expanded result row (Decision-style)
   const [resultsSort, setResultsSort] = useState('recent'); // recent | score | name
   const [dupBannerDismissed, setDupBannerDismissed] = useState(false);

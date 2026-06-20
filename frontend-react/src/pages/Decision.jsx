@@ -60,7 +60,7 @@ export default function Decision() {
   const weightCommitRef = useRef(null);
   const [expanded, setExpanded] = useState(null);
   const [sentToHM, setSentToHM] = useState(new Set());   // candidate_ids with a sent recommendation email
-  const [sortBy, setSortBy] = useState('combined'); // combined | cv | interview | name
+  const [sortBy, setSortBy] = useState('recent'); // recent | combined | cv | interview | name
   const [statusFilter, setStatusFilter] = useState('all');  // Decision list status filter pills
   const [pendingFocus, setPendingFocus] = useState(null);   // candidate_id to expand+scroll once rows load
   const focusAppliedRef = useRef(false);
@@ -154,6 +154,7 @@ export default function Decision() {
       const rb = b.status === 'rejected' ? 1 : 0;
       if (ra !== rb) return ra - rb;
 
+      if (sortBy === 'recent') return new Date(b.updated_at || b.shortlisted_at || 0) - new Date(a.updated_at || a.shortlisted_at || 0);
       if (sortBy === 'name') return (a.candidate_name || '').localeCompare(b.candidate_name || '');
       if (sortBy === 'cv') return (b._cv ?? -1) - (a._cv ?? -1);
       if (sortBy === 'interview') return (b._intv ?? -1) - (a._intv ?? -1);
@@ -383,6 +384,7 @@ HR Department`;
                 onChange={e => setSortBy(e.target.value)}
                 style={{ width: 170, flexShrink: 0, padding: '7px 12px', border: '1px solid var(--gray-200)', borderRadius: 'var(--radius)', fontSize: 13, fontFamily: 'inherit', outline: 'none', background: 'var(--surface)', cursor: 'pointer' }}
               >
+                <option value="recent">Most recent</option>
                 <option value="combined">Combined score</option>
                 <option value="cv">CV score</option>
                 <option value="interview">Interview score</option>
