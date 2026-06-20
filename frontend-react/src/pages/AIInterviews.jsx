@@ -290,24 +290,27 @@ HR Department`;
         </div>
       )}
 
-      {/* Job selector */}
-      <div style={{ background: 'var(--surface)', border: '1px solid var(--gray-200)', borderRadius: 'var(--radius)', padding: '20px 24px', marginBottom: 24, display: 'flex', gap: 16, alignItems: 'flex-end', maxWidth: 640 }}>
-        <div className="form-group" style={{ marginBottom: 0, flex: 1, maxWidth: 360 }}>
-          <label>Job Opening</label>
-          <select value={jobId} onChange={e => handleJobChange(e.target.value)} disabled={loadingJobs}>
-            <option value="">{loadingJobs ? 'Loading…' : 'Select a job opening'}</option>
-            {jobs.filter(j => j.is_active !== false).map(j => <option key={j.JobId} value={j.JobId}>{j.job_title}{j.department ? ` — ${j.department}` : ''}</option>)}
-            {jobs.some(j => j.is_active === false) && (
-              <optgroup label="Closed (reactivate in Job Openings to use)">
-                {jobs.filter(j => j.is_active === false).map(j => <option key={j.JobId} value={j.JobId} disabled>{j.job_title}{j.department ? ` — ${j.department}` : ''}</option>)}
-              </optgroup>
-            )}
-          </select>
+      {/* Job is driven by the global "Current Job" picker in the header — no
+          separate selector here (the Results tab mirrors it). */}
+      {!embedded && (
+        <div style={{ background: 'var(--surface)', border: '1px solid var(--gray-200)', borderRadius: 'var(--radius)', padding: '20px 24px', marginBottom: 24, display: 'flex', gap: 16, alignItems: 'flex-end', maxWidth: 640 }}>
+          <div className="form-group" style={{ marginBottom: 0, flex: 1, maxWidth: 360 }}>
+            <label>Job Opening</label>
+            <select value={jobId} onChange={e => handleJobChange(e.target.value)} disabled={loadingJobs}>
+              <option value="">{loadingJobs ? 'Loading…' : 'Select a job opening'}</option>
+              {jobs.filter(j => j.is_active !== false).map(j => <option key={j.JobId} value={j.JobId}>{j.job_title}{j.department ? ` — ${j.department}` : ''}</option>)}
+              {jobs.some(j => j.is_active === false) && (
+                <optgroup label="Closed (reactivate in Job Openings to use)">
+                  {jobs.filter(j => j.is_active === false).map(j => <option key={j.JobId} value={j.JobId} disabled>{j.job_title}{j.department ? ` — ${j.department}` : ''}</option>)}
+                </optgroup>
+              )}
+            </select>
+          </div>
         </div>
-      </div>
+      )}
 
       {!jobId ? (
-        <div style={{ textAlign: 'center', padding: '60px 0', color: 'var(--gray-400)', fontSize: 14 }}>Select a job to see completed interviews</div>
+        <div style={{ textAlign: 'center', padding: '60px 0', color: 'var(--gray-400)', fontSize: 14 }}>Select a job from the header to see completed interviews</div>
       ) : loadingSessions ? (
         <div style={{ textAlign: 'center', padding: '60px 0', color: 'var(--gray-400)', fontSize: 14 }}>Loading sessions…</div>
       ) : sessions.length === 0 ? (
