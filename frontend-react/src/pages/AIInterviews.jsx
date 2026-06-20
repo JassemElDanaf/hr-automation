@@ -9,58 +9,6 @@ import { scoreColor } from '../utils/helpers';
 
 function looksLikeEmail(s) { return typeof s === 'string' && /@/.test(s) && /\./.test(s.split('@').pop() || ''); }
 
-// ── Teams .vtt transcript parsing ─────────────────────────────────────────────
-
-function parseVttTime(s) {
-  const p = s.trim().split(':').map(parseFloat);
-  return p.length === 3 ? p[0] * 3600 + p[1] * 60 + p[2] : (p[0] || 0) * 60 + (p[1] || 0);
-}
-
-// Teams exports WebVTT with speaker tags: <v Full Name>spoken text</v>
-function parseVtt(raw) {
-  const cues = [];
-  const blocks = String(raw).replace(/\r/g, '').split(/\n\n+/);
-  for (const block of blocks) {
-    const lines = block.split('\n').filter(Boolean);
-    const ti = lines.findIndex(l => l.includes('-->'));
-    if (ti === -1) continue;
-    const start = parseVttTime(lines[ti].split('-->')[0]);
-    const text = lines.slice(ti + 1).join(' ');
-    const m = text.match(/<v\s+([^>]+)>([\s\S]*?)(<\/v>|$)/);
-    const speaker = m ? m[1].trim() : '';
-    const spoken = (m ? m[2] : text).replace(/<[^>]+>/g, '').trim();
-    if (spoken) cues.push({ start, speaker, text: spoken });
-  }
-  return cues;
-}
-
-// Merge consecutive cues from the same speaker into turns.
-function groupTurns(cues) {
-  const turns = [];
-  for (const c of cues) {
-    const last = turns[turns.length - 1];
-    if (last && last.speaker === c.speaker) last.text += ' ' + c.text;
-    else turns.push({ speaker: c.speaker, text: c.text, start: c.start });
-  }
-  return turns;
-}
-
-// Interviewer turn(s) become the question, the candidate's reply the answer —
-// the same {question, answer} shape the AI evaluator and transcript UI expect.
-function turnsToQaPairs(turns, candidateSpeaker) {
-  const pairs = [];
-  let pendingQ = '';
-  for (const t of turns) {
-    if (t.speaker === candidateSpeaker) {
-      pairs.push({ question: pendingQ || '(Conversation)', answer: t.text, category: 'hr', t: Math.round(t.start) });
-      pendingQ = '';
-    } else {
-      pendingQ = pendingQ ? pendingQ + ' ' + t.text : t.text;
-    }
-  }
-  return pairs;
-}
-
 // ── Recording player with question overlay synced to playback time ───────────
 
 function RecordingPlayer({ src, qaPairs }) {
@@ -139,7 +87,6 @@ export default function AIInterviews({ embedded = false }) {
   const [search, setSearch]               = useState('');
   const [sortBy, setSortBy]               = useState('date'); // date | score | name
   const [manualEditing, setManualEditing] = useState({}); // sessionId → { comm, tech, conf, culture, overall, recommendation, summary }
-  const [showTeamsImport, setShowTeamsImport] = useState(false);
   const pollingRef = useRef(null);
   const autoEvalRef = useRef(new Set()); // session ids we've already auto-evaluated (no loops)
 
@@ -357,15 +304,6 @@ HR Department`;
             )}
           </select>
         </div>
-        <button
-          className="btn btn-secondary"
-          disabled={!jobId}
-          title={jobId ? 'Import a Microsoft Teams meeting transcript (.vtt)' : 'Select a job first'}
-          onClick={() => setShowTeamsImport(true)}
-          style={{ whiteSpace: 'nowrap' }}
-        >
-          ⬆ Import Teams Transcript
-        </button>
       </div>
 
       {!jobId ? (
@@ -701,158 +639,6 @@ HR Department`;
         </div>
       )}
 
-      {showTeamsImport && jobId && (
-        <TeamsImportModal
-          jobId={jobId}
-          jobTitle={jobTitle}
-          showToast={showToast}
-          onClose={() => setShowTeamsImport(false)}
-          onImported={async () => {
-            setShowTeamsImport(false);
-            const res = await apiGet(`/interview/sessions?jobId=${jobId}`);
-            setSessions(res.data || res || []);
-          }}
-        />
-      )}
-    </div>
-  );
-}
-
-// ── Teams transcript import modal ─────────────────────────────────────────────
-// Parses a Microsoft Teams .vtt transcript, maps speakers to question/answer
-// pairs (you pick which speaker is the candidate), saves it as an interview
-// session, and runs the same AI evaluation used for in-app interviews.
-
-function TeamsImportModal({ jobId, jobTitle, showToast, onClose, onImported }) {
-  const [candidates, setCandidates] = useState([]);
-  const [candidateId, setCandidateId] = useState('');
-  const [fileName, setFileName] = useState('');
-  const [turns, setTurns] = useState([]);
-  const [speakers, setSpeakers] = useState([]);
-  const [candidateSpeaker, setCandidateSpeaker] = useState('');
-  const [durationSec, setDurationSec] = useState(0);
-  const [phase, setPhase] = useState('idle'); // idle | saving | evaluating
-
-  useEffect(() => {
-    (async () => {
-      try {
-        const r = await apiGet(`/interview/candidates?jobId=${jobId}`);
-        setCandidates(r.data || r || []);
-      } catch { showToast('Failed to load candidates', 'error'); }
-    })();
-  }, [jobId]);
-
-  function handleFile(e) {
-    const f = e.target.files?.[0];
-    if (!f) return;
-    setFileName(f.name);
-    const reader = new FileReader();
-    reader.onload = () => {
-      const cues = parseVtt(reader.result);
-      if (!cues.length) { showToast('No spoken lines found — is this a Teams .vtt transcript?', 'error'); return; }
-      const grouped = groupTurns(cues);
-      setTurns(grouped);
-      setDurationSec(Math.round(cues[cues.length - 1].start));
-      const names = [...new Set(grouped.map(t => t.speaker).filter(Boolean))];
-      setSpeakers(names);
-      // Preselect: speaker matching the chosen candidate's name, else 2nd speaker
-      const cand = candidates.find(c => String(c.CandidateId) === String(candidateId));
-      const guess = cand && names.find(n => n.toLowerCase().includes((cand.FullName || '').toLowerCase().split(' ')[0]));
-      setCandidateSpeaker(guess || names[1] || names[0] || '');
-    };
-    reader.readAsText(f);
-  }
-
-  const pairs = candidateSpeaker ? turnsToQaPairs(turns, candidateSpeaker) : [];
-  const cand = candidates.find(c => String(c.CandidateId) === String(candidateId));
-
-  async function doImport() {
-    if (!cand) { showToast('Select a candidate', 'error'); return; }
-    if (!pairs.length) { showToast('No candidate answers found for that speaker', 'error'); return; }
-    const base = {
-      jobId: parseInt(jobId), evaluationId: cand.EvaluationId || 0,
-      candidateId: cand.CandidateId, candidateName: cand.FullName,
-      jobTitle, transcript: pairs, durationSeconds: durationSec,
-    };
-    setPhase('saving');
-    try {
-      await apiPost('/interview/save-transcript', { ...base, scores: {} });
-      setPhase('evaluating');
-      const evalRes = await apiPost('/interview/evaluate', base);
-      const scores = evalRes.data || evalRes;
-      await apiPost('/interview/save-transcript', { ...base, scores });
-      showToast(`Teams interview imported and evaluated for ${cand.FullName}`, 'success');
-      onImported();
-    } catch {
-      showToast('Import saved, but AI evaluation failed — use Re-evaluate on the session', 'error');
-      onImported();
-    } finally { setPhase('idle'); }
-  }
-
-  return (
-    <div className="modal-overlay active" onClick={e => e.target === e.currentTarget && phase === 'idle' && onClose()}>
-      <div className="modal" style={{ maxWidth: 620 }}>
-        <div className="modal-header">
-          <h3>Import Teams Transcript — {jobTitle}</h3>
-          <button className="modal-close" onClick={onClose}>&times;</button>
-        </div>
-        <div className="modal-body" style={{ padding: 20 }}>
-          <p style={{ fontSize: 13, color: 'var(--gray-500)', marginBottom: 16 }}>
-            For interviews held on Microsoft Teams: download the meeting transcript (.vtt) from Teams,
-            upload it here, and it becomes a scored interview session — same AI evaluation as in-app interviews.
-          </p>
-
-          <div className="form-group">
-            <label>Candidate</label>
-            <select value={candidateId} onChange={e => setCandidateId(e.target.value)}>
-              <option value="">— Select the interviewed candidate —</option>
-              {candidates.map(c => <option key={c.CandidateId} value={c.CandidateId}>{c.FullName}</option>)}
-            </select>
-          </div>
-
-          <div className="form-group">
-            <label>Teams transcript file (.vtt)</label>
-            <input type="file" accept=".vtt,text/vtt" onChange={handleFile} />
-            {fileName && <div style={{ fontSize: 12, color: 'var(--gray-500)', marginTop: 4 }}>{fileName} · {turns.length} speaker turns · ~{Math.round(durationSec / 60)} min</div>}
-          </div>
-
-          {speakers.length > 0 && (
-            <div className="form-group">
-              <label>Which speaker is the candidate?</label>
-              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                {speakers.map(name => (
-                  <button
-                    key={name} type="button"
-                    onClick={() => setCandidateSpeaker(name)}
-                    style={{
-                      padding: '6px 14px', borderRadius: 999, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit',
-                      border: `1.5px solid ${candidateSpeaker === name ? '#2563eb' : 'var(--gray-300)'}`,
-                      background: candidateSpeaker === name ? '#2563eb' : 'var(--surface)',
-                      color: candidateSpeaker === name ? '#fff' : 'var(--gray-700)',
-                    }}
-                  >{name}</button>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {pairs.length > 0 && (
-            <div style={{ background: 'var(--gray-50)', border: '1px solid var(--gray-200)', borderRadius: 8, padding: '10px 14px', fontSize: 13, color: 'var(--gray-600)' }}>
-              <strong>{pairs.length}</strong> question/answer pairs detected.
-              <div style={{ marginTop: 6, fontSize: 12, color: 'var(--gray-500)', lineHeight: 1.5 }}>
-                <em>Q1:</em> {pairs[0].question.slice(0, 110)}{pairs[0].question.length > 110 ? '…' : ''}<br />
-                <em>A1:</em> {pairs[0].answer.slice(0, 110)}{pairs[0].answer.length > 110 ? '…' : ''}
-              </div>
-            </div>
-          )}
-        </div>
-        <div className="modal-footer" style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-          <button className="btn btn-secondary" onClick={onClose} disabled={phase !== 'idle'}>Cancel</button>
-          <button className="btn btn-primary" onClick={doImport} disabled={phase !== 'idle' || !candidateId || !pairs.length}>
-            {phase === 'saving' ? 'Saving…' : phase === 'evaluating' ? 'AI evaluating… ~20s' : 'Import & Evaluate'}
-          </button>
-        </div>
-      </div>
     </div>
   );
 }
