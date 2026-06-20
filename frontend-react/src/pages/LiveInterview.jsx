@@ -374,20 +374,15 @@ export default function LiveInterview() {
 
   return (
     <div className="container tab-fade-in">
-      {/* Sub-tabs */}
-      <div style={{ display: 'flex', gap: 0, marginBottom: 24, borderBottom: '2px solid var(--gray-200)' }}>
-        {[{ key: 'setup', label: 'Setup' }, { key: 'bank', label: 'Question Bank' }, { key: 'results', label: 'Results' }].map(t => (
-          <button
-            key={t.key}
-            onClick={() => setMainTab(t.key)}
-            style={{
-              padding: '10px 22px', border: 'none', background: 'none', cursor: 'pointer',
-              fontSize: 14, fontWeight: 600, fontFamily: 'inherit',
-              color: mainTab === t.key ? '#2563eb' : 'var(--gray-500)',
-              borderBottom: mainTab === t.key ? '2px solid #2563eb' : '2px solid transparent',
-              marginBottom: -2, transition: 'color 0.15s',
-            }}
-          >{t.label}</button>
+      {/* Sub-tabs styled like the CV Evaluation numbered stepper */}
+      <div className="wizard-steps">
+        {[{ key: 'setup', label: 'Setup' }, { key: 'bank', label: 'Question Bank' }, { key: 'results', label: 'Results' }].map((t, i) => (
+          <div key={t.key} style={{ display: 'contents' }}>
+            <div className={`wizard-step ${mainTab === t.key ? 'active' : ''}`} onClick={() => setMainTab(t.key)}>
+              <span className="step-num">{i + 1}</span> {t.label}
+            </div>
+            {i < 2 && <div className="wizard-connector"></div>}
+          </div>
         ))}
       </div>
 
