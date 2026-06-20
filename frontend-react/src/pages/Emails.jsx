@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { apiGet } from '../services/api';
 import { useSelectedJob } from '../state/selectedJob';
 import { useUI } from '../state/uiState';
-import StatCard from '../components/common/StatCard';
 import Badge from '../components/common/Badge';
 import EmptyState from '../components/common/EmptyState';
 import Loading from '../components/common/Loading';
+import Select from '../components/common/Select';
 import Modal from '../components/modals/Modal';
 import { sendEmailRequest, getEmailStatus, buildEmailHtml } from '../services/email';
 import { formatDate, emailTypeLabel as baseEmailTypeLabel } from '../utils/helpers';
@@ -14,6 +15,7 @@ import { formatDate, emailTypeLabel as baseEmailTypeLabel } from '../utils/helpe
 const emailTypeLabel = (t) => t === 'recommendation' ? 'Handed to HM' : baseEmailTypeLabel(t);
 
 export default function Emails() {
+  const navigate = useNavigate();
   const { selectedJob, setSelectedJob } = useSelectedJob();
   const { showToast } = useUI();
   const [jobs, setJobs] = useState([]);
@@ -54,7 +56,9 @@ export default function Emails() {
 
   function handleJobChange(val) {
     setJobId(val);
-    if (val) {
+    // 'all' is an Emails-only view (every job's history merged) — don't push it
+    // to the global job context, which only holds a single job.
+    if (val && val !== 'all') {
       const job = jobs.find(j => j.id === parseInt(val));
       if (job) setSelectedJob(job);
     }
@@ -67,8 +71,8 @@ export default function Emails() {
     setCompose({ candidateId: '', to: '', subject: '', body: '' });
     setShowCompose(true);
     // Load the selected job's candidates for the optional "link to candidate"
-    // dropdown. No job selected is fine — you can still send a one-off email.
-    if (jobId) {
+    // dropdown. No job (or "All jobs") selected is fine — send a one-off email.
+    if (jobId && jobId !== 'all') {
       try { const res = await apiGet(`/candidates?job_id=${jobId}`); setCandidates(res.data || []); }
       catch { setCandidates([]); }
     } else setCandidates([]);
@@ -118,8 +122,17 @@ export default function Emails() {
     if (!jobId) { setEmailData([]); return; }
     setLoading(true);
     try {
-      const res = await apiGet(`/email-history?job_id=${jobId}`);
-      setEmailData((res.data || []).filter(e => e.id));
+      if (jobId === 'all') {
+        // Merge every job's history so an inbound reply for any job is never missed.
+        const lists = await Promise.all(
+          jobs.map(j => apiGet(`/email-history?job_id=${j.id}`).then(r => (r.data || []).filter(e => e.id)).catch(() => []))
+        );
+        const merged = lists.flat().sort((a, b) => new Date(b.sent_at) - new Date(a.sent_at));
+        setEmailData(merged);
+      } else {
+        const res = await apiGet(`/email-history?job_id=${jobId}`);
+        setEmailData((res.data || []).filter(e => e.id));
+      }
     } catch (err) { showToast('Failed to load emails', 'error'); }
     finally { setLoading(false); }
   }
@@ -137,7 +150,7 @@ export default function Emails() {
         body: JSON.stringify({
           to,
           subject: 'Diyar HR — SMTP test email',
-          body: 'This is a test email from the Diyar HR Automation app. If you received it, your SMTP credential is delivering correctly.',
+          body: 'This is a test email from the Diyar HR app. If you received it, your SMTP credential is delivering correctly.',
         }),
       });
       const j = await res.json().catch(() => ({}));
@@ -175,36 +188,23 @@ export default function Emails() {
   }
 
   return (
-    <div className="container">
-      {/* SMTP Banner — compact single-line status */}
-      <div className="criteria-bar" style={{ marginBottom: '14px', padding: '7px 14px', display: 'flex', alignItems: 'center', gap: '9px' }}>
-        <span style={{ fontSize: '14px', lineHeight: 1 }}>{smtpIcon}</span>
-        <div style={{ flex: 1, display: 'flex', alignItems: 'baseline', gap: '7px', flexWrap: 'wrap' }}>
-          <span style={{ fontSize: '13px', fontWeight: 600 }}>{smtpText}</span>
-          <span style={{ fontSize: '12px', color: 'var(--gray-500)' }}>· {smtpHint}</span>
-        </div>
-        <button className="btn btn-secondary btn-sm" onClick={() => setShowTest(true)}>Send Test Email</button>
-        <button className="btn btn-secondary btn-sm" onClick={() => setShowSmtpHelp(true)}>Setup Guide</button>
-      </div>
-
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
-        <div>
-          <h2 style={{ fontSize: '18px', fontWeight: 700 }}>Email History</h2>
-          <p style={{ fontSize: '13px', color: 'var(--gray-500)' }}>All emails sent and logged across candidates.</p>
-        </div>
-        <div style={{ display: 'flex', gap: '8px' }}>
-          <button className="btn btn-primary btn-sm" onClick={openCompose}>✉ New Email</button>
-          <button className="btn btn-secondary btn-sm" onClick={loadEmails}>Refresh</button>
-        </div>
-      </div>
-
-      <div style={{ display: 'flex', gap: '12px', alignItems: 'center', marginBottom: '16px' }}>
+    <div className="container tab-fade-in">
+      <div style={{ display: 'flex', gap: '12px', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap' }}>
         <label style={{ fontSize: '13px', fontWeight: 600 }}>Job:</label>
-        <select value={jobId} onChange={e => handleJobChange(e.target.value)} style={{ maxWidth: '280px' }}>
-          <option value="">-- Select a job --</option>
-          {/* Emails are viewable for any job (active or closed), so all are selectable. */}
-          {jobs.map(j => <option key={j.id} value={j.id}>{j.job_title}{!j.is_active ? ' (closed)' : ''}</option>)}
-        </select>
+        <Select
+          value={jobId}
+          onChange={handleJobChange}
+          placeholder="Select a job…"
+          style={{ minWidth: 240, maxWidth: 320 }}
+          options={[
+            { value: 'all', label: 'All jobs' },
+            // Same look as the Decision/Shortlist pickers (department + inactive
+            // badge), but inactive jobs stay selectable here so HR can read a
+            // closed job's email history.
+            ...jobs.filter(j => j.is_active).map(j => ({ value: j.id, label: `${j.job_title}${j.department ? ` — ${j.department}` : ''}` })),
+            ...jobs.filter(j => !j.is_active).map(j => ({ value: j.id, label: `${j.job_title}${j.department ? ` — ${j.department}` : ''}`, badge: 'inactive' })),
+          ]}
+        />
         <div className="filter-tabs">
           {['all', 'sent', 'failed', 'inbound'].map(f => (
             <button key={f} className={`filter-tab ${statusFilter === f ? 'active' : ''}`} onClick={() => setStatusFilter(f)}>
@@ -212,14 +212,24 @@ export default function Emails() {
             </button>
           ))}
         </div>
-      </div>
-
-      <div className="stats" style={{ marginBottom: '16px' }}>
-        <StatCard label="Total" value={emailData.length || '-'} />
-        <StatCard label="Sent" value={sentCount || '-'} style={{ color: 'var(--success)' }} />
-        <StatCard label="Failed" value={failedCount || '-'} style={{ color: 'var(--danger)' }} />
-        <StatCard label="Inbound" value={inboundCount || '-'} />
-        <StatCard label="This Week" value={weekCount || '-'} />
+        {/* Actions on the right of the job row */}
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginLeft: 'auto' }}>
+          <button className="btn btn-secondary btn-sm" onClick={() => setShowSmtpHelp(true)}>Setup Guide</button>
+          <button className="btn btn-secondary btn-sm" onClick={() => setShowTest(true)}>Send Test Email</button>
+          <button className="btn btn-primary btn-sm" onClick={openCompose}>✉ New Email</button>
+          <button
+            onClick={loadEmails}
+            disabled={loading}
+            title="Refresh email history"
+            style={{
+              width: 32, height: 32, borderRadius: '50%', flexShrink: 0,
+              border: '1px solid var(--gray-200)', background: 'var(--surface)',
+              cursor: 'pointer', fontSize: 15, color: 'var(--gray-500)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              animation: loading ? 'spin 0.8s linear infinite' : 'none',
+            }}
+          >↺</button>
+        </div>
       </div>
 
       <div className="table-wrap">
@@ -281,8 +291,26 @@ export default function Emails() {
                           <div className="email-detail-field" style={{ marginTop: '8px' }}><span className="email-detail-label">Subject:</span> {e.subject}</div>
                           {e.body && (
                             <div className="email-detail-body-box">
-                              <div className="email-detail-label" style={{ marginBottom: '6px' }}>Message:</div>
-                              <pre className="email-detail-body-pre">{e.body}</pre>
+                              <div className="email-detail-label" style={{ marginBottom: '6px' }}>{inbound ? 'Message:' : 'Message preview:'}</div>
+                              {inbound
+                                ? <pre className="email-detail-body-pre">{e.body}</pre>
+                                : <iframe title="Email preview" srcDoc={buildEmailHtml(e.body)} sandbox="" style={{ width: '100%', height: 380, border: '1px solid var(--gray-200)', borderRadius: 8, background: '#fff', display: 'block' }} />}
+                            </div>
+                          )}
+                          {/* Inbound HM reply → jump straight to the Decision tab to act on it. */}
+                          {inbound && e.candidate_id && (
+                            <div style={{ marginTop: 12, padding: '12px 14px', background: 'var(--tint-info)', border: '1px solid #bfdbfe', borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+                              <div style={{ fontSize: 13, color: 'var(--gray-700)' }}>
+                                <strong>Make the final call on {e.candidate_name || 'this candidate'}.</strong> Open the Decision tab to hire or reject.
+                              </div>
+                              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                                <button className="btn btn-sm btn-secondary" onClick={() => navigate(`/decision?job=${jobId}&filter=sent-hm`)} title="See everyone sent to the hiring manager for this job">
+                                  📋 Sent to HM
+                                </button>
+                                <button className="btn btn-sm btn-primary" onClick={() => navigate(`/decision?job=${jobId}&focus=${e.candidate_id}`)} title="Open the Decision tab with this candidate ready to hire or reject">
+                                  ⚖ Decide on {(e.candidate_name || '').trim().split(/\s+/)[0] || 'candidate'} →
+                                </button>
+                              </div>
                             </div>
                           )}
                         </div>
@@ -311,10 +339,17 @@ export default function Emails() {
           </div>
           <div>
             <label style={{ fontSize: '13px', fontWeight: 600, display: 'block', marginBottom: '5px' }}>Link to candidate <span style={{ color: 'var(--gray-400)', fontWeight: 400 }}>(optional)</span></label>
-            <select value={compose.candidateId} onChange={e => onComposeCandidate(e.target.value)} style={{ width: '100%', padding: '8px 10px', fontSize: '14px' }} disabled={!jobId}>
-              <option value="">— None (one-off email) —</option>
-              {candidates.map(c => <option key={c.id} value={c.id}>{(c.candidate_name || c.full_name || 'Candidate')}{c.email ? ` · ${c.email}` : ''}</option>)}
-            </select>
+            <Select
+              value={compose.candidateId}
+              onChange={onComposeCandidate}
+              disabled={!jobId}
+              placeholder="— None (one-off email) —"
+              style={{ display: 'block', width: '100%', minWidth: 0 }}
+              options={[
+                { value: '', label: '— None (one-off email) —' },
+                ...candidates.map(c => ({ value: c.id, label: `${c.candidate_name || c.full_name || 'Candidate'}${c.email ? ` · ${c.email}` : ''}` })),
+              ]}
+            />
             <div style={{ fontSize: '12px', color: 'var(--gray-400)', marginTop: '4px' }}>{jobId ? 'Pick a candidate to log this to their history. Leave as None for a one-off.' : 'Select a job in the filter below to link this email to a candidate.'}</div>
           </div>
           <div>

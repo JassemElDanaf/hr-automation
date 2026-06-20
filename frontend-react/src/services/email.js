@@ -16,6 +16,12 @@ export function buildEmailHtml(body) {
     .split('\n')
     .map(line => {
       const t = line.trim();
+      // A bare URL on its own line (e.g. the interview link) becomes a real
+      // button instead of an ugly, line-wrapping raw URL in the inbox.
+      if (/^https?:\/\/\S+$/.test(t)) {
+        const label = /\/interview\//.test(t) ? 'Start Your Interview' : 'Open Link';
+        return `<div style="margin:16px 0;"><a href="${t}" class="email-cta" style="display:inline-block;background:#1e40af;color:#ffffff;text-decoration:none;font-weight:600;font-size:15px;line-height:1;padding:14px 26px;border-radius:8px;font-family:-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">${label} &rarr;</a></div>`;
+      }
       const isHeading = t.length >= 2 && t.length <= 30 && /^[A-Za-z][A-Za-z /&-]*$/.test(t) && !/^(Hi|Hello|Dear)\b/i.test(t);
       return isHeading
         ? `<strong style="display:inline-block;margin-top:6px;color:#111827;">${t}</strong>`
@@ -34,23 +40,35 @@ export function buildEmailHtml(body) {
 <meta name="x-apple-disable-message-reformatting">
 <meta http-equiv="x-ua-compatible" content="ie=edge">
 <title>Diyar United Company</title>
+<style>
+  /* Mobile: card goes edge-to-edge, padding tightens, body text bumps up, and
+     the CTA becomes a full-width tap target. Clients that strip <style> simply
+     keep the inline styles below, so nothing breaks. */
+  @media only screen and (max-width:480px) {
+    .email-outer { padding:0 !important; }
+    .email-card { border-radius:0 !important; border-left:0 !important; border-right:0 !important; }
+    .email-header { padding:16px 18px !important; }
+    .email-body { padding:18px 18px !important; font-size:16px !important; }
+    .email-cta { display:block !important; text-align:center !important; }
+  }
+</style>
 </head>
 <body style="margin:0;padding:0;background:#f3f4f6;-webkit-text-size-adjust:100%;-ms-text-size-adjust:100%;">
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#f3f4f6;">
     <tr>
-      <td align="center" style="padding:16px;">
-        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:600px;background:#ffffff;border-radius:12px;overflow:hidden;border:1px solid #e5e7eb;font-family:-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+      <td align="center" class="email-outer" style="padding:16px;">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="email-card" style="width:100%;max-width:600px;background:#ffffff;border-radius:12px;overflow:hidden;border:1px solid #e5e7eb;font-family:-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
           <tr>
-            <td style="background:#1e40af;padding:18px 24px;">
+            <td class="email-header" style="background:#1e40af;padding:18px 24px;">
               <div style="color:#ffffff;font-size:16px;font-weight:700;">Diyar United Company</div>
               <div style="color:#bfdbfe;font-size:12px;margin-top:2px;">Human Resources</div>
             </td>
           </tr>
           <tr>
-            <td style="padding:24px;color:#1f2937;font-size:15px;line-height:1.7;white-space:pre-wrap;word-break:break-word;overflow-wrap:break-word;">${withHeadings}</td>
+            <td class="email-body" style="padding:24px;color:#1f2937;font-size:15px;line-height:1.7;white-space:pre-wrap;word-break:break-word;overflow-wrap:break-word;">${withHeadings}</td>
           </tr>
           <tr>
-            <td style="padding:14px 24px;border-top:1px solid #f3f4f6;color:#9ca3af;font-size:11px;">Sent by Diyar HR Automation</td>
+            <td style="padding:14px 24px;border-top:1px solid #f3f4f6;color:#9ca3af;font-size:11px;">Sent by Diyar HR</td>
           </tr>
         </table>
       </td>
@@ -89,36 +107,72 @@ export function getEmailStatus(res) {
   return { type: 'error', message: 'Email delivery uncertain \u2014 check Emails tab for status.' };
 }
 
-export function getRejectionTemplate(candidateName, jobTitle) {
+// ── Editable email templates ─────────────────────────────────────────────
+// Built-in defaults (the baseline). Admins can override subject/body in the
+// Email Templates settings page; overrides load from the DB into `_overrides`
+// on app start. Bodies use {placeholder} tokens.
+export const TEMPLATE_DEFS = {
+  interview_invite: {
+    name: 'Interview invitation',
+    placeholders: ['candidate_name', 'job_title', 'interview_link'],
+    subject: 'Interview Invitation - {job_title}',
+    body: `Dear {candidate_name},\n\nCongratulations! After reviewing your application for the {job_title} position, we would like to invite you to the next stage: a short online interview that you can complete on your own time.\n\nPlease use your personal interview link below to begin. It works in any modern browser and will guide you through the questions one by one — no scheduling needed.\n\nYour interview link:\n{interview_link}\n\nPlease aim to complete it within the next few days. If you have any trouble opening the link, just reply to this email.\n\nWe look forward to learning more about you.\n\nBest regards,\nHR Department`,
+  },
+  shortlist: {
+    name: 'Shortlisted',
+    placeholders: ['candidate_name', 'job_title'],
+    subject: 'You have been shortlisted — {job_title}',
+    body: `Dear {candidate_name},\n\nGreat news! After reviewing your application for the {job_title} position, we are pleased to inform you that you have been shortlisted for the next stage of our hiring process.\n\nWe were impressed by your background and would like to move forward with your candidacy. A member of our team will be in touch shortly with next steps.\n\nThank you for your interest in joining our team.\n\nBest regards,\nHR Department`,
+  },
+  rejection: {
+    name: 'Rejection',
+    placeholders: ['candidate_name', 'job_title'],
+    subject: 'Application Update - {job_title}',
+    body: `Dear {candidate_name},\n\nThank you for your interest in the {job_title} position and for taking the time to apply.\n\nAfter careful review of all applications, we regret to inform you that we have decided to move forward with other candidates whose qualifications more closely match our current requirements.\n\nWe appreciate your interest in our organization and encourage you to apply for future openings that match your skills and experience.\n\nWe wish you all the best in your job search and future endeavors.\n\nBest regards,\nHR Department`,
+  },
+  offer: {
+    name: 'Job offer',
+    placeholders: ['candidate_name', 'job_title'],
+    subject: 'Job Offer - {job_title}',
+    body: `Dear {candidate_name},\n\nWe are delighted to extend an offer for the {job_title} position.\n\nPlease find the details of the offer attached. We kindly ask you to review and respond within 5 business days.\n\nCongratulations, and we look forward to welcoming you to our team!\n\nBest regards,\nHR Department`,
+  },
+};
+
+let _templateOverrides = {}; // template_key -> { subject, body } (from DB)
+export function setTemplateOverrides(obj) { _templateOverrides = obj || {}; }
+export function effectiveTemplate(key) {
+  const def = TEMPLATE_DEFS[key] || { subject: '', body: '' };
+  const ov = _templateOverrides[key];
   return {
-    subject: 'Application Update - ' + jobTitle,
-    body: `Dear ${candidateName},\n\nThank you for your interest in the ${jobTitle} position and for taking the time to apply.\n\nAfter careful review of all applications, we regret to inform you that we have decided to move forward with other candidates whose qualifications more closely match our current requirements.\n\nWe appreciate your interest in our organization and encourage you to apply for future openings that match your skills and experience.\n\nWe wish you all the best in your job search and future endeavors.\n\nBest regards,\nHR Department`,
+    subject: (ov && ov.subject != null) ? ov.subject : def.subject,
+    body: (ov && ov.body != null) ? ov.body : def.body,
+    isOverridden: !!ov,
   };
+}
+function fillTemplate(t, vars) {
+  const sub = (s) => String(s).replace(/\{(\w+)\}/g, (m, k) => (vars[k] != null ? vars[k] : m));
+  return { subject: sub(t.subject), body: sub(t.body) };
+}
+
+export function getRejectionTemplate(candidateName, jobTitle) {
+  return fillTemplate(effectiveTemplate('rejection'), { candidate_name: candidateName, job_title: jobTitle });
 }
 
 export function getShortlistTemplate(candidateName, jobTitle) {
-  return {
-    subject: 'You have been shortlisted — ' + jobTitle,
-    body: `Dear ${candidateName},\n\nGreat news! After reviewing your application for the ${jobTitle} position, we are pleased to inform you that you have been shortlisted for the next stage of our hiring process.\n\nWe were impressed by your background and would like to move forward with your candidacy. A member of our team will be in touch shortly with next steps.\n\nThank you for your interest in joining our team.\n\nBest regards,\nHR Department`,
-  };
+  return fillTemplate(effectiveTemplate('shortlist'), { candidate_name: candidateName, job_title: jobTitle });
 }
 
 export function getInterviewTemplate(candidateName, jobTitle, link) {
-  // `link` is the AI self-interview link generated in the Interview tab. If HR
-  // hasn't generated one yet, a clear placeholder is inserted so they can paste
-  // it in before sending (the composer body is fully editable).
-  const linkLine = link ? link : '[PASTE INTERVIEW LINK HERE]';
-  return {
-    subject: 'Interview Invitation - ' + jobTitle,
-    body: `Dear ${candidateName},\n\nCongratulations! After reviewing your application for the ${jobTitle} position, we would like to invite you to the next stage: a short online interview that you can complete on your own time.\n\nPlease use your personal interview link below to begin. It works in any modern browser and will guide you through the questions one by one — no scheduling needed.\n\nYour interview link:\n${linkLine}\n\nPlease aim to complete it within the next few days. If you have any trouble opening the link, just reply to this email.\n\nWe look forward to learning more about you.\n\nBest regards,\nHR Department`,
-  };
+  // `link` is the AI self-interview link generated in the Interview tab; if HR
+  // hasn't generated one yet, a clear placeholder is inserted (body is editable).
+  return fillTemplate(effectiveTemplate('interview_invite'), {
+    candidate_name: candidateName, job_title: jobTitle,
+    interview_link: link ? link : '[PASTE INTERVIEW LINK HERE]',
+  });
 }
 
 export function getOfferTemplate(candidateName, jobTitle) {
-  return {
-    subject: 'Job Offer - ' + jobTitle,
-    body: `Dear ${candidateName},\n\nWe are delighted to extend an offer for the ${jobTitle} position.\n\nPlease find the details of the offer attached. We kindly ask you to review and respond within 5 business days.\n\nCongratulations, and we look forward to welcoming you to our team!\n\nBest regards,\nHR Department`,
-  };
+  return fillTemplate(effectiveTemplate('offer'), { candidate_name: candidateName, job_title: jobTitle });
 }
 
 export function getInterviewPackTemplate({ candidateName, candidateEmail, jobTitle, department, meeting, questions, generalNotes, evaluation }) {

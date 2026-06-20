@@ -1,4 +1,4 @@
-# Diyar HR Automation
+# Diyar HR
 
 > **Status:** Demo-ready. Complete, fully QA'd HR automation system. See [`report/report.pdf`](report/report.pdf) for the project report.
 

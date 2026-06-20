@@ -1,7 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { apiGet, apiPost } from '../services/api';
 import { useUI } from '../state/uiState';
-import StatCard from '../components/common/StatCard';
 import Loading from '../components/common/Loading';
 import EmptyState from '../components/common/EmptyState';
 import { formatDate } from '../utils/helpers';
@@ -127,15 +126,8 @@ export default function TalentPool() {
 
   return (
     <div className="container">
-      <div style={{ marginBottom: 20 }}>
-        <h2 style={{ fontSize: 20, fontWeight: 700, color: 'var(--gray-900)' }}>CV Pool</h2>
-        <p style={{ fontSize: 14, color: 'var(--gray-500)', marginTop: 4 }}>
-          Search every CV ever uploaded — find the skill, open the CV, shortlist.
-        </p>
-      </div>
-
       {/* Search hero */}
-      <div style={{ background: '#fff', border: '1px solid var(--gray-200)', borderRadius: 12, padding: '20px 24px', marginBottom: 16, boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
+      <div style={{ background: 'var(--surface)', border: '1px solid var(--gray-200)', borderRadius: 12, padding: '20px 24px', marginBottom: 16, boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
         <div style={{ position: 'relative' }}>
           <span style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', fontSize: 16, color: 'var(--gray-400)', pointerEvents: 'none' }}>🔍</span>
           <input
@@ -178,7 +170,7 @@ export default function TalentPool() {
             const scoreColor = score == null ? 'var(--gray-300)' : score >= 7 ? '#16a34a' : score >= 4 ? '#d97706' : '#dc2626';
             const initials = (r.candidate_name || '?').split(/\s+/).map(w => w[0]).slice(0, 2).join('').toUpperCase();
             return (
-              <div key={r.id} style={{ background: '#fff', border: `1px solid ${panel.open ? '#bfdbfe' : 'var(--gray-200)'}`, borderRadius: 12, overflow: 'hidden', boxShadow: panel.open ? '0 2px 10px rgba(37,99,235,0.07)' : '0 1px 2px rgba(0,0,0,0.03)', transition: 'border-color 0.15s, box-shadow 0.15s' }}>
+              <div key={r.id} style={{ background: 'var(--surface)', border: `1px solid ${panel.open ? '#bfdbfe' : 'var(--gray-200)'}`, borderRadius: 12, overflow: 'hidden', boxShadow: panel.open ? '0 2px 10px rgba(37,99,235,0.07)' : '0 1px 2px rgba(0,0,0,0.03)', transition: 'border-color 0.15s, box-shadow 0.15s' }}>
                 {/* Row */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '16px 20px', flexWrap: 'wrap' }}>
                   <div style={{ width: 42, height: 42, borderRadius: '50%', background: avatarColor(r.candidate_name), color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, fontWeight: 700, flexShrink: 0 }}>
@@ -215,7 +207,7 @@ export default function TalentPool() {
                         display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontSize: 13, fontWeight: 600,
                         height: 36, borderRadius: 8, width: '100%',
                         border: `1.5px solid ${panel.open ? '#2563eb' : 'var(--gray-300)'}`,
-                        background: panel.open ? '#eff6ff' : '#fff',
+                        background: panel.open ? 'var(--tint-info)' : 'var(--surface)',
                         color: panel.open ? '#2563eb' : 'var(--gray-700)',
                         cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.15s', whiteSpace: 'nowrap',
                       }}
@@ -279,7 +271,7 @@ export default function TalentPool() {
                     ) : panel.url ? (
                       <iframe src={panel.url} style={{ width: '100%', height: 520, border: 'none', display: 'block' }} title={`CV — ${r.candidate_name}`} />
                     ) : (
-                      <div style={{ padding: '16px 20px', background: '#fff', maxHeight: 420, overflowY: 'auto', fontSize: 13, lineHeight: 1.7, whiteSpace: 'pre-wrap', color: 'var(--gray-700)' }}>
+                      <div style={{ padding: '16px 20px', background: 'var(--surface)', maxHeight: 420, overflowY: 'auto', fontSize: 13, lineHeight: 1.7, whiteSpace: 'pre-wrap', color: 'var(--gray-700)' }}>
                         <Highlighted text={r.cv_text} terms={terms} />
                       </div>
                     )}

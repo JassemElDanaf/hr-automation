@@ -18,6 +18,73 @@
   --gray-800: #1f2937;
   --gray-900: #111827;
   --radius: 8px;
+  /* Semantic surfaces / tints (themed) */
+  --bg: #f9fafb;
+  --surface: #ffffff;
+  --surface-2: #f9fafb;
+  --border: #e5e7eb;
+  --tint-success: #f0fdf4;
+  --tint-danger: #fef2f2;
+  --tint-info: #eff6ff;
+  --tint-warning: #fffbeb;
+}
+
+/* ── Dark theme ──────────────────────────────────────────────────
+   Flips the gray ramp (light-bg values → dark, dark-text values → light) and
+   the semantic surfaces/tints, so anything using var(--gray-*) / var(--surface)
+   / var(--tint-*) adapts automatically. Toggle via the header Settings menu. */
+html[data-theme="dark"] {
+  /* Soft, low-strain dark palette (GitHub "dark dimmed" feel): muted blue-grays
+     and off-white text rather than pure black / pure white. */
+  --bg: #1c2128;
+  --surface: #22272e;
+  --surface-2: #2d333b;
+  --border: #373e47;
+  --tint-success: #12261c;
+  --tint-danger: #2b1719;
+  --tint-info: #15243b;
+  --tint-warning: #2a2410;
+  --gray-50: #22272e;
+  --gray-100: #2d333b;
+  --gray-200: #373e47;
+  --gray-300: #444c56;
+  --gray-400: #768390;
+  --gray-500: #909dab;
+  --gray-600: #adbac7;
+  --gray-700: #c2ccd6;
+  --gray-800: #cdd9e5;
+  --gray-900: #dbe3ec;
+  --primary: #4a96f0;
+  --primary-dark: #6cb0ff;
+  color-scheme: dark;
+}
+/* Dark fixes for pastel tints that carry gray-var / inherited text. */
+html[data-theme="dark"] tr.row-rejected td { background: var(--tint-danger); }
+html[data-theme="dark"] tr.row-rejected:hover td { background: #351a1d; }
+html[data-theme="dark"] tr.row-shortlisted td { background: var(--tint-success); }
+html[data-theme="dark"] tr.row-shortlisted:hover td { background: #163021; }
+html[data-theme="dark"] tr.row-duplicate td { background: var(--tint-warning); }
+html[data-theme="dark"] tr.row-duplicate:hover td { background: #332c14; }
+html[data-theme="dark"] .candidate-card--interviewed { background: var(--tint-info); border-color: #1e3a5f; box-shadow: none; }
+html[data-theme="dark"] .candidate-card--hired { background: var(--tint-success); border-color: #1d4d39; box-shadow: none; }
+html[data-theme="dark"] .candidate-card--rejected { background: var(--tint-danger); border-color: #5f2a2a; box-shadow: none; }
+
+/* Always print in the light palette, even if dark mode is on. */
+@media print {
+  html[data-theme="dark"] {
+    --bg: #ffffff; --surface: #ffffff; --surface-2: #f9fafb; --border: #e5e7eb;
+    --tint-success: #f0fdf4; --tint-danger: #fef2f2; --tint-info: #eff6ff; --tint-warning: #fffbeb;
+    --gray-50: #f9fafb; --gray-100: #f3f4f6; --gray-200: #e5e7eb; --gray-300: #d1d5db;
+    --gray-400: #9ca3af; --gray-500: #6b7280; --gray-600: #4b5563; --gray-700: #374151;
+    --gray-800: #1f2937; --gray-900: #111827;
+  }
+}
+
+html {
+  /* Always reserve the scrollbar gutter so pages don't shift horizontally (and
+     the cursor doesn't jump) when a tall page that scrolls is followed by a
+     short one that doesn't. Applies app-wide — there's no sidebar to anchor to. */
+  scrollbar-gutter: stable;
 }
 
 body {
@@ -29,7 +96,7 @@ body {
 
 /* Header */
 .header {
-  background: white;
+  background: var(--surface);
   border-bottom: 1px solid var(--gray-200);
   padding: 16px 32px;
   display: flex;
@@ -61,7 +128,7 @@ body {
   font-family: inherit;
   transition: border-color 0.15s, background 0.15s;
 }
-.global-job-badge:hover { background: #fff; border-color: var(--primary); }
+.global-job-badge:hover { background: var(--surface); border-color: var(--primary); }
 .global-job-badge.empty { color: var(--primary); border-style: dashed; border-color: var(--primary); }
 .global-job-badge.empty .global-job-label { color: var(--primary); font-weight: 600; }
 .global-job-badge .global-job-label { color: var(--gray-500); font-weight: 500; }
@@ -72,7 +139,7 @@ body {
 .global-job-menu {
   position: absolute; top: calc(100% + 8px); right: 0; z-index: 200;
   min-width: 280px; max-width: 360px;
-  background: #fff; border: 1px solid var(--gray-200); border-radius: 12px;
+  background: var(--surface); border: 1px solid var(--gray-200); border-radius: 12px;
   box-shadow: 0 12px 32px rgba(0,0,0,0.14); padding: 6px;
   animation: gjmIn 0.12s ease both;
 }
@@ -90,7 +157,7 @@ body {
   transition: background 0.12s;
 }
 .global-job-menu-item:hover { background: var(--gray-50); }
-.global-job-menu-item.active { background: #eff6ff; }
+.global-job-menu-item.active { background: var(--tint-info); }
 .global-job-menu-item .gjm-title { font-size: 13.5px; font-weight: 600; color: var(--gray-900); flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .global-job-menu-item .gjm-dept { font-size: 12px; color: var(--gray-400); white-space: nowrap; }
 .global-job-menu-item .gjm-check { color: var(--primary); font-weight: 700; }
@@ -107,7 +174,7 @@ body {
 }
 .global-job-badge .global-job-clear:hover { color: var(--danger); }
 .global-job-badge.empty {
-  color: var(--gray-400); background: white; font-style: italic;
+  color: var(--gray-400); background: var(--surface); font-style: italic;
   border-style: dashed;
 }
 
@@ -115,7 +182,7 @@ body {
 .nav-tabs {
   display: flex;
   align-items: center;
-  background: white;
+  background: var(--surface);
   border-bottom: 1px solid var(--gray-200);
   padding: 0 32px 0 32px;
 }
@@ -144,7 +211,7 @@ body {
 }
 .btn-primary { background: var(--primary); color: white; }
 .btn-primary:hover { background: var(--primary-dark); }
-.btn-secondary { background: white; color: var(--gray-700); border: 1px solid var(--gray-300); }
+.btn-secondary { background: var(--surface); color: var(--gray-700); border: 1px solid var(--gray-300); }
 .btn-secondary:hover { background: var(--gray-50); }
 .btn-success { background: var(--success); color: white; }
 .btn-danger { background: var(--danger); color: white; }
@@ -156,7 +223,7 @@ body {
 /* Stats */
 .stats { display: flex; gap: 16px; margin-bottom: 24px; }
 .stat-card {
-  background: white; border: 1px solid var(--gray-200);
+  background: var(--surface); border: 1px solid var(--gray-200);
   border-radius: var(--radius); padding: 16px 24px; flex: 1;
 }
 .stat-card .label { font-size: 13px; color: var(--gray-500); font-weight: 500; }
@@ -164,7 +231,7 @@ body {
 
 /* Table */
 .table-wrap {
-  background: white; border: 1px solid var(--gray-200);
+  background: var(--surface); border: 1px solid var(--gray-200);
   border-radius: var(--radius); overflow: hidden;
 }
 .table-scroll { overflow-x: auto; }
@@ -206,7 +273,7 @@ tr.row-fading-out td { animation: rowFadeOut 0.35s ease-out forwards; }
 }
 
 /* Duplicate detection */
-tr.row-duplicate td { background: #fffbeb; }
+tr.row-duplicate td { background: var(--surface)beb; }
 tr.row-duplicate:hover td { background: #fef3c7; }
 .dup-badge {
   display: inline-block; margin-left: 8px; padding: 2px 8px;
@@ -217,16 +284,16 @@ tr.row-duplicate:hover td { background: #fef3c7; }
 .dup-warning-banner {
   display: flex; align-items: center; gap: 10px;
   padding: 10px 16px; margin-bottom: 12px;
-  background: #fffbeb; border: 1px solid #fde68a; border-radius: var(--radius);
+  background: var(--surface)beb; border: 1px solid #fde68a; border-radius: var(--radius);
   font-size: 13px; color: #92400e;
 }
 .dup-warning-icon { font-size: 16px; flex-shrink: 0; }
 .btn-warning-outline {
-  background: white; border: 1px solid #f59e0b; color: #b45309;
+  background: var(--surface); border: 1px solid #f59e0b; color: #b45309;
   font-size: 12px; font-weight: 600; padding: 4px 12px; border-radius: var(--radius);
   cursor: pointer; transition: all 0.15s; white-space: nowrap;
 }
-.btn-warning-outline:hover { background: #fffbeb; border-color: #d97706; }
+.btn-warning-outline:hover { background: var(--surface)beb; border-color: #d97706; }
 .dup-dismiss-btn {
   margin-left: auto; background: none; border: none; font-size: 18px; color: #b45309;
   cursor: pointer; padding: 0 4px; line-height: 1; opacity: 0.6;
@@ -279,10 +346,10 @@ tr.row-duplicate:hover td { background: #fef3c7; }
 .results-filter-btn {
   display: inline-flex; align-items: center; gap: 6px;
   padding: 6px 16px; border-radius: 999px; border: 1px solid var(--gray-200);
-  background: white; font-size: 13px; font-weight: 500; color: var(--gray-600);
+  background: var(--surface); font-size: 13px; font-weight: 500; color: var(--gray-600);
   cursor: pointer; transition: all 0.15s; box-shadow: 0 1px 2px rgba(0,0,0,0.04);
 }
-.results-filter-btn:hover { background: white; border-color: var(--primary); color: var(--primary); }
+.results-filter-btn:hover { background: var(--surface); border-color: var(--primary); color: var(--primary); }
 .results-filter-btn.active { background: var(--primary); color: white; border-color: var(--primary); box-shadow: 0 2px 6px rgba(37,99,235,0.25); }
 .results-filter-count {
   display: inline-flex; align-items: center; justify-content: center;
@@ -332,7 +399,7 @@ tr.row-duplicate:hover td { background: #fef3c7; }
 }
 .modal-overlay.active { display: flex; }
 .modal {
-  background: white; border-radius: 12px; width: 860px; max-width: 95vw;
+  background: var(--surface); border-radius: 12px; width: 860px; max-width: 95vw;
   margin-bottom: 40px; box-shadow: 0 20px 60px rgba(0,0,0,0.15);
 }
 .modal.wide { width: 1080px; }
@@ -397,6 +464,13 @@ textarea { resize: vertical; min-height: 120px; }
   height: 100%; border-radius: 4px; transition: width 0.3s;
 }
 
+/* Indeterminate evaluation bar (global EvalIndicator + CV Evaluation card) */
+.eval-bar { position: relative; height: 5px; background: var(--gray-100); border-radius: 4px; overflow: hidden; }
+.eval-bar > i { position: absolute; top: 0; left: -40%; height: 100%; width: 40%;
+  background: linear-gradient(90deg, transparent, #3b82f6, transparent);
+  animation: evalSlide 1.1s ease-in-out infinite; }
+@keyframes evalSlide { 0% { left: -40%; } 100% { left: 100%; } }
+
 /* Toast */
 .toast {
   position: fixed; bottom: 24px; right: 24px; padding: 14px 20px;
@@ -421,6 +495,11 @@ textarea { resize: vertical; min-height: 120px; }
   border-radius: 50%; animation: spin 0.6s linear infinite; margin-bottom: 12px;
 }
 @keyframes spin { to { transform: rotate(360deg); } }
+
+/* Smooth tab entry — eases content in on mount so returning to a tab doesn't
+   pop/jump as data loads. */
+@keyframes tabFadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: none; } }
+.tab-fade-in { animation: tabFadeIn 0.22s ease-out; }
 
 /* Pulsing status dot (used by "AI evaluating…" indicators). */
 @keyframes pulse {
@@ -451,7 +530,7 @@ textarea { resize: vertical; min-height: 120px; }
 .weight-slider::-webkit-slider-thumb {
   -webkit-appearance: none; appearance: none;
   width: 18px; height: 18px; margin-top: -6px;
-  border-radius: 50%; background: #fff; border: 2px solid #2563eb;
+  border-radius: 50%; background: var(--surface); border: 2px solid #2563eb;
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.18);
   transition: transform 0.12s ease, box-shadow 0.12s ease;
 }
@@ -460,7 +539,7 @@ textarea { resize: vertical; min-height: 120px; }
 .weight-slider::-moz-range-track { height: 6px; border-radius: 999px; background: transparent; }
 .weight-slider::-moz-range-thumb {
   width: 18px; height: 18px;
-  border-radius: 50%; background: #fff; border: 2px solid #2563eb;
+  border-radius: 50%; background: var(--surface); border: 2px solid #2563eb;
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.18);
   transition: transform 0.12s ease, box-shadow 0.12s ease;
 }
@@ -504,11 +583,11 @@ textarea { resize: vertical; min-height: 120px; }
   gap: 12px; margin-top: 10px;
 }
 .job-card {
-  background: white; border: 2px solid var(--gray-200); border-radius: var(--radius);
+  background: var(--surface); border: 2px solid var(--gray-200); border-radius: var(--radius);
   padding: 20px; cursor: pointer; transition: all 0.15s;
 }
 .job-card:hover { border-color: var(--gray-300); box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
-.job-card.selected { border-color: var(--primary); background: #eff6ff; }
+.job-card.selected { border-color: var(--primary); background: var(--tint-info); }
 .job-card-title { font-size: 16px; font-weight: 700; color: var(--gray-900); margin-bottom: 8px; }
 .job-card-meta { font-size: 13px; color: var(--gray-500); display: flex; flex-wrap: wrap; gap: 6px; }
 .job-card-meta .dot::before { content: '\00b7'; margin-right: 6px; }
@@ -517,7 +596,7 @@ textarea { resize: vertical; min-height: 120px; }
 /* Search bar */
 .search-bar {
   width: 100%; padding: 10px 14px; border: 1px solid var(--gray-200);
-  border-radius: var(--radius); font-size: 14px; background: white;
+  border-radius: var(--radius); font-size: 14px; background: var(--surface);
 }
 .search-bar:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px rgba(37,99,235,0.1); }
 
@@ -525,7 +604,7 @@ textarea { resize: vertical; min-height: 120px; }
 .filter-tabs { display: flex; gap: 8px; }
 .filter-tab {
   padding: 6px 16px; border-radius: 20px; font-size: 13px; font-weight: 600;
-  cursor: pointer; border: 1px solid var(--gray-200); background: white;
+  cursor: pointer; border: 1px solid var(--gray-200); background: var(--surface);
   color: var(--gray-500); transition: all 0.15s;
 }
 .filter-tab:hover { background: var(--gray-50); }
@@ -540,7 +619,7 @@ textarea { resize: vertical; min-height: 120px; }
 }
 .toggle-slider::before {
   content: ''; position: absolute; height: 18px; width: 18px; left: 3px; bottom: 3px;
-  background: white; border-radius: 50%; transition: 0.2s;
+  background: var(--surface); border-radius: 50%; transition: 0.2s;
 }
 .toggle-switch input:checked + .toggle-slider { background: var(--success); }
 .toggle-switch input:checked + .toggle-slider::before { transform: translateX(20px); }
@@ -551,7 +630,7 @@ textarea { resize: vertical; min-height: 120px; }
   text-align: center; cursor: pointer; transition: all 0.2s; background: var(--gray-50);
 }
 .dropzone:hover { border-color: var(--gray-400); }
-.dropzone.dragover { border-color: var(--primary); background: #eff6ff; }
+.dropzone.dragover { border-color: var(--primary); background: var(--tint-info); }
 .dropzone-icon { font-size: 48px; margin-bottom: 12px; }
 .dropzone-text { font-size: 15px; font-weight: 600; color: var(--gray-600); }
 .dropzone-sub { font-size: 13px; color: var(--gray-400); margin-top: 4px; }
@@ -580,19 +659,19 @@ textarea { resize: vertical; min-height: 120px; }
   gap: 20px;
 }
 .criteria-section {
-  background: white; border: 1px solid var(--gray-200);
+  background: var(--surface); border: 1px solid var(--gray-200);
   border-radius: var(--radius); padding: 16px 18px;
 }
 .criteria-section-header { margin-bottom: 12px; }
 .criteria-section-header h4 { font-size: 14px; font-weight: 700; color: var(--gray-800); margin-bottom: 2px; }
 .criteria-section-hint { display: block; font-size: 12px; color: var(--gray-500); line-height: 1.4; }
-.criteria-section.generate-block { background: linear-gradient(90deg, #eff6ff 0%, #faf5ff 100%); border-color: #dbeafe; padding: 12px 18px; }
+.criteria-section.generate-block { background: linear-gradient(90deg, var(--tint-info) 0%, #faf5ff 100%); border-color: #dbeafe; padding: 12px 18px; }
 
 /* Action card (bottom-left of criteria grid) */
 .criteria-actions-card {
   padding: 20px;
   border: 1px solid var(--gray-200); border-radius: 12px;
-  background: white; text-align: center;
+  background: var(--surface); text-align: center;
 }
 .criteria-actions-title {
   font-size: 14px; font-weight: 700; color: var(--gray-700);
@@ -606,12 +685,12 @@ textarea { resize: vertical; min-height: 120px; }
   display: flex; flex-direction: column; align-items: center; gap: 6px;
   padding: 14px 28px; min-width: 140px;
   border: 1px solid var(--gray-200); border-radius: var(--radius);
-  background: white; cursor: pointer;
+  background: var(--surface); cursor: pointer;
   font-size: 13px; font-weight: 600; color: var(--gray-700);
   transition: all 0.15s;
 }
 .criteria-action-btn:hover { background: var(--gray-50); border-color: var(--gray-300); }
-.criteria-action-btn.active { background: #eff6ff; border-color: var(--primary); color: var(--primary); }
+.criteria-action-btn.active { background: var(--tint-info); border-color: var(--primary); color: var(--primary); }
 .criteria-action-icon { font-size: 20px; }
 .criteria-action-content {
   text-align: left; padding: 14px 16px;
@@ -624,7 +703,7 @@ textarea { resize: vertical; min-height: 120px; }
   font-size: 13px; line-height: 1.5; width: 100%;
 }
 .unsaved-warning-card {
-  margin-top: 12px; padding: 10px 14px; background: #fffbeb; border: 1px solid #fde68a;
+  margin-top: 12px; padding: 10px 14px; background: var(--surface)beb; border: 1px solid #fde68a;
   border-radius: var(--radius); display: flex; gap: 10px; align-items: flex-start;
   font-size: 12px; color: var(--gray-700);
 }
@@ -649,7 +728,7 @@ textarea { resize: vertical; min-height: 120px; }
 .file-list { margin-top: 16px; }
 .file-item {
   display: flex; align-items: center; justify-content: space-between;
-  padding: 10px 14px; background: white; border: 1px solid var(--gray-200);
+  padding: 10px 14px; background: var(--surface); border: 1px solid var(--gray-200);
   border-radius: var(--radius); margin-bottom: 8px; font-size: 13px;
 }
 .file-item .file-info { display: flex; align-items: center; gap: 12px; flex: 1; }
@@ -668,7 +747,7 @@ textarea { resize: vertical; min-height: 120px; }
 }
 .source-tab {
   flex: 1; padding: 10px; text-align: center; font-size: 13px; font-weight: 600;
-  cursor: pointer; background: white; border: none; color: var(--gray-600);
+  cursor: pointer; background: var(--surface); border: none; color: var(--gray-600);
   border-right: 1px solid var(--gray-300); transition: all 0.15s;
 }
 .source-tab:last-child { border-right: none; }
@@ -692,7 +771,7 @@ textarea { resize: vertical; min-height: 120px; }
 
 /* Candidate card */
 .candidate-card {
-  background: white; border: 1px solid var(--gray-200); border-radius: var(--radius);
+  background: var(--surface); border: 1px solid var(--gray-200); border-radius: var(--radius);
   padding: 20px; margin-bottom: 12px;
   transition: background 0.4s ease, border-color 0.4s ease, box-shadow 0.4s ease;
   position: relative;
@@ -701,18 +780,18 @@ textarea { resize: vertical; min-height: 120px; }
 
 /* State variants — shortlisted stays white; color only appears once a decision is made */
 .candidate-card--shortlisted {
-  background: #fff;
+  background: var(--surface);
   border-color: var(--gray-200);
   box-shadow: none;
 }
 .candidate-card--notified {
-  background: #fff;
+  background: var(--surface);
   border-color: var(--gray-200);
   box-shadow: none;
   border-left: 3px solid #34d399;
 }
 .candidate-card--interviewed {
-  background: #eff6ff;
+  background: var(--tint-info);
   border-color: #93c5fd;
   box-shadow: 0 0 0 1px #bfdbfe, 0 2px 8px rgba(37, 99, 235, 0.08);
 }
@@ -863,7 +942,7 @@ textarea { resize: vertical; min-height: 120px; }
 /* Handed off to HM — blue to signal a process step, not a verdict (matches the
    --handed-off card tint and chip). */
 .sl-email-handoff {
-  background: #eff6ff;
+  background: var(--tint-info);
   color: #1e40af;
   border-color: #bfdbfe;
 }
@@ -912,7 +991,7 @@ textarea { resize: vertical; min-height: 120px; }
   border: 1px solid var(--gray-200);
   border-top: none;
   border-radius: 0 0 var(--radius) var(--radius);
-  background: white;
+  background: var(--surface);
   animation: emailDetailsSlideIn 0.2s ease-out;
   overflow: hidden;
 }
@@ -932,7 +1011,7 @@ textarea { resize: vertical; min-height: 120px; }
   border-top: 1px dashed var(--gray-200);
 }
 .sl-detail-sent { background: #fafff9; }
-.sl-detail-failed { background: #fffafa; }
+.sl-detail-failed { background: var(--surface)afa; }
 .sl-detail-inbound { background: #fcfaff; }
 .sl-email-detail-header {
   display: flex;
@@ -998,7 +1077,7 @@ textarea { resize: vertical; min-height: 120px; }
 }
 .email-detail-row td {
   padding: 0 !important;
-  background: white;
+  background: var(--surface);
 }
 .email-detail-panel {
   padding: 16px 20px;
@@ -1044,7 +1123,7 @@ textarea { resize: vertical; min-height: 120px; }
   color: var(--gray-700);
   margin: 0;
   padding: 12px 14px;
-  background: white;
+  background: var(--surface);
   border: 1px solid var(--gray-200);
   border-radius: var(--radius);
 }
@@ -1066,7 +1145,7 @@ textarea { resize: vertical; min-height: 120px; }
 
 /* Setup */
 .li-setup-card {
-  background: white; border: 1px solid var(--gray-200); border-radius: var(--radius);
+  background: var(--surface); border: 1px solid var(--gray-200); border-radius: var(--radius);
   padding: 28px 32px; max-width: 760px;
 }
 .li-section-title { font-size: 16px; font-weight: 700; color: var(--gray-900); margin-bottom: 20px; }
@@ -1081,7 +1160,7 @@ textarea { resize: vertical; min-height: 120px; }
 .li-feature-title { font-size: 13px; font-weight: 600; color: var(--gray-800); margin-bottom: 2px; }
 .li-feature-desc { font-size: 12px; color: var(--gray-500); line-height: 1.5; }
 .li-warning-banner {
-  margin-top: 16px; padding: 10px 14px; background: #fffbeb; border: 1px solid #fde68a;
+  margin-top: 16px; padding: 10px 14px; background: var(--surface)beb; border: 1px solid #fde68a;
   border-radius: var(--radius); font-size: 13px; color: #92400e;
 }
 
@@ -1259,13 +1338,13 @@ textarea { resize: vertical; min-height: 120px; }
 /* Results */
 .li-entry-num {
   flex-shrink: 0; font-size: 10px; font-weight: 700; color: var(--primary);
-  background: #eff6ff; padding: 2px 6px; border-radius: 4px; margin-top: 1px;
+  background: var(--tint-info); padding: 2px 6px; border-radius: 4px; margin-top: 1px;
 }
 .li-rec-banner { padding: 12px 20px; border-radius: var(--radius); margin-bottom: 20px; font-size: 14px; }
 .li-rec-strong { background: #dcfce7; color: #15803d; border: 1px solid #bbf7d0; }
-.li-rec-yes    { background: #eff6ff; color: var(--primary); border: 1px solid #bfdbfe; }
+.li-rec-yes    { background: var(--tint-info); color: var(--primary); border: 1px solid #bfdbfe; }
 .li-rec-no     { background: #fee2e2; color: #b91c1c; border: 1px solid #fecaca; }
-.li-results-card { background: white; border: 1px solid var(--gray-200); border-radius: var(--radius); padding: 24px; margin-bottom: 16px; }
+.li-results-card { background: var(--surface); border: 1px solid var(--gray-200); border-radius: var(--radius); padding: 24px; margin-bottom: 16px; }
 .li-card-title { font-size: 15px; font-weight: 700; color: var(--gray-900); margin-bottom: 14px; }
 .li-perq-list { display: flex; flex-direction: column; gap: 14px; }
 .li-perq-item { padding: 12px 0; border-bottom: 1px solid var(--gray-100); }
@@ -1283,7 +1362,7 @@ textarea { resize: vertical; min-height: 120px; }
 
 @media print {
   .header, .nav-tabs, .global-job-badge { display: none !important; }
-  body { background: white !important; }
+  body { background: var(--surface) !important; }
   .container { padding: 0 !important; max-width: 100% !important; }
   /* Hide everything except the expanded session card */
   .container > div:first-child,      /* page title */

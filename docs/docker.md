@@ -20,7 +20,7 @@ The only Docker container in this project is **PostgreSQL**. There is **no `dock
 
 | Container | Image | Port | Purpose |
 |-----------|-------|------|---------|
-| `hr-postgres` | `postgres:16` | `5432:5432` | HR Automation database |
+| `hr-postgres` | `postgres:16` | `5432:5432` | Diyar HR database |
 
 Everything else runs natively on the host:
 - n8n via `npx n8n`

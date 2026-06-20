@@ -11,6 +11,7 @@ const DEPARTMENTS = ['Engineering', 'IT', 'Marketing', 'Sales', 'HR', 'Finance',
 
 export default function JobOpenings() {
   const { showToast } = useUI();
+  const { refreshJobs } = useSelectedJob();
   const [allJobs, setAllJobs] = useState([]);
   const [filter, setFilter] = useState('all');
   const [search, setSearch] = useState('');
@@ -66,6 +67,7 @@ export default function JobOpenings() {
       if (res.data.success) {
         const isActive = res.data.data.is_active;
         setAllJobs(prev => prev.map(j => j.id === id ? { ...j, is_active: isActive, status: isActive ? 'open' : 'closed' } : j));
+        refreshJobs(); // header job picker reflects active/inactive immediately, no reload needed
         showToast(`Job is now ${isActive ? 'active' : 'inactive'}`, 'success');
       }
     } catch { showToast('Failed to toggle status', 'error'); }
@@ -119,12 +121,7 @@ export default function JobOpenings() {
     <div className="container">
       <div className="table-wrap">
         <div className="table-header">
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <div>
-              <h2 style={{ fontSize: '18px', fontWeight: 700 }}>Job Openings</h2>
-              <span style={{ fontSize: '13px', color: 'var(--gray-400)' }}>{filtered.length} of {allJobs.length} jobs</span>
-            </div>
-          </div>
+          <span style={{ fontSize: '13px', color: 'var(--gray-400)' }}>{filtered.length} of {allJobs.length} jobs</span>
           <button className="btn btn-primary btn-sm" onClick={() => { resetForm(); setShowCreate(true); }}>+ New Job</button>
         </div>
         <div style={{ padding: '12px 24px', borderBottom: '1px solid var(--gray-200)', display: 'flex', alignItems: 'center', gap: '16px' }}>

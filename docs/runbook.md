@@ -1,6 +1,6 @@
 # Runbook — Local Setup and Operations
 
-Step-by-step instructions to bring up, operate, and shut down every service in the HR Automation stack on a Windows workstation.
+Step-by-step instructions to bring up, operate, and shut down every service in the Diyar HR stack on a Windows workstation.
 
 ---
 

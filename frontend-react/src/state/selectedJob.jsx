@@ -16,6 +16,11 @@ export function SelectedJobProvider({ children }) {
     return null;
   });
 
+  // Bump to tell job-list consumers (the header picker, etc.) to re-fetch — e.g.
+  // after a job is enabled/disabled, so it flips active/inactive without a reload.
+  const [jobsNonce, setJobsNonce] = useState(0);
+  const refreshJobs = useCallback(() => setJobsNonce((n) => n + 1), []);
+
   const setSelectedJob = useCallback((job) => {
     if (!job || !job.id) {
       setSelectedJobState(null);
@@ -37,7 +42,7 @@ export function SelectedJobProvider({ children }) {
   }, []);
 
   return (
-    <SelectedJobContext.Provider value={{ selectedJob, setSelectedJob, clearSelectedJob }}>
+    <SelectedJobContext.Provider value={{ selectedJob, setSelectedJob, clearSelectedJob, jobsNonce, refreshJobs }}>
       {children}
     </SelectedJobContext.Provider>
   );

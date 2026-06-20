@@ -14,6 +14,7 @@ Endpoints (JSON):
   POST /auth/login   {email,password}            -> {token, user}
   GET  /auth/me      (Bearer token)              -> {user}
   POST /auth/logout  (Bearer token)              -> {ok}
+  POST /auth/change-password (Bearer) {current_password, new_password} -> {ok}
   GET  /auth/users   (admin)                     -> {users:[...]}
   POST /auth/users   (admin) {email,password,full_name,role}
   PATCH/auth/users   (admin) {id, role?, is_active?, password?}
@@ -152,6 +153,23 @@ class Handler(BaseHTTPRequestHandler):
                     cur.execute("SELECT id, email, full_name, role, is_active, created_at, "
                                 "last_login_at FROM users ORDER BY id")
                     return self._send(200, {'users': cur.fetchall()})
+                if path == '/auth/email-templates':  # any signed-in user (needed to compose)
+                    if not user_by_token(cur, self._token()):
+                        return self._send(401, {'error': 'unauthorized'})
+                    cur.execute("SELECT template_key, subject, body, updated_at, updated_by FROM email_templates")
+                    rows = cur.fetchall()
+                    return self._send(200, {'templates': {r['template_key']: r for r in rows}})
+                if path == '/auth/audit':  # admin: recent activity
+                    if not self._require_admin(cur):
+                        return
+                    q = parse_qs(urlparse(self.path).query)
+                    try:
+                        limit = min(int((q.get('limit') or ['200'])[0]), 1000)
+                    except (ValueError, TypeError):
+                        limit = 200
+                    cur.execute("SELECT id, user_email, action, entity_type, entity_id, detail, created_at "
+                                "FROM audit_log ORDER BY id DESC LIMIT %s", (limit,))
+                    return self._send(200, {'events': cur.fetchall()})
             return self._send(404, {'error': 'not found'})
         except Exception as e:
             return self._send(500, {'error': str(e)})
@@ -193,6 +211,77 @@ class Handler(BaseHTTPRequestHandler):
                     if tok and is_uuid(tok):
                         cur.execute("DELETE FROM auth_sessions WHERE token = %s", (tok,))
                         c.commit()
+                    return self._send(200, {'ok': True})
+
+                if path == '/auth/change-password':  # any signed-in user, own password
+                    me = user_by_token(cur, self._token())
+                    if not me:
+                        return self._send(401, {'error': 'unauthorized'})
+                    current = body.get('current_password') or ''
+                    new = body.get('new_password') or ''
+                    if not current or not new:
+                        return self._send(400, {'error': 'current and new password are required'})
+                    if len(new) < 6:
+                        return self._send(400, {'error': 'new password must be at least 6 characters'})
+                    if new == current:
+                        return self._send(400, {'error': 'new password must be different from the current one'})
+                    # Verify the current password against the stored bcrypt hash.
+                    cur.execute(
+                        "SELECT 1 FROM users WHERE id = %s "
+                        "AND password_hash = crypt(%s, password_hash)",
+                        (me['id'], current),
+                    )
+                    if not cur.fetchone():
+                        return self._send(403, {'error': 'Current password is incorrect'})
+                    # Set the new hash, then revoke every OTHER session for this
+                    # user (keep the current token so they stay signed in here).
+                    cur.execute(
+                        "UPDATE users SET password_hash = crypt(%s, gen_salt('bf', 12)) "
+                        "WHERE id = %s",
+                        (new, me['id']),
+                    )
+                    cur.execute(
+                        "DELETE FROM auth_sessions WHERE user_id = %s AND token <> %s",
+                        (me['id'], self._token()),
+                    )
+                    c.commit()
+                    return self._send(200, {'ok': True})
+
+                if path == '/auth/email-templates':  # admin: save a template override
+                    me = self._require_admin(cur)
+                    if not me:
+                        return
+                    key = (body.get('template_key') or '').strip()
+                    subject = body.get('subject')
+                    bodytext = body.get('body')
+                    if not key or subject is None or bodytext is None:
+                        return self._send(400, {'error': 'template_key, subject and body are required'})
+                    cur.execute(
+                        "INSERT INTO email_templates (template_key, subject, body, updated_at, updated_by) "
+                        "VALUES (%s, %s, %s, now(), %s) "
+                        "ON CONFLICT (template_key) DO UPDATE SET subject = EXCLUDED.subject, "
+                        "body = EXCLUDED.body, updated_at = now(), updated_by = EXCLUDED.updated_by",
+                        (key, subject, bodytext, me['email']),
+                    )
+                    c.commit()
+                    return self._send(200, {'ok': True})
+
+                if path == '/auth/audit':  # any signed-in user logs their own action
+                    me = user_by_token(cur, self._token())
+                    if not me:
+                        return self._send(401, {'error': 'unauthorized'})
+                    action = (body.get('action') or '').strip()
+                    if not action:
+                        return self._send(400, {'error': 'action required'})
+                    detail = body.get('detail')
+                    cur.execute(
+                        "INSERT INTO audit_log (user_id, user_email, action, entity_type, entity_id, detail) "
+                        "VALUES (%s, %s, %s, %s, %s, %s::jsonb)",
+                        (me['id'], me['email'], action, body.get('entity_type'),
+                         (str(body.get('entity_id')) if body.get('entity_id') is not None else None),
+                         json.dumps(detail) if detail is not None else None),
+                    )
+                    c.commit()
                     return self._send(200, {'ok': True})
 
                 if path == '/auth/users':  # admin: create user

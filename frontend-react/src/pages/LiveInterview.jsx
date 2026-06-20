@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { apiGet, apiPost } from '../services/api';
+import { useEvalStatus } from '../state/evalStatus';
 import { useUI } from '../state/uiState';
 import { useSelectedJob } from '../state/selectedJob';
 import AIInterviews from './AIInterviews';
@@ -8,6 +9,11 @@ import AIInterviews from './AIInterviews';
 const CAT_LABELS = { hr: 'Behavioural', technical: 'Technical', salary: 'Salary', iqama: 'Iqama / Visa', notice: 'Notice Period', location: 'Location' };
 const CAT_COLOR  = { hr: '#2563eb', technical: '#16a34a', salary: '#d97706', iqama: '#7c3aed', notice: '#dc2626', location: '#0891b2' };
 const CAT_BG     = { hr: '#eff6ff', technical: '#f0fdf4', salary: '#fffbeb', iqama: '#f5f3ff', notice: '#fef2f2', location: '#ecfeff' };
+
+// Source of each question in the combined interview set (where the user picked it).
+const SRC_LABEL = { bank: '📚 Bank', ai: '✨ AI', custom: '✏️ Custom' };
+const SRC_BG    = { bank: '#eff6ff', ai: '#f5f3ff', custom: '#fff7ed' };
+const SRC_COLOR = { bank: '#2563eb', ai: '#7c3aed', custom: '#c2410c' };
 
 const API_BASE  = import.meta.env.VITE_API_URL || '/webhook';
 const QBANK_URL = `${API_BASE}/interview/question-bank`;
@@ -27,6 +33,7 @@ export default function LiveInterview() {
   const navigate = useNavigate();
   const { showToast } = useUI();
   const { selectedJob } = useSelectedJob();
+  const { runAiTask } = useEvalStatus();
 
   // ── Main sub-tab ── ('setup' | 'bank' | 'prep' | 'results')
   // ?tab=results deep-links to Results (used by the old /ai-interviews redirect)
@@ -39,6 +46,7 @@ export default function LiveInterview() {
   const [jobId, setJobId]                 = useState('');
   const [jobTitle, setJobTitle]           = useState('');
   const [candidates, setCandidates]       = useState([]);
+  const [interviewedIds, setInterviewedIds] = useState(new Set()); // CandidateIds with a completed session
   const [evaluationId, setEvaluationId]   = useState('');
   const [candidateId, setCandidateId]     = useState('');
   const [candidateName, setCandidateName] = useState('');
@@ -46,9 +54,12 @@ export default function LiveInterview() {
   const [loadingCands, setLoadingCands]   = useState(false);
 
   const [qMode, setQMode]                 = useState('from-bank');
-  const [customQs, setCustomQs]           = useState([emptyQ()]);
+  const [customQs, setCustomQs]           = useState([]);
   const [generatedQs, setGeneratedQs]     = useState([]);
   const [bankSelectedQs, setBankSelectedQs] = useState([]);
+  const [aiTopic, setAiTopic] = useState('');
+  const [customDraft, setCustomDraft]     = useState('');   // "Write My Own" type-and-add box
+  const [customCat, setCustomCat]         = useState('hr');
   const [numQ, setNumQ]                   = useState(5);
   const [types, setTypes]                 = useState({ hr: true, technical: true, salary: false });
   const [generating, setGenerating]       = useState(false);
@@ -100,6 +111,20 @@ export default function LiveInterview() {
       setQMode('ai-generate');
       setSavedQsLoaded(true);
       showToast(`${pendingPrep.questions.length} prepared questions loaded`, 'success');
+    } else {
+      // No questions passed in (e.g. returning via the indicator after AI
+      // generation) — restore whatever was last built for this candidate.
+      try {
+        const snap = JSON.parse(localStorage.getItem(`hr_live_qs_${c.CandidateId}`) || 'null');
+        if (snap && (snap.generatedQs?.length || snap.customQs?.length || snap.bankSelectedQs?.length)) {
+          if (snap.qMode)          setQMode(snap.qMode);
+          if (snap.generatedQs)    setGeneratedQs(snap.generatedQs);
+          if (snap.customQs)       setCustomQs(snap.customQs);
+          if (snap.bankSelectedQs) setBankSelectedQs(snap.bankSelectedQs);
+          setSavedQsLoaded(true);
+          showToast('Questions restored from your last session', 'success');
+        }
+      } catch {}
     }
     setPendingPrep(null);
   }, [candidates, pendingPrep]);
@@ -111,6 +136,18 @@ export default function LiveInterview() {
     if (match) handleJobChange(String(match.JobId));
   }, [selectedJob, jobs]);
 
+  // Restore the last-worked candidate when returning to this tab (navigating
+  // away and back). Skips if a candidate is already selected or a deep-link
+  // (pendingPrep) is about to pick one.
+  useEffect(() => {
+    if (candidateId || pendingPrep || candidates.length === 0 || !jobId) return;
+    let last;
+    try { last = localStorage.getItem(`hr_live_last_cand_${jobId}`); } catch {}
+    if (last && candidates.some(c => String(c.CandidateId) === String(last))) {
+      handleCandidateChange(String(last), { silent: true });
+    }
+  }, [candidates, jobId]);
+
   async function loadJobs() {
     setLoadingJobs(true);
     try { const r = await apiGet('/interview/jobs'); setJobs(r.data || r || []); }
@@ -119,19 +156,29 @@ export default function LiveInterview() {
   }
 
   async function handleJobChange(val) {
-    setJobId(val); setJobTitle(''); setCandidates([]);
+    setJobId(val); setJobTitle(''); setCandidates([]); setInterviewedIds(new Set());
     setEvaluationId(''); setCandidateId(''); setCandidateName('');
     setLink(''); setCopied(false); setSavedQsLoaded(false);
     if (!val) return;
     const j = jobs.find(j => String(j.JobId) === val);
     if (j) setJobTitle(j.job_title);
     setLoadingCands(true);
-    try { const r = await apiGet(`/interview/candidates?jobId=${val}`); setCandidates(r.data || r || []); }
+    try {
+      // Load candidates + which of them already completed the AI interview, so
+      // the picker can flag/sort them (still selectable for a deliberate redo).
+      const [r, sess] = await Promise.all([
+        apiGet(`/interview/candidates?jobId=${val}`),
+        apiGet(`/interview/sessions?jobId=${val}`).catch(() => []),
+      ]);
+      setCandidates(r.data || r || []);
+      const sessList = Array.isArray(sess) ? sess : (sess.data || []);
+      setInterviewedIds(new Set(sessList.map(s => String(s.candidateId))));
+    }
     catch { showToast('Failed to load candidates', 'error'); }
     finally { setLoadingCands(false); }
   }
 
-  async function handleCandidateChange(val) {
+  async function handleCandidateChange(val, { silent = false } = {}) {
     setLink(''); setCopied(false);
     const c = candidates.find(c => String(c.CandidateId) === val);
     if (!c) {
@@ -143,19 +190,21 @@ export default function LiveInterview() {
     setCandidateId(c.CandidateId);
     setEvaluationId(c.EvaluationId || '');
     setCandidateName(c.FullName);
+    // Remember the last candidate per job so returning to this tab keeps them.
+    try { localStorage.setItem(`hr_live_last_cand_${jobId}`, String(c.CandidateId)); } catch {}
 
     // 1️⃣ Restore from localStorage first (instant — survives refresh)
     try {
       const raw = localStorage.getItem(`hr_live_qs_${c.CandidateId}`);
       if (raw) {
         const snap = JSON.parse(raw);
-        if (snap.generatedQs?.length || snap.customQs?.length > 1 || snap.bankSelectedQs?.length) {
+        if (snap.generatedQs?.length || snap.customQs?.length || snap.bankSelectedQs?.length) {
           if (snap.qMode)           setQMode(snap.qMode);
           if (snap.generatedQs)     setGeneratedQs(snap.generatedQs);
           if (snap.customQs)        setCustomQs(snap.customQs);
           if (snap.bankSelectedQs)  setBankSelectedQs(snap.bankSelectedQs);
           setSavedQsLoaded(true);
-          showToast('Questions restored from your last session', 'success');
+          if (!silent) showToast('Questions restored from your last session', 'success');
           return; // skip server fetch — local copy is fresher
         }
       }
@@ -176,7 +225,7 @@ export default function LiveInterview() {
           setGeneratedQs(mapped);
           setQMode('ai-generate');
           setSavedQsLoaded(true);
-          showToast(`${list.length} saved questions loaded from candidate profile`, 'success');
+          if (!silent) showToast(`${list.length} saved questions loaded from candidate profile`, 'success');
         }
       } catch {}
     }
@@ -187,21 +236,55 @@ export default function LiveInterview() {
     if (!Object.values(types).some(Boolean)) { showToast('Pick at least one question type', 'error'); return; }
     setGenerating(true);
     try {
-      const res = await apiPost('/generate-interview-questions', {
+      const res = await runAiTask('Generating interview questions…', () => apiPost('/generate-interview-questions', {
         candidate_id: parseInt(candidateId),
         job_id: parseInt(jobId),
         num_questions: numQ,
         include_hr: types.hr,
         include_technical: types.technical,
         include_salary: types.salary,
-      });
+      }), { to: `/live-interview?setupCandidate=${candidateId}&setupJob=${jobId}`, hint: candidateName ? `Back to ${candidateName}` : 'Back to Interview Setup' });
       const data = res.data || res;
       const qs = Array.isArray(data) ? data : (data.questions || []);
       if (!qs.length) { showToast('No questions returned — is Ollama running?', 'error'); return; }
-      setGeneratedQs(qs.map(q => ({ id: _nextId++, text: q.question || q.text || '', category: q.category || 'hr', selected: true })));
+      const mapped = qs.map(q => ({ id: _nextId++, text: q.question || q.text || '', category: q.category || 'hr', selected: true }));
+      setGeneratedQs(mapped);
+      // Persist directly (not only via the mount-time effect) so the questions
+      // survive even if the user navigated away during generation.
+      try {
+        localStorage.setItem(`hr_live_qs_${candidateId}`, JSON.stringify({
+          qMode: 'ai-generate', generatedQs: mapped, customQs, bankSelectedQs, savedAt: Date.now(),
+        }));
+      } catch {}
       showToast(`${qs.length} questions generated`, 'success');
     } catch { showToast('Failed to generate questions', 'error'); }
     finally { setGenerating(false); }
+  }
+
+  // Tailored single-question generation: type a topic, the local model writes the
+  // question. Calls Ollama directly (CORS allowed for the app origin in start.sh).
+  async function generateFromTopic() {
+    const topic = aiTopic.trim();
+    if (!topic) { showToast('Type a topic first — e.g. "AWS experience"', 'error'); return; }
+    try {
+      const text = await runAiTask('Generating a tailored question…', async () => {
+        const r = await fetch('http://localhost:11434/api/generate', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            model: 'qwen3:4b', stream: false, think: false,
+            prompt: `You are a job interviewer. Write exactly ONE clear, professional interview question that asks the candidate about: "${topic}". Return ONLY the question text — no preamble, no quotes, no explanation.`,
+          }),
+        });
+        const j = await r.json();
+        let out = (j.response || '').replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+        out = (out.split('\n').map(s => s.trim()).filter(Boolean).pop() || '').replace(/^["'“”]+|["'“”]+$/g, '').trim();
+        return out;
+      }, { to: `/live-interview?setupCandidate=${candidateId}&setupJob=${jobId}`, hint: candidateName ? `Back to ${candidateName}` : 'Back to Interview Setup' });
+      if (!text) { showToast('No question returned — is Ollama running?', 'error'); return; }
+      setGeneratedQs(p => [...p, { id: _nextId++, text, category: 'technical', selected: true }]);
+      setAiTopic('');
+      showToast('Tailored question added', 'success');
+    } catch { showToast('Failed to generate — is Ollama running?', 'error'); }
   }
 
   async function saveGeneratedToBank() {
@@ -233,17 +316,16 @@ export default function LiveInterview() {
     // against it (rubric) and extracts requirements from it. Dropping it here
     // silently disables both features.
     const toPayloadQ = q => ({ question: q.text.trim(), category: q.category, modelAnswer: (q.modelAnswer || '').trim() });
-    if (qMode === 'from-bank') {
-      const filled = bankSelectedQs.filter(q => q.selected && q.text.trim());
-      if (filled.length) payload.customQuestions = filled.map(toPayloadQ);
-      // no questions selected = AI generates live during interview (same as no custom questions)
-    } else if (qMode === 'ai-generate') {
-      const filled = generatedQs.filter(q => q.selected && q.text.trim());
-      if (filled.length) payload.customQuestions = filled.map(toPayloadQ);
-    } else {
-      const filled = customQs.filter(q => q.selected && q.text.trim());
-      if (filled.length) payload.customQuestions = filled.map(toPayloadQ);
-    }
+    // The interview set mixes bank + AI + custom; dedup by text here (the live list
+    // stays un-deduped so editing is stable). No questions at all = the AI
+    // generates them live during the interview.
+    const seen = new Set();
+    const filled = combinedQuestions().filter(q => {
+      const k = q.text.trim().toLowerCase();
+      if (!k || seen.has(k)) return false;
+      seen.add(k); return true;
+    });
+    if (filled.length) payload.customQuestions = filled.map(toPayloadQ);
     // The link origin must be reachable by the candidate. Default to wherever
     // HR opened the app (generate from the tunnel URL for remote candidates);
     // VITE_PUBLIC_URL in .env overrides it for a stable public address.
@@ -261,28 +343,40 @@ export default function LiveInterview() {
     catch { showToast('Failed to copy', 'error'); }
   }
 
-  const isCustom   = qMode === 'custom';
-  const isAIGen    = qMode === 'ai-generate';
-  const isFromBank = qMode === 'from-bank';
-  const activeQs   = isCustom ? customQs : isAIGen ? generatedQs : bankSelectedQs;
-  const setActiveQs = isCustom ? setCustomQs : isAIGen ? setGeneratedQs : setBankSelectedQs;
-  const addQ       = ()         => setActiveQs(p => [...p, emptyQ()]);
-  const removeQ    = id         => setActiveQs(p => p.filter(q => q.id !== id));
-  const updateQ    = (id, f, v) => setActiveQs(p => p.map(q => q.id === id ? { ...q, [f]: v } : q));
-  const filledCount = activeQs.filter(q => q.selected && q.text.trim()).length;
+  // ── Interview-set helpers ──
+  // Each source owns its own state array; the interview set is simply their concat,
+  // every item tagged with where it came from. We DON'T dedup here so inline editing
+  // stays stable — dedup happens once in generateLink against the final text.
+  function combinedQuestions() {
+    const out = [];
+    for (const [source, list] of [['bank', bankSelectedQs], ['ai', generatedQs], ['custom', customQs]]) {
+      for (const q of list) out.push({ ...q, source });   // keep empties so inline editing is stable
+    }
+    return out;
+  }
+  const setterFor = src => src === 'bank' ? setBankSelectedQs : src === 'ai' ? setGeneratedQs : setCustomQs;
+  // Edit / remove one question in whichever source array owns it — so the single
+  // "Interview set" list below is the one place questions are managed.
+  const updateCombined = (q, field, value) => setterFor(q.source)(p => p.map(x => x.id === q.id ? { ...x, [field]: value } : x));
+  const removeCombined = q => setterFor(q.source)(p => p.filter(x => x.id !== q.id));
+  // "Write My Own" is now a type-and-add box that appends straight to the set.
+  function addCustomQuestion() {
+    const t = customDraft.trim();
+    if (!t) return;
+    setCustomQs(p => [...p, { id: _nextId++, text: t, category: customCat, selected: true }]);
+    setCustomDraft('');
+  }
+  const combined    = combinedQuestions();
+  const bankCount   = combined.filter(q => q.source === 'bank').length;
+  const genCount    = combined.filter(q => q.source === 'ai').length;
+  const customCount = combined.filter(q => q.source === 'custom').length;
+  const filledCount = combined.length;
 
   return (
-    <div className="container">
-      <div style={{ marginBottom: 24 }}>
-        <h2 style={{ fontSize: 20, fontWeight: 700, color: 'var(--gray-900)' }}>Interview</h2>
-        <p style={{ fontSize: 14, color: 'var(--gray-500)', marginTop: 4 }}>
-          Prepare questions, send a private AI-interview link, and review completed interviews.
-        </p>
-      </div>
-
+    <div className="container tab-fade-in">
       {/* Sub-tabs */}
       <div style={{ display: 'flex', gap: 0, marginBottom: 24, borderBottom: '2px solid var(--gray-200)' }}>
-        {[{ key: 'setup', label: 'Setup' }, { key: 'bank', label: 'Question Bank' }, { key: 'prep', label: 'Candidate Prep' }, { key: 'results', label: 'Results' }].map(t => (
+        {[{ key: 'setup', label: 'Setup' }, { key: 'bank', label: 'Question Bank' }, { key: 'results', label: 'Results' }].map(t => (
           <button
             key={t.key}
             onClick={() => setMainTab(t.key)}
@@ -319,12 +413,24 @@ export default function LiveInterview() {
                   <option value="">
                     {loadingCands ? 'Loading…' : !jobId ? 'Select a job first' : candidates.length === 0 ? 'No shortlisted candidates' : '— Select a candidate —'}
                   </option>
-                  {candidates.map(c => (
-                    <option key={c.CandidateId} value={c.CandidateId}>{c.FullName}{c.OverallScore ? ` — Score: ${c.OverallScore}` : ''}</option>
-                  ))}
+                  {[...candidates]
+                    .sort((a, b) => (interviewedIds.has(String(a.CandidateId)) ? 1 : 0) - (interviewedIds.has(String(b.CandidateId)) ? 1 : 0))
+                    .map(c => {
+                      const done = interviewedIds.has(String(c.CandidateId));
+                      return (
+                        <option key={c.CandidateId} value={c.CandidateId}>
+                          {done ? '✓ ' : ''}{c.FullName}{c.OverallScore ? ` — Score: ${c.OverallScore}` : ''}{done ? ' (interviewed)' : ''}
+                        </option>
+                      );
+                    })}
                 </select>
               </div>
             </div>
+            {candidateName && interviewedIds.has(String(candidateId)) && (
+              <div style={{ marginTop: 12, padding: '9px 14px', background: '#fef3c7', border: '1px solid #fde68a', borderRadius: 6, fontSize: 12.5, color: '#92400e' }}>
+                ⚠️ <strong>{candidateName}</strong> already completed an interview — see the <strong>Results</strong> tab. Generating a new link will let them interview again.
+              </div>
+            )}
             {candidateName && (
               <div style={{ marginTop: 12, padding: '9px 14px', background: '#eff6ff', border: '1px solid #dbeafe', borderRadius: 6, fontSize: 13, color: '#1e40af', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <span>Interviewing <strong>{candidateName}</strong>{jobTitle && <> for <strong>{jobTitle}</strong></>}</span>
@@ -341,7 +447,7 @@ export default function LiveInterview() {
                       win.location.href = URL.createObjectURL(blob);
                     } catch { win.close(); showToast('Failed to load CV', 'error'); }
                   }}
-                  style={{ fontSize: 12, fontWeight: 600, padding: '4px 12px', borderRadius: 6, border: '1px solid #bfdbfe', background: '#fff', color: '#2563eb', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}
+                  style={{ fontSize: 12, fontWeight: 600, padding: '4px 12px', borderRadius: 6, border: '1px solid #bfdbfe', background: 'var(--surface)', color: '#2563eb', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}
                 >
                   📄 View CV
                 </button>
@@ -372,7 +478,7 @@ export default function LiveInterview() {
                     onClick={() => { setQMode(m.key); setLink(''); setCopied(false); }}
                     style={{
                       flex: 1, padding: '16px 12px', cursor: 'pointer', textAlign: 'center',
-                      background: '#fff',
+                      background: 'var(--surface)',
                       border: `1.5px solid ${active ? '#2563eb' : 'var(--gray-200)'}`,
                       borderRadius: 10, transition: 'border-color 0.15s', outline: 'none',
                       display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6,
@@ -386,72 +492,167 @@ export default function LiveInterview() {
               })}
             </div>
 
-            {/* From Question Bank */}
-            {qMode === 'from-bank' && (
-              <BankPicker
-                onSelect={qs => setBankSelectedQs(qs)}
-                selected={bankSelectedQs}
-                onUpdate={updateQ}
-                onRemove={removeQ}
-                onReorder={setBankSelectedQs}
-                onAdd={addQ}
-              />
-            )}
+            {/* All three source panels stay MOUNTED — we just toggle visibility with
+                `display`. Switching tabs is then a pure CSS flip (instant, smooth)
+                instead of unmounting/remounting: the Bank panel no longer refetches
+                the question bank on every switch, and checkbox state is preserved. */}
 
-            {/* AI Generate */}
-            {qMode === 'ai-generate' && (
-              <div>
-                <div style={{ display: 'grid', gridTemplateColumns: '160px 1fr auto auto', gap: 14, alignItems: 'end', marginBottom: 16 }}>
-                  <div className="form-group" style={{ marginBottom: 0 }}>
-                    <label>No. of questions</label>
-                    <select value={numQ} onChange={e => setNumQ(Number(e.target.value))}>
-                      {[3,4,5,6,7,8,10].map(n => <option key={n} value={n}>{n} questions</option>)}
-                    </select>
-                  </div>
-                  <div className="form-group" style={{ marginBottom: 0 }}>
-                    <label>Include types</label>
-                    <div style={{ display: 'flex', gap: 20, paddingTop: 9 }}>
-                      {['hr','technical','salary'].map(k => (
-                        <label key={k} style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 13, color: 'var(--gray-700)', userSelect: 'none' }}>
-                          <input type="checkbox" checked={!!types[k]} onChange={e => setTypes(p => ({ ...p, [k]: e.target.checked }))} />
-                          {CAT_LABELS[k]}
-                        </label>
-                      ))}
-                    </div>
-                  </div>
-                  <button className="btn btn-primary" onClick={handleAIGenerate} disabled={generating || !candidateId} style={{ whiteSpace: 'nowrap' }}>
-                    {generating ? 'Generating…' : 'Generate'}
-                  </button>
-                  {generatedQs.length > 0 && (
-                    <button
-                      onClick={saveGeneratedToBank}
-                      disabled={savingToBank}
-                      style={{ whiteSpace: 'nowrap', padding: '9px 16px', fontSize: 13, fontWeight: 600, color: '#16a34a', background: '#f0fdf4', border: '1px solid #86efac', borderRadius: 6, cursor: 'pointer', fontFamily: 'inherit' }}
-                    >
-                      {savingToBank ? 'Saving…' : '💾 Save to Bank'}
-                    </button>
-                  )}
+            {/* From Question Bank — checkbox catalog only (controlled by the set) */}
+            <div style={{ display: qMode === 'from-bank' ? 'block' : 'none' }}>
+              <BankPicker onSelect={setBankSelectedQs} selected={bankSelectedQs} />
+            </div>
+
+            {/* AI Generate — controls only; results land in the set below */}
+            <div style={{ display: qMode === 'ai-generate' ? 'block' : 'none' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '160px 1fr auto auto', gap: 14, alignItems: 'end', marginBottom: 14 }}>
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label>No. of questions</label>
+                  <select value={numQ} onChange={e => setNumQ(Number(e.target.value))}>
+                    {[3,4,5,6,7,8,10].map(n => <option key={n} value={n}>{n} questions</option>)}
+                  </select>
                 </div>
-                {generatedQs.length > 0 && (
-                  <QuestionList qs={generatedQs} onAdd={addQ} onRemove={removeQ} onUpdate={updateQ} onReorder={setGeneratedQs} />
-                )}
-                {generatedQs.length === 0 && (
-                  <div style={{ padding: '14px 16px', background: 'var(--gray-50)', border: '1px solid var(--gray-200)', borderRadius: 8, fontSize: 13, color: 'var(--gray-400)', textAlign: 'center' }}>
-                    Select a candidate above and click Generate to create questions
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label>Include types</label>
+                  <div style={{ display: 'flex', gap: 20, paddingTop: 9 }}>
+                    {['hr','technical','salary'].map(k => (
+                      <label key={k} style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 13, color: 'var(--gray-700)', userSelect: 'none' }}>
+                        <input type="checkbox" checked={!!types[k]} onChange={e => setTypes(p => ({ ...p, [k]: e.target.checked }))} />
+                        {CAT_LABELS[k]}
+                      </label>
+                    ))}
                   </div>
+                </div>
+                <button className="btn btn-primary" onClick={handleAIGenerate} disabled={generating || !candidateId} style={{ whiteSpace: 'nowrap' }}>
+                  {generating ? 'Generating…' : 'Generate'}
+                </button>
+                {genCount > 0 && (
+                  <button
+                    onClick={saveGeneratedToBank}
+                    disabled={savingToBank}
+                    style={{ whiteSpace: 'nowrap', padding: '9px 16px', fontSize: 13, fontWeight: 600, color: '#16a34a', background: '#f0fdf4', border: '1px solid #86efac', borderRadius: 6, cursor: 'pointer', fontFamily: 'inherit' }}
+                  >
+                    {savingToBank ? 'Saving…' : '💾 Save to Bank'}
+                  </button>
                 )}
               </div>
-            )}
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <input value={aiTopic} onChange={e => setAiTopic(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') generateFromTopic(); }}
+                  placeholder={'Tailor a question — type a topic, e.g. "AWS experience"'}
+                  style={{ flex: 1, padding: '9px 12px', fontSize: 13.5, border: '1px solid var(--gray-300)', borderRadius: 8, outline: 'none', background: 'var(--surface)', color: 'var(--gray-800)', fontFamily: 'inherit' }} />
+                <button className="btn btn-secondary btn-sm" onClick={generateFromTopic} disabled={!aiTopic.trim()} style={{ whiteSpace: 'nowrap' }}>✨ Generate from topic</button>
+              </div>
+              <div style={{ marginTop: 10, fontSize: 12, color: 'var(--gray-400)' }}>
+                Generated questions are added to the interview set below — edit or remove them there.
+              </div>
+            </div>
 
-            {/* Write my own */}
-            {qMode === 'custom' && (
-              <QuestionList qs={customQs} onAdd={addQ} onRemove={removeQ} onUpdate={updateQ} onReorder={setCustomQs} />
+            {/* Write My Own — type-and-add box; questions append to the set below */}
+            <div style={{ display: qMode === 'custom' ? 'block' : 'none' }}>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'stretch' }}>
+                <input
+                  value={customDraft}
+                  onChange={e => setCustomDraft(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') addCustomQuestion(); }}
+                  placeholder="Type your question and press Enter…"
+                  style={{ flex: 1, padding: '10px 12px', fontSize: 13.5, border: '1px solid var(--gray-300)', borderRadius: 8, outline: 'none', background: 'var(--surface)', color: 'var(--gray-800)', fontFamily: 'inherit' }} />
+                <select value={customCat} onChange={e => setCustomCat(e.target.value)}
+                  style={{ width: 150, padding: '0 10px', fontSize: 13, border: '1px solid var(--gray-300)', borderRadius: 8, background: 'var(--surface)', color: 'var(--gray-800)', fontFamily: 'inherit', cursor: 'pointer' }}>
+                  {Object.keys(CAT_LABELS).map(c => <option key={c} value={c}>{CAT_LABELS[c]}</option>)}
+                </select>
+                <button className="btn btn-primary" onClick={addCustomQuestion} disabled={!customDraft.trim()} style={{ whiteSpace: 'nowrap' }}>+ Add</button>
+              </div>
+              <div style={{ marginTop: 10, fontSize: 12, color: 'var(--gray-400)' }}>
+                Each question you add appears in the interview set below — edit or remove it there.
+              </div>
+            </div>
+
+            {/* THE single place selected questions live: one editable list mixing all
+                three sources. Edit text/category, add an expected answer (📝), remove (×). */}
+            {filledCount > 0 ? (
+              <div style={{ marginTop: 22, paddingTop: 20, borderTop: '1px solid var(--gray-200)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10, flexWrap: 'wrap', gap: 8 }}>
+                  <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--gray-800)' }}>
+                    Interview set — {filledCount} question{filledCount !== 1 ? 's' : ''}
+                  </span>
+                  <span style={{ fontSize: 12, color: 'var(--gray-400)' }}>
+                    {[bankCount && `${bankCount} from bank`, genCount && `${genCount} AI`, customCount && `${customCount} custom`].filter(Boolean).join(' · ')}
+                  </span>
+                </div>
+                <div style={{ border: '1px solid var(--gray-200)', borderRadius: 8, overflow: 'hidden' }}>
+                  {combined.map((q, i) => (
+                    <div key={`${q.source}-${q.id}`} style={{ borderBottom: i < combined.length - 1 ? '1px solid var(--gray-100)' : 'none', background: 'var(--surface)' }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: '34px 1fr 120px 60px 34px 34px', alignItems: 'center' }}>
+                        <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--gray-400)', textAlign: 'center' }}>{i + 1}</span>
+                        <input
+                          value={q.text}
+                          onChange={e => updateCombined(q, 'text', e.target.value)}
+                          placeholder={`Question ${i + 1}…`}
+                          style={{ padding: '11px 12px', border: 'none', borderLeft: '1px solid var(--gray-100)', borderRight: '1px solid var(--gray-100)', fontSize: 13, color: 'var(--gray-900)', outline: 'none', fontFamily: 'inherit', background: 'transparent', width: '100%' }} />
+                        <select
+                          value={q.category}
+                          onChange={e => updateCombined(q, 'category', e.target.value)}
+                          style={{ padding: '11px 10px', border: 'none', borderRight: '1px solid var(--gray-100)', fontSize: 11, fontWeight: 700, cursor: 'pointer', outline: 'none', background: CAT_BG[q.category], color: CAT_COLOR[q.category], width: '100%', height: '100%' }}>
+                          {Object.keys(CAT_LABELS).map(c => <option key={c} value={c}>{CAT_LABELS[c]}</option>)}
+                        </select>
+                        <span
+                          title={`From ${q.source === 'bank' ? 'Question Bank' : q.source === 'ai' ? 'AI Generate' : 'Write My Own'}`}
+                          style={{ fontSize: 10, fontWeight: 700, color: SRC_COLOR[q.source], textAlign: 'center', whiteSpace: 'nowrap', borderRight: '1px solid var(--gray-100)' }}>
+                          {SRC_LABEL[q.source]}
+                        </span>
+                        <button onClick={() => updateCombined(q, 'showRubric', !q.showRubric)} title={q.showRubric ? 'Hide expected answer' : 'Add expected answer'}
+                          style={{ width: '100%', height: '100%', border: 'none', borderRight: '1px solid var(--gray-100)', background: q.showRubric ? '#eff6ff' : 'transparent', color: q.showRubric ? '#2563eb' : 'var(--gray-300)', cursor: 'pointer', fontSize: 13, display: 'flex', alignItems: 'center', justifyContent: 'center', height: 44 }}>📝</button>
+                        <button onClick={() => removeCombined(q)} title="Remove from set"
+                          style={{ width: '100%', height: '100%', border: 'none', background: 'transparent', color: 'var(--gray-400)', cursor: 'pointer', fontSize: 18, display: 'flex', alignItems: 'center', justifyContent: 'center', height: 44 }}>×</button>
+                      </div>
+                      {q.showRubric && (
+                        <div style={{ padding: '8px 12px 10px 46px', borderTop: '1px solid #dbeafe', background: 'var(--tint-info)' }}>
+                          <div style={{ fontSize: 11, fontWeight: 600, color: '#6b7280', marginBottom: 4 }}>Expected answer / rubric</div>
+                          <textarea
+                            value={q.modelAnswer || ''}
+                            onChange={e => updateCombined(q, 'modelAnswer', e.target.value)}
+                            rows={2}
+                            placeholder="Describe what a good answer looks like. The AI will score the candidate against this."
+                            style={{ width: '100%', fontSize: 12, color: '#374151', padding: '7px 10px', border: '1px solid #dbeafe', borderRadius: 6, outline: 'none', fontFamily: 'inherit', resize: 'vertical', background: 'var(--surface)', lineHeight: 1.6 }} />
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+                <div style={{ marginTop: 8, fontSize: 12, color: 'var(--gray-400)' }}>
+                  Everything you pick collects here in order — this is exactly what the candidate will be asked.
+                </div>
+              </div>
+            ) : (
+              <div style={{ marginTop: 20, padding: '16px', background: 'var(--gray-50)', border: '1px dashed var(--gray-300)', borderRadius: 8, fontSize: 13, color: 'var(--gray-500)', textAlign: 'center' }}>
+                No questions yet — pick from the bank, generate with AI, or write your own above. They collect into one interview set here.
+              </div>
             )}
           </div>
 
           {/* Section 3 */}
           <div style={cardStyle}>
             <SectionTitle number={3} title="Generate & Send" />
+            {/* Explain why the button is disabled so a built question set isn't a dead end. */}
+            {(!jobId || !candidateId) ? (
+              <div style={{ marginBottom: 14, padding: '10px 14px', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, fontSize: 13, color: '#92400e', display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ fontSize: 15 }}>⚠</span>
+                <span>
+                  {!jobId
+                    ? 'Pick a job opening in step 1 to generate the link.'
+                    : 'Pick a candidate in step 1 — the interview link is personalised to them.'}
+                  {filledCount > 0 && <> Your <strong>{filledCount}</strong> selected question{filledCount !== 1 ? 's are' : ' is'} saved and ready.</>}
+                </span>
+              </div>
+            ) : filledCount === 0 ? (
+              <div style={{ marginBottom: 14, padding: '10px 14px', background: 'var(--tint-info)', border: '1px solid #bfdbfe', borderRadius: 8, fontSize: 13, color: '#1e40af' }}>
+                No questions picked — the AI will ask its own questions live. Or select some in step 2 to control the interview.
+              </div>
+            ) : (
+              <div style={{ marginBottom: 14, fontSize: 13, color: 'var(--gray-600)' }}>
+                Ready — <strong style={{ color: 'var(--gray-800)' }}>{filledCount}</strong> question{filledCount !== 1 ? 's' : ''} for <strong style={{ color: 'var(--gray-800)' }}>{candidateName}</strong>.
+              </div>
+            )}
             <button
               className="btn btn-primary"
               onClick={generateLink}
@@ -513,12 +714,11 @@ export default function LiveInterview() {
 
 // ── BankPicker ────────────────────────────────────────────────────────────────
 
-function BankPicker({ onSelect, selected, onUpdate, onRemove, onReorder, onAdd }) {
+function BankPicker({ onSelect, selected }) {
   const [bank, setBank]         = useState([]);
   const [loading, setLoading]   = useState(true);
   const [search, setSearch]     = useState('');
   const [catFilter, setCatFilter] = useState('all');
-  const [checked, setChecked]   = useState({});
 
   useEffect(() => { loadBank(); }, []);
 
@@ -539,29 +739,30 @@ function BankPicker({ onSelect, selected, onUpdate, onRemove, onReorder, onAdd }
     return matchCat && matchSearch;
   });
 
-  function toggle(id, bankRow) {
-    const next = { ...checked, [id]: !checked[id] };
-    setChecked(next);
-    const newSel = bank
-      .filter(b => next[b.id])
-      .map(b => ({ id: _nextId++, text: b.question, category: b.category, selected: true, modelAnswer: b.modelAnswer || '' }));
-    onSelect(newSel);
+  // Fully controlled by the parent's interview set: a row is "checked" iff it's
+  // already in the set (matched by bankId). No internal selection state — so
+  // removing a question from the single "Interview set" list also unchecks it here.
+  const checkedIds = new Set(selected.filter(s => s.bankId != null).map(s => s.bankId));
+  const mk = b => ({ id: _nextId++, bankId: b.id, text: b.question, category: b.category, selected: true, modelAnswer: b.modelAnswer || '' });
+
+  function toggle(b) {
+    if (checkedIds.has(b.id)) onSelect(selected.filter(s => s.bankId !== b.id));
+    else onSelect([...selected, mk(b)]);
   }
 
-  const allVis = visible.length > 0 && visible.every(b => checked[b.id]);
+  const allVis = visible.length > 0 && visible.every(b => checkedIds.has(b.id));
 
   function toggleAll() {
-    const next = { ...checked };
-    const val = !allVis;
-    visible.forEach(b => { next[b.id] = val; });
-    setChecked(next);
-    const newSel = bank
-      .filter(b => next[b.id])
-      .map(b => ({ id: _nextId++, text: b.question, category: b.category, selected: true, modelAnswer: b.modelAnswer || '' }));
-    onSelect(newSel);
+    if (allVis) {
+      const visIds = new Set(visible.map(b => b.id));
+      onSelect(selected.filter(s => !visIds.has(s.bankId)));
+    } else {
+      const additions = visible.filter(b => !checkedIds.has(b.id)).map(mk);
+      onSelect([...selected, ...additions]);
+    }
   }
 
-  const selectedCount = Object.values(checked).filter(Boolean).length;
+  const selectedCount = checkedIds.size;
 
   return (
     <div>
@@ -579,7 +780,7 @@ function BankPicker({ onSelect, selected, onUpdate, onRemove, onReorder, onAdd }
               style={{
                 padding: '5px 12px', borderRadius: 20, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit',
                 border: `1px solid ${catFilter === c ? (CAT_COLOR[c] || '#2563eb') : 'var(--gray-200)'}`,
-                background: catFilter === c ? (CAT_BG[c] || '#eff6ff') : '#fff',
+                background: catFilter === c ? (CAT_BG[c] || 'var(--tint-info)') : 'var(--surface)',
                 color: catFilter === c ? (CAT_COLOR[c] || '#2563eb') : 'var(--gray-500)',
               }}
             >
@@ -616,13 +817,13 @@ function BankPicker({ onSelect, selected, onUpdate, onRemove, onReorder, onAdd }
                 style={{
                   display: 'grid', gridTemplateColumns: '40px 1fr 110px',
                   borderBottom: i < visible.length - 1 ? '1px solid var(--gray-100)' : 'none',
-                  background: checked[b.id] ? '#f8faff' : '#fff',
+                  background: checkedIds.has(b.id) ? 'var(--tint-info)' : 'var(--surface)',
                   cursor: 'pointer',
                 }}
-                onClick={() => toggle(b.id, b)}
+                onClick={() => toggle(b)}
               >
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <input type="checkbox" checked={!!checked[b.id]} onChange={() => toggle(b.id, b)} onClick={e => e.stopPropagation()} style={{ cursor: 'pointer' }} />
+                  <input type="checkbox" checked={checkedIds.has(b.id)} onChange={() => toggle(b)} onClick={e => e.stopPropagation()} style={{ cursor: 'pointer' }} />
                 </div>
                 <div style={{ padding: '10px 12px', fontSize: 13, color: 'var(--gray-900)', lineHeight: 1.5 }}>{b.question}</div>
                 <div style={{ display: 'flex', alignItems: 'center', padding: '10px 8px' }}>
@@ -633,17 +834,12 @@ function BankPicker({ onSelect, selected, onUpdate, onRemove, onReorder, onAdd }
               </div>
             ))}
           </div>
+          {selectedCount > 0 && (
+            <div style={{ fontSize: 12, color: 'var(--gray-400)' }}>
+              {selectedCount} added to the interview set below.
+            </div>
+          )}
         </>
-      )}
-
-      {/* Selected questions edit list */}
-      {selected.length > 0 && (
-        <div style={{ marginTop: 16 }}>
-          <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--gray-500)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-            Selected — drag to reorder or edit before sending
-          </div>
-          <QuestionList qs={selected} onAdd={onAdd} onRemove={onRemove} onUpdate={onUpdate} onReorder={onReorder} />
-        </div>
       )}
     </div>
   );
@@ -724,7 +920,7 @@ function CandidatePrepTab({ showToast, jobs, selectedJob, onUseForInterview }) {
                 <div
                   style={{
                     display: 'flex', alignItems: 'center', gap: 12, padding: '14px 18px',
-                    background: isExpanded ? '#f8faff' : '#fff', cursor: 'pointer',
+                    background: isExpanded ? 'var(--tint-info)' : 'var(--surface)', cursor: 'pointer',
                     borderBottom: isExpanded ? '1px solid var(--gray-200)' : 'none',
                   }}
                   onClick={() => setExpanded(isExpanded ? null : row.candidate_id)}
@@ -756,7 +952,7 @@ function CandidatePrepTab({ showToast, jobs, selectedJob, onUseForInterview }) {
                 </div>
 
                 {isExpanded && (
-                  <div style={{ padding: '14px 18px', background: '#fff' }}>
+                  <div style={{ padding: '14px 18px', background: 'var(--surface)' }}>
                     {qs.length > 0 ? (
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                         {qs.map((q, i) => (
@@ -898,7 +1094,7 @@ function QuestionBankTab({ showToast }) {
 
       {/* Add / Edit form */}
       {(adding || editing !== null) && (
-        <div style={{ marginBottom: 16, padding: '16px 20px', background: '#f8faff', border: '1.5px solid #bfdbfe', borderRadius: 10 }}>
+        <div style={{ marginBottom: 16, padding: '16px 20px', background: 'var(--tint-info)', border: '1.5px solid #bfdbfe', borderRadius: 10 }}>
           <div style={{ fontSize: 13, fontWeight: 700, color: '#1e40af', marginBottom: 12 }}>{adding ? 'Add New Question' : 'Edit Question'}</div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 140px 200px', gap: 12, marginBottom: 12 }}>
             <div className="form-group" style={{ marginBottom: 0 }}>
@@ -955,7 +1151,7 @@ function QuestionBankTab({ showToast }) {
             style={{
               padding: '5px 12px', borderRadius: 20, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit',
               border: `1px solid ${catFilter === c ? (CAT_COLOR[c] || '#2563eb') : 'var(--gray-200)'}`,
-              background: catFilter === c ? (CAT_BG[c] || '#eff6ff') : '#fff',
+              background: catFilter === c ? (CAT_BG[c] || 'var(--tint-info)') : 'var(--surface)',
               color: catFilter === c ? (CAT_COLOR[c] || '#2563eb') : 'var(--gray-500)',
             }}
           >
@@ -995,7 +1191,7 @@ function QuestionBankTab({ showToast }) {
                 display: 'grid', gridTemplateColumns: '1fr 120px 180px 80px 80px',
                 borderBottom: i < visible.length - 1 ? '1px solid var(--gray-100)' : 'none',
                 padding: '11px 14px', alignItems: 'center',
-                background: editing === r.id ? '#f8faff' : '#fff',
+                background: editing === r.id ? 'var(--tint-info)' : 'var(--surface)',
               }}
             >
               <div style={{ fontSize: 13, color: 'var(--gray-900)', lineHeight: 1.4, paddingRight: 12 }}>{r.question}</div>
@@ -1028,7 +1224,7 @@ function QuestionBankTab({ showToast }) {
 // ── Shared components ─────────────────────────────────────────────────────────
 
 const cardStyle = {
-  background: '#fff',
+  background: 'var(--surface)',
   border: '1px solid var(--gray-200)',
   borderRadius: 'var(--radius)',
   padding: '24px 28px',
@@ -1074,7 +1270,7 @@ function QuestionList({ qs, onAdd, onRemove, onUpdate, onReorder }) {
             key={q.id}
             style={{
               borderBottom: i < qs.length - 1 ? '1px solid var(--gray-100)' : 'none',
-              background: q.selected ? '#fff' : 'var(--gray-50)',
+              background: q.selected ? 'var(--surface)' : 'var(--gray-50)',
               opacity: q.selected ? 1 : 0.55,
               transition: 'opacity 0.15s, background 0.15s',
             }}
@@ -1153,7 +1349,7 @@ function QuestionList({ qs, onAdd, onRemove, onUpdate, onReorder }) {
               >×</button>
             </div>
             {q.showRubric && (
-              <div style={{ padding: '8px 12px 10px 108px', borderTop: '1px solid #dbeafe', background: '#f8faff' }}>
+              <div style={{ padding: '8px 12px 10px 108px', borderTop: '1px solid #dbeafe', background: 'var(--tint-info)' }}>
                 <div style={{ fontSize: 11, fontWeight: 600, color: '#6b7280', marginBottom: 4 }}>Expected answer / rubric</div>
                 <textarea
                   placeholder="Describe what a good answer looks like. The AI will score the candidate against this."
@@ -1163,7 +1359,7 @@ function QuestionList({ qs, onAdd, onRemove, onUpdate, onReorder }) {
                   style={{
                     width: '100%', fontSize: 12, color: '#374151', padding: '7px 10px',
                     border: '1px solid #dbeafe', borderRadius: 6, outline: 'none',
-                    fontFamily: 'inherit', resize: 'vertical', background: '#fff', lineHeight: 1.6,
+                    fontFamily: 'inherit', resize: 'vertical', background: 'var(--surface)', lineHeight: 1.6,
                   }}
                 />
               </div>
@@ -1173,7 +1369,7 @@ function QuestionList({ qs, onAdd, onRemove, onUpdate, onReorder }) {
       </div>
       <button
         onClick={onAdd}
-        style={{ width: '100%', padding: '8px', fontSize: 13, color: '#2563eb', background: '#fff', border: '1px dashed #bfdbfe', borderRadius: 6, cursor: 'pointer', fontFamily: 'inherit' }}
+        style={{ width: '100%', padding: '8px', fontSize: 13, color: '#2563eb', background: 'var(--surface)', border: '1px dashed #bfdbfe', borderRadius: 6, cursor: 'pointer', fontFamily: 'inherit' }}
       >
         + Add question
       </button>

@@ -63,3 +63,46 @@ export async function updateUser(payload) {
   if (!r.ok) throw new Error(j.error || 'Failed to update user');
   return j.user;
 }
+
+export async function changePassword(currentPassword, newPassword) {
+  const r = await fetch('/auth/change-password', {
+    method: 'POST', headers: authHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
+  });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(j.error || 'Failed to change password');
+  return j;
+}
+
+// ── Email templates (admin-editable) ──────────────────────────────────────
+export async function listEmailTemplates() {
+  const r = await fetch('/auth/email-templates', { headers: authHeaders() });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(j.error || 'Failed to load templates');
+  return j.templates || {};
+}
+export async function saveEmailTemplate(template_key, subject, body) {
+  const r = await fetch('/auth/email-templates', {
+    method: 'POST', headers: authHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ template_key, subject, body }),
+  });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(j.error || 'Failed to save template');
+  return j;
+}
+
+// ── Audit log ─────────────────────────────────────────────────────────────
+export async function logAudit(action, entity_type, entity_id, detail) {
+  try {
+    await fetch('/auth/audit', {
+      method: 'POST', headers: authHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ action, entity_type, entity_id, detail }),
+    });
+  } catch { /* never block the UI on audit */ }
+}
+export async function listAudit(limit = 200) {
+  const r = await fetch(`/auth/audit?limit=${limit}`, { headers: authHeaders() });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(j.error || 'Failed to load audit log');
+  return j.events || [];
+}

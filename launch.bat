@@ -1,10 +1,13 @@
 @echo off
-REM Diyar HR Automation - one-click launcher
+REM Diyar HR - one-click launcher
 REM Double-click this file (or pin to taskbar) to bring up everything:
 REM   Docker Desktop -> hr-postgres -> Ollama -> Python sidecars (SMTP/IMAP/recording/Auth) -> n8n -> React frontend
 REM The Auth sidecar (port 8904) powers app login + RBAC; start.sh installs its
 REM one dependency (psycopg2) automatically on first run.
 REM Then opens http://localhost:3001 in your default browser (login required).
+REM
+REM New here? Read HOW-IT-WORKS.md (repo root) for how the whole system fits
+REM together, and CLAUDE.md for the authoritative source of truth + change log.
 
 cd /d "%~dp0"
 

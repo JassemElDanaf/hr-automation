@@ -1,4 +1,4 @@
-# Diyar HR Automation — System Summary & Flow
+# Diyar HR — System Summary & Flow
 
 A one-page description of the whole product, written so you can paste it into
 Claude / ChatGPT (or an image model) to generate a flow diagram. The last
@@ -8,7 +8,7 @@ section is a ready-to-use **image-generation prompt**.
 
 ## 1. What it is (one line)
 
-**Diyar HR Automation** is a **fully local, AI-assisted hiring pipeline**: an HR
+**Diyar HR** is a **fully local, AI-assisted hiring pipeline**: an HR
 user drives the whole process from one web app — post a job, let AI screen the
 CVs, shortlist, have candidates self-interview with an AI interviewer, then
 combine both signals to make the final hire decision. Nothing runs in the cloud;
@@ -122,7 +122,7 @@ flowchart TD
 
 ## 9. 📋 IMAGE-GENERATION PROMPT (copy-paste this)
 
-> Create a clean, modern **horizontal flowchart** titled **"Diyar HR Automation — Hiring Flow"** in a corporate style with a primary blue (#2563eb) accent on a light background.
+> Create a clean, modern **horizontal flowchart** titled **"Diyar HR — Hiring Flow"** in a corporate style with a primary blue (#2563eb) accent on a light background.
 >
 > Show a **left-to-right pipeline of 5 main stages** as rounded rectangles connected by arrows:
 > **1) Job Openings** → **2) CV Evaluation** → **3) Shortlist** → **4) Interview** → **5) Decision**, ending in two outcome chips: **Hired** (green) and **Rejected** (red).

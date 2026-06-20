@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tiny IMAP poll sidecar for Diyar HR Automation — twin of smtp_server.py.
+"""Tiny IMAP poll sidecar for Diyar HR — twin of smtp_server.py.
 
 Pulls UNSEEN messages from a configured IMAP mailbox every IMAP_POLL_SEC seconds,
 parses each, and POSTs to n8n's `/inbound-email` webhook so the row lands in

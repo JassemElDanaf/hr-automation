@@ -1,5 +1,5 @@
 #!/bin/bash
-# HR Automation — Start All Services
+# Diyar HR — Start All Services
 # Usage: ./start.sh [--no-open]
 
 export PATH="/d/NodeJS:/c/Users/Jasse/AppData/Roaming/npm:/d/n8n/node_modules/.bin:$PATH"
@@ -20,7 +20,7 @@ if [ -f "$SCRIPT_DIR/.env" ]; then
   echo "  Loaded .env"
 fi
 
-echo "Starting HR Automation services..."
+echo "Starting Diyar HR services..."
 
 # ── 1. Docker Desktop + PostgreSQL ───────────────────────────────────────────
 echo "[1/6] Docker + PostgreSQL..."
@@ -58,10 +58,17 @@ if curl -s http://localhost:11434/api/tags > /dev/null 2>&1; then
   echo "  Ollama already running."
 else
   /d/ollama/program/ollama.exe serve > /dev/null 2>&1 &
-  sleep 3
+  # Cold-starting the 40MB exe + scanning /d/ollama models takes >3s here, so a
+  # single fixed-sleep check fired before the port was bound and false-reported
+  # "failed" (same trap as the old n8n bug). Poll instead — up to ~30s.
+  otries=0
+  until curl -s http://localhost:11434/api/tags > /dev/null 2>&1; do
+    sleep 2; otries=$((otries+1))
+    [ $otries -gt 15 ] && break
+  done
   curl -s http://localhost:11434/api/tags > /dev/null 2>&1 \
     && echo "  Ollama started." \
-    || echo "  WARNING: Ollama failed to start."
+    || echo "  WARNING: Ollama failed to start (port 11434 not responding after 30s)."
 fi
 
 # ── 3. Python sidecars ───────────────────────────────────────────────────────
@@ -171,7 +178,7 @@ fi
 
 echo ""
 echo "═══════════════════════════════════════════"
-echo "  HR Automation ready!"
+echo "  Diyar HR ready!"
 echo "  App:       http://localhost:3001  (login required)"
 echo "  n8n:       http://localhost:5678"
 echo "  Ollama:    http://localhost:11434"

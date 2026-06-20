@@ -1,9 +1,11 @@
 import { useState, useEffect, useRef } from 'react';
 import { apiGet, apiPost } from '../services/api';
 import { useUI } from '../state/uiState';
+import { useEvalStatus } from '../state/evalStatus';
 import { useSelectedJob } from '../state/selectedJob';
 import { sendEmailRequest, getEmailStatus } from '../services/email';
 import { buildInterviewReportPdf } from '../utils/pdfReport';
+import { scoreColor } from '../utils/helpers';
 
 function looksLikeEmail(s) { return typeof s === 'string' && /@/.test(s) && /\./.test(s.split('@').pop() || ''); }
 
@@ -144,6 +146,7 @@ function RecoPill({ text }) {
 // live as the "Results" sub-tab inside the Interview page.
 export default function AIInterviews({ embedded = false }) {
   const { showToast, openEmailComposer } = useUI();
+  const { runAiTask } = useEvalStatus();
   const { selectedJob } = useSelectedJob();
   const [jobs, setJobs]                   = useState([]);
   const [jobId, setJobId]                 = useState('');
@@ -156,6 +159,7 @@ export default function AIInterviews({ embedded = false }) {
   const [reEvaluating, setReEvaluating]   = useState({});
   const [mediaPanel, setMediaPanel]       = useState({}); // id → { recording: bool, cv: bool, cvUrl, cvLoading }
   const [search, setSearch]               = useState('');
+  const [sortBy, setSortBy]               = useState('date'); // date | score | name
   const [manualEditing, setManualEditing] = useState({}); // sessionId → { comm, tech, conf, culture, overall, recommendation, summary }
   const [showTeamsImport, setShowTeamsImport] = useState(false);
   const pollingRef = useRef(null);
@@ -233,7 +237,8 @@ export default function AIInterviews({ embedded = false }) {
     try {
       const qaPairs = parseJSON(s.qaPairs);
       const base = { jobId: s.jobOpeningId, evaluationId: s.evaluationId, candidateId: s.candidateId, candidateName: s.candidateName, transcript: qaPairs, durationSeconds: s.durationSeconds };
-      const evalRes = await apiPost('/interview/evaluate', base);
+      const evalRes = await runAiTask('Re-scoring interview…', () => apiPost('/interview/evaluate', base),
+        { to: '/live-interview?tab=results', hint: s.candidateName ? `Back to ${s.candidateName}'s results` : 'Back to Interview Results' });
       const scores = evalRes.data || evalRes;
       await apiPost('/interview/save-transcript', { ...base, scores, recordingPath: s.recordingPath || '', requirementsMatch: parseJSON(s.requirementsMatch) });
       showToast('Evaluation complete', 'success');
@@ -361,7 +366,7 @@ HR Department`;
       )}
 
       {/* Job selector */}
-      <div style={{ background: '#fff', border: '1px solid var(--gray-200)', borderRadius: 'var(--radius)', padding: '20px 24px', marginBottom: 24, display: 'flex', gap: 16, alignItems: 'flex-end', maxWidth: 640 }}>
+      <div style={{ background: 'var(--surface)', border: '1px solid var(--gray-200)', borderRadius: 'var(--radius)', padding: '20px 24px', marginBottom: 24, display: 'flex', gap: 16, alignItems: 'flex-end', maxWidth: 640 }}>
         <div className="form-group" style={{ marginBottom: 0, flex: 1, maxWidth: 360 }}>
           <label>Job Opening</label>
           <select value={jobId} onChange={e => handleJobChange(e.target.value)} disabled={loadingJobs}>
@@ -399,13 +404,26 @@ HR Department`;
               AI evaluation in progress — refreshing automatically…
             </div>
           )}
-          <input
-            type="text"
-            placeholder="Search by name or email…"
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            style={{ width: '100%', padding: '9px 14px', border: '1px solid var(--gray-200)', borderRadius: 'var(--radius)', fontSize: 13, marginBottom: 16, fontFamily: 'inherit', outline: 'none' }}
-          />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
+            <span style={{ fontSize: 12.5, color: 'var(--gray-500)', whiteSpace: 'nowrap' }}>Search by</span>
+            <input
+              type="text"
+              placeholder="Name or email…"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              style={{ width: 240, padding: '9px 14px', border: '1px solid var(--gray-200)', borderRadius: 'var(--radius)', fontSize: 13, fontFamily: 'inherit', outline: 'none' }}
+            />
+            <span style={{ marginLeft: 'auto', fontSize: 12.5, color: 'var(--gray-500)', whiteSpace: 'nowrap' }}>Sort by</span>
+            <select
+              value={sortBy}
+              onChange={e => setSortBy(e.target.value)}
+              style={{ width: 160, flexShrink: 0, padding: '9px 12px', border: '1px solid var(--gray-200)', borderRadius: 'var(--radius)', fontSize: 13, fontFamily: 'inherit', outline: 'none', background: 'var(--surface)', cursor: 'pointer' }}
+            >
+              <option value="date">Most recent</option>
+              <option value="score">Highest score</option>
+              <option value="name">Name (A–Z)</option>
+            </select>
+          </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             {(() => {
               const filtered = sessions.filter(s => {
@@ -413,7 +431,12 @@ HR Department`;
                 const q = search.toLowerCase();
                 return (s.candidateName || '').toLowerCase().includes(q) || (s.candidateEmail || '').toLowerCase().includes(q);
               });
-              return filtered;
+              const sorted = [...filtered].sort((a, b) => {
+                if (sortBy === 'score') return (parseFloat(b.scoreOverall) || 0) - (parseFloat(a.scoreOverall) || 0);
+                if (sortBy === 'name') return (a.candidateName || '').localeCompare(b.candidateName || '');
+                return new Date(b.completedAt || 0) - new Date(a.completedAt || 0); // date (most recent)
+              });
+              return sorted;
             })().map(s => {
               const pending    = isPending(s);
               const isOpen     = !pending && expandedId === s.id;
@@ -425,93 +448,98 @@ HR Department`;
               const recUrl     = hasRec ? `${RECORDING_SERVER}/recording/${s.recordingPath}` : null;
 
               return (
-                <div key={s.id} style={{ background: '#fff', border: '1px solid var(--gray-200)', borderRadius: 'var(--radius)', overflow: 'hidden' }}>
-
-                  {/* ── Summary row ── */}
-                  <div
-                    onClick={() => !pending && setExpandedId(isOpen ? null : s.id)}
-                    style={{ display: 'grid', gridTemplateColumns: pending ? '1fr auto' : `1fr ${hasRec ? '28px ' : ''}100px 100px 90px 90px 90px 120px 36px`, alignItems: 'center', gap: 12, padding: '16px 20px', cursor: pending ? 'default' : 'pointer', userSelect: 'none' }}
-                  >
-                    <div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <span style={{ fontWeight: 700, fontSize: 15, color: 'var(--gray-900)' }}>{s.candidateName || s.candidateEmail}</span>
-                        {hasRec && <span title="Recording available" style={{ fontSize: 11, color: '#7c3aed' }}>🎥</span>}
+                <div key={s.id} style={{
+                  background: 'var(--surface)', border: `1px solid ${isOpen ? '#bfdbfe' : 'var(--gray-200)'}`,
+                  borderRadius: 12, overflow: 'hidden',
+                  boxShadow: isOpen ? '0 4px 16px rgba(37,99,235,0.08)' : '0 1px 2px rgba(0,0,0,0.04)',
+                  transition: 'border-color 0.15s, box-shadow 0.15s',
+                }}>
+                  {/* Header row (Decision-style) */}
+                  <div onClick={() => !pending && setExpandedId(isOpen ? null : s.id)} style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '14px 18px', cursor: pending ? 'default' : 'pointer', flexWrap: 'wrap' }}>
+                    <div style={{ flex: 1, minWidth: 180 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                        <strong style={{ fontSize: 15, color: 'var(--gray-900)' }}>{s.candidateName || s.candidateEmail}</strong>
+                        {hasRec && <span title="Recording available" style={{ fontSize: 12, color: '#7c3aed' }}>🎥</span>}
+                        {!pending && <RecoPill text={s.recommendation} />}
                       </div>
-                      <div style={{ fontSize: 12, color: 'var(--gray-500)', marginTop: 2 }}>
-                        {s.candidateName && s.candidateEmail ? s.candidateEmail : ''}{s.completedAt ? ` · ${formatDate(s.completedAt)}` : ''}
+                      <div style={{ fontSize: 12, color: 'var(--gray-400)', marginTop: 2 }}>
+                        {s.candidateName && s.candidateEmail ? `${s.candidateEmail} · ` : ''}{s.completedAt ? formatDate(s.completedAt) : ''}{!pending ? ` · ⏱ ${formatDuration(s.durationSeconds)}` : ''}
                       </div>
                     </div>
 
                     {pending ? (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 220, justifyContent: 'flex-end' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 200, justifyContent: 'flex-end' }}>
                         {reEvaluating[s.id] || polling ? (
                           <div style={{ display: 'flex', flexDirection: 'column', gap: 5, minWidth: 160 }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                               <div style={{ width: 7, height: 7, borderRadius: '50%', background: '#f59e0b', animation: 'pulse 1.5s ease-in-out infinite' }} />
                               <span style={{ fontSize: 12, color: '#b45309', fontWeight: 600 }}>AI evaluating…</span>
                             </div>
-                            {/* indeterminate progress bar */}
                             <div style={{ height: 5, width: '100%', background: '#fef3c7', borderRadius: 3, overflow: 'hidden' }}>
                               <div style={{ height: '100%', width: '40%', background: '#f59e0b', borderRadius: 3, animation: 'indeterminate 1.2s ease-in-out infinite' }} />
                             </div>
                           </div>
                         ) : (
                           <button onClick={e => { e.stopPropagation(); reEvaluate(s); }}
-                            style={{ fontSize: 12, padding: '5px 12px', borderRadius: 6, border: '1px solid #d97706', background: '#fff', color: '#b45309', cursor: 'pointer', fontFamily: 'inherit', fontWeight: 600 }}>
+                            style={{ fontSize: 12, padding: '5px 12px', borderRadius: 6, border: '1px solid #d97706', background: 'var(--surface)', color: '#b45309', cursor: 'pointer', fontFamily: 'inherit', fontWeight: 600 }}>
                             ↻ Retry evaluation
                           </button>
                         )}
                       </div>
                     ) : (
                       <>
-                        <div style={{ fontSize: 12, color: 'var(--gray-500)' }}>⏱ {formatDuration(s.durationSeconds)}</div>
-                        {[
-                          { lbl: 'Communication', score: s.scoreComm,    color: '#2563eb' },
-                          { lbl: 'Technical',     score: s.scoreTech,    color: '#16a34a' },
-                          { lbl: 'Confidence',    score: s.scoreConf,    color: '#d97706' },
-                          { lbl: 'Overall',       score: s.scoreOverall, color: '#111827' },
-                        ].map(({ lbl, score, color }) => {
-                          const n = parseFloat(score);
-                          return (
-                            <div key={lbl} style={{ textAlign: 'center', padding: '0 4px' }}>
-                              <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--gray-400)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>{lbl}</div>
-                              <div style={{ fontWeight: 800, fontSize: lbl === 'Overall' ? 18 : 16, color }}>{isNaN(n) ? '—' : n.toFixed(1)}</div>
-                            </div>
-                          );
-                        })}
-                        <div><RecoPill text={s.recommendation} /></div>
-                        <div style={{ color: 'var(--gray-400)', fontSize: 16, textAlign: 'center', transition: 'transform 0.2s', transform: isOpen ? 'rotate(180deg)' : 'none' }}>▾</div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 18, flexShrink: 0 }}>
+                          {[
+                            { lbl: 'Comm', score: s.scoreComm },
+                            { lbl: 'Technical', score: s.scoreTech },
+                            { lbl: 'Confidence', score: s.scoreConf },
+                          ].map(({ lbl, score }) => {
+                            const n = parseFloat(score);
+                            return (
+                              <div key={lbl} style={{ textAlign: 'center', minWidth: 42 }}>
+                                <div style={{ fontWeight: 800, fontSize: 16, color: scoreColor(score) }}>{isNaN(n) ? '—' : n.toFixed(1)}</div>
+                                <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--gray-400)', textTransform: 'uppercase', letterSpacing: '0.05em', marginTop: 3 }}>{lbl}</div>
+                              </div>
+                            );
+                          })}
+                          <div style={{ textAlign: 'center', minWidth: 52, borderLeft: '1px solid var(--gray-200)', paddingLeft: 16 }}>
+                            {(() => { const n = parseFloat(s.scoreOverall); return <div style={{ fontSize: 23, fontWeight: 800, color: scoreColor(s.scoreOverall), lineHeight: 1 }}>{isNaN(n) ? '—' : n.toFixed(1)}</div>; })()}
+                            <div style={{ fontSize: 10, fontWeight: 700, color: '#2563eb', textTransform: 'uppercase', letterSpacing: '0.05em', marginTop: 3 }}>Overall</div>
+                          </div>
+                        </div>
+                        <span style={{ color: 'var(--gray-400)', fontSize: 13, flexShrink: 0, transition: 'transform 0.25s ease', transform: isOpen ? 'rotate(180deg)' : 'none' }}>▾</span>
                       </>
                     )}
                   </div>
 
-                  {/* ── Expanded detail ── */}
-                  {isOpen && (
+                  {/* ── Expanded detail (smooth grid-rows expand) ── */}
+                  <div style={{ display: 'grid', gridTemplateRows: isOpen ? '1fr' : '0fr', transition: 'grid-template-rows 0.28s ease' }}>
+                    <div style={{ overflow: 'hidden' }}>
                     <div style={{ borderTop: '1px solid var(--gray-100)' }}>
 
                       {/* Media + share toolbar */}
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '12px 20px', borderBottom: '1px solid var(--gray-100)', background: '#fafafa', flexWrap: 'wrap' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '12px 20px', borderBottom: '1px solid var(--gray-100)', background: 'var(--surface-2)', flexWrap: 'wrap' }}>
                         {/* Left — media. Only render what's actually attached (no dead buttons). */}
                         {hasRec && (
                           <>
                             <button onClick={() => toggleRecording(s.id)}
-                              style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 600, padding: '7px 14px', borderRadius: 7, border: `1.5px solid ${mp.recording ? '#7c3aed' : 'var(--gray-300)'}`, background: mp.recording ? '#f5f3ff' : '#fff', color: mp.recording ? '#7c3aed' : 'var(--gray-700)', cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.15s' }}>
+                              style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 600, padding: '7px 14px', borderRadius: 7, border: `1.5px solid ${mp.recording ? '#7c3aed' : 'var(--gray-300)'}`, background: mp.recording ? 'rgba(124,58,237,0.16)' : 'var(--surface)', color: mp.recording ? '#a684f5' : 'var(--gray-700)', cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.15s' }}>
                               🎥 {mp.recording ? 'Hide Recording' : 'Watch Recording'}
                             </button>
                             <a href={recUrl} download={s.recordingPath}
-                              style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 600, padding: '7px 14px', borderRadius: 7, border: '1.5px solid var(--gray-300)', background: '#fff', color: 'var(--gray-700)', textDecoration: 'none', fontFamily: 'inherit' }}>
+                              style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 600, padding: '7px 14px', borderRadius: 7, border: '1.5px solid var(--gray-300)', background: 'var(--surface)', color: 'var(--gray-700)', textDecoration: 'none', fontFamily: 'inherit' }}>
                               ⬇ Download
                             </a>
                           </>
                         )}
                         {s.hasCv && (
                           <button onClick={() => toggleCV(s)}
-                            style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 600, padding: '7px 14px', borderRadius: 7, border: `1.5px solid ${mp.cv ? '#2563eb' : 'var(--gray-300)'}`, background: mp.cv ? '#eff6ff' : '#fff', color: mp.cv ? '#2563eb' : 'var(--gray-700)', cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.15s' }}>
+                            style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 600, padding: '7px 14px', borderRadius: 7, border: `1.5px solid ${mp.cv ? '#2563eb' : 'var(--gray-300)'}`, background: mp.cv ? 'var(--tint-info)' : 'var(--surface)', color: mp.cv ? 'var(--primary)' : 'var(--gray-700)', cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.15s' }}>
                             📄 {mp.cvLoading ? 'Loading CV…' : mp.cv ? 'Hide CV' : 'View CV'}
                           </button>
                         )}
                         {!hasRec && !s.hasCv && (
-                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7, fontSize: 12.5, color: 'var(--gray-400)', background: '#fff', border: '1px dashed var(--gray-200)', borderRadius: 7, padding: '6px 12px' }}>
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7, fontSize: 12.5, color: 'var(--gray-400)', background: 'var(--surface)', border: '1px dashed var(--gray-200)', borderRadius: 7, padding: '6px 12px' }}>
                             <span style={{ fontSize: 14, opacity: 0.7 }}>🎬</span> No recording or CV attached
                           </span>
                         )}
@@ -520,7 +548,7 @@ HR Department`;
                             attachments) lives in the Decision tab, not here — Results is HR-level review. */}
                         <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
                           <button onClick={() => { setExpandedId(s.id); setTimeout(() => window.print(), 100); }}
-                            style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 600, padding: '7px 16px', borderRadius: 7, border: '1.5px solid var(--gray-300)', background: '#fff', color: 'var(--gray-700)', cursor: 'pointer', fontFamily: 'inherit' }}>
+                            style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 600, padding: '7px 16px', borderRadius: 7, border: '1.5px solid var(--gray-300)', background: 'var(--surface)', color: 'var(--gray-700)', cursor: 'pointer', fontFamily: 'inherit' }}>
                             🖨 Export PDF
                           </button>
                         </div>
@@ -548,11 +576,11 @@ HR Department`;
                         </div>
                       )}
 
-                      <div style={{ padding: '20px 24px', background: '#fafafa' }}>
+                      <div style={{ padding: '20px 24px', background: 'var(--surface-2)' }}>
 
                         {/* Requirements check */}
                         {reqs.length > 0 && (
-                          <div style={{ marginBottom: 20, background: '#fff', border: '1px solid var(--gray-200)', borderRadius: 8, overflow: 'hidden' }}>
+                          <div style={{ marginBottom: 20, background: 'var(--surface)', border: '1px solid var(--gray-200)', borderRadius: 8, overflow: 'hidden' }}>
                             <div style={{ padding: '10px 16px', borderBottom: '1px solid var(--gray-100)', display: 'flex', alignItems: 'center', gap: 8 }}>
                               <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--gray-700)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Requirements Check</span>
                               <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 99, background: reqs.every(r => r.met) ? '#dcfce7' : '#fee2e2', color: reqs.every(r => r.met) ? '#16a34a' : '#dc2626', fontWeight: 700 }}>
@@ -599,7 +627,7 @@ HR Department`;
                           <button
                             onClick={() => reEvaluate(s)}
                             disabled={reEvaluating[s.id]}
-                            style={{ fontSize: 12, padding: '5px 12px', borderRadius: 6, border: '1px solid #d97706', background: '#fff', color: '#b45309', cursor: reEvaluating[s.id] ? 'not-allowed' : 'pointer', fontFamily: 'inherit', fontWeight: 600 }}>
+                            style={{ fontSize: 12, padding: '5px 12px', borderRadius: 6, border: '1px solid #d97706', background: 'var(--surface)', color: '#b45309', cursor: reEvaluating[s.id] ? 'not-allowed' : 'pointer', fontFamily: 'inherit', fontWeight: 600 }}>
                             {reEvaluating[s.id] ? 'Evaluating…' : '↻ Re-evaluate with AI'}
                           </button>
                           {!manualEditing[s.id] && (
@@ -613,7 +641,7 @@ HR Department`;
                                 recommendation: s.recommendation || '',
                                 summary: s.summary || '',
                               }}))}
-                              style={{ fontSize: 12, fontWeight: 600, padding: '5px 14px', borderRadius: 6, border: '1px solid var(--gray-300)', background: '#fff', color: 'var(--gray-600)', cursor: 'pointer', fontFamily: 'inherit' }}
+                              style={{ fontSize: 12, fontWeight: 600, padding: '5px 14px', borderRadius: 6, border: '1px solid var(--gray-300)', background: 'var(--surface)', color: 'var(--gray-600)', cursor: 'pointer', fontFamily: 'inherit' }}
                             >
                               ✏️ Edit Evaluation Manually
                             </button>
@@ -661,7 +689,7 @@ HR Department`;
                               {qaPairs.map((pair, i) => {
                                 const pq = perQ.find(p => p.index === i + 1) || perQ[i] || {};
                                 return (
-                                  <div key={i} style={{ background: '#fff', border: '1px solid var(--gray-200)', borderRadius: 8, overflow: 'hidden' }}>
+                                  <div key={i} style={{ background: 'var(--surface)', border: '1px solid var(--gray-200)', borderRadius: 8, overflow: 'hidden' }}>
                                     <div style={{ padding: '10px 16px', borderBottom: '1px solid #f3f4f6', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
                                       <div style={{ flex: 1 }}>
                                         <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--gray-400)', textTransform: 'uppercase', letterSpacing: '0.08em', marginRight: 8 }}>Q{i + 1}</span>
@@ -671,7 +699,7 @@ HR Department`;
                                         <span style={{ fontSize: 12, fontWeight: 700, color: '#2563eb', whiteSpace: 'nowrap', paddingTop: 2 }}>{pq.score}/10</span>
                                       )}
                                     </div>
-                                    <div style={{ padding: '10px 16px', background: '#fafafa' }}>
+                                    <div style={{ padding: '10px 16px', background: 'var(--surface-2)' }}>
                                       <p style={{ fontSize: 13, color: '#374151', margin: 0, lineHeight: 1.65 }}>{pair.answer || <em style={{ color: 'var(--gray-400)' }}>No answer captured</em>}</p>
                                       {pq.feedback && (
                                         <p style={{ fontSize: 12, color: 'var(--gray-400)', margin: '7px 0 0', fontStyle: 'italic', lineHeight: 1.6 }}>
@@ -687,7 +715,8 @@ HR Department`;
                         )}
                       </div>
                     </div>
-                  )}
+                    </div>
+                  </div>
                 </div>
               );
             })}
@@ -821,7 +850,7 @@ function TeamsImportModal({ jobId, jobTitle, showToast, onClose, onImported }) {
                     style={{
                       padding: '6px 14px', borderRadius: 999, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit',
                       border: `1.5px solid ${candidateSpeaker === name ? '#2563eb' : 'var(--gray-300)'}`,
-                      background: candidateSpeaker === name ? '#2563eb' : '#fff',
+                      background: candidateSpeaker === name ? '#2563eb' : 'var(--surface)',
                       color: candidateSpeaker === name ? '#fff' : 'var(--gray-700)',
                     }}
                   >{name}</button>
@@ -861,7 +890,7 @@ function ManualEvalForm({ data, onChange, onCancel, onSave }) {
     </div>
   );
   return (
-    <div style={{ background: '#fff', border: '1.5px solid #2563eb', borderRadius: 8, padding: '16px 20px', marginBottom: 16 }}>
+    <div style={{ background: 'var(--surface)', border: '1.5px solid #2563eb', borderRadius: 8, padding: '16px 20px', marginBottom: 16 }}>
       <div style={{ fontSize: 12, fontWeight: 700, color: '#2563eb', marginBottom: 12, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Manual Evaluation</div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 12, marginBottom: 14 }}>
         {field('Communication', 'comm', '#2563eb')}
@@ -892,7 +921,7 @@ function ManualEvalForm({ data, onChange, onCancel, onSave }) {
           {saving ? 'Saving…' : 'Save'}
         </button>
         <button onClick={onCancel}
-          style={{ padding: '7px 16px', background: '#fff', color: 'var(--gray-600)', border: '1px solid var(--gray-200)', borderRadius: 6, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
+          style={{ padding: '7px 16px', background: 'var(--surface)', color: 'var(--gray-600)', border: '1px solid var(--gray-200)', borderRadius: 6, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
           Cancel
         </button>
       </div>

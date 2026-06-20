@@ -3,13 +3,14 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { apiGet, apiPost } from '../services/api';
 import { useSelectedJob } from '../state/selectedJob';
 import { useUI } from '../state/uiState';
-import StatCard from '../components/common/StatCard';
+import { useEvalStatus } from '../state/evalStatus';
 import Badge from '../components/common/Badge';
 import ScoreBadge from '../components/common/ScoreBadge';
 import EmptyState from '../components/common/EmptyState';
 import Loading from '../components/common/Loading';
+import Select from '../components/common/Select';
 import { sendEmailRequest, getInterviewTemplate, getOfferTemplate, getRejectionTemplate, getEmailStatus } from '../services/email';
-import { emailTypeLabel } from '../utils/helpers';
+import { emailTypeLabel, scoreColor } from '../utils/helpers';
 import EvalDetailModal from '../components/modals/EvalDetailModal';
 
 const HM_LS_KEY = 'hr_hiring_manager_emails';
@@ -44,7 +45,7 @@ function OverflowMenu({ items }) {
       <button className="btn btn-sm btn-ghost" title="More actions" onClick={() => setOpen(o => !o)}
         style={{ minWidth: 34, padding: '4px 10px', fontWeight: 800, fontSize: 17, lineHeight: 1, letterSpacing: '1px' }}>⋯</button>
       {open && (
-        <div role="menu" style={{ position: 'absolute', right: 0, top: 'calc(100% + 4px)', zIndex: 50, background: '#fff', border: '1px solid var(--gray-200)', borderRadius: 8, boxShadow: '0 8px 28px rgba(0,0,0,0.13)', minWidth: 168, overflow: 'hidden', padding: '4px 0' }}>
+        <div role="menu" style={{ position: 'absolute', right: 0, top: 'calc(100% + 4px)', zIndex: 50, background: 'var(--surface)', border: '1px solid var(--gray-200)', borderRadius: 8, boxShadow: '0 8px 28px rgba(0,0,0,0.13)', minWidth: 168, overflow: 'hidden', padding: '4px 0' }}>
           {items.map((it, i) => (
             <button key={i} role="menuitem" onClick={() => { setOpen(false); it.onClick(); }}
               style={{ display: 'block', width: '100%', textAlign: 'left', padding: '8px 14px', fontSize: 13, border: 'none', background: 'none', cursor: 'pointer', color: it.danger ? '#dc2626' : 'var(--gray-700)', fontFamily: 'inherit', fontWeight: 500 }}
@@ -59,12 +60,35 @@ function OverflowMenu({ items }) {
   );
 }
 
+const SL_CHIP = (bg, color) => ({ fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', padding: '3px 9px', borderRadius: 10, background: bg, color });
+
+// Compact score chip used inside the expanded detail (Decision-style).
+function SlChip({ value, label }) {
+  const v = value != null ? parseFloat(value) : null;
+  return (
+    <div style={{ flex: 1, textAlign: 'center', background: 'var(--gray-50)', borderRadius: 8, padding: '8px 6px' }}>
+      <div style={{ fontSize: 17, fontWeight: 800, color: scoreColor(v), lineHeight: 1 }}>{v != null ? v.toFixed(1) : '—'}</div>
+      <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--gray-400)', marginTop: 4 }}>{label}</div>
+    </div>
+  );
+}
+
+function SlCallout({ label, text, color }) {
+  return (
+    <div style={{ marginTop: 10, fontSize: 12.5, color: 'var(--gray-700)', lineHeight: 1.5 }}>
+      <strong style={{ color }}>{label}:</strong> {text}
+    </div>
+  );
+}
+
 export default function Shortlist() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const inviteHandledRef = useRef(false);
   const { selectedJob, setSelectedJob } = useSelectedJob();
   const { showToast, openEmailComposer } = useUI();
+  const { runAiTask } = useEvalStatus();
+  const autoEvalRef = useRef(new Set()); // session ids already auto-evaluated (no loops)
   const [jobs, setJobs] = useState([]);
   const [jobId, setJobId] = useState('');
   const [data, setData] = useState([]);
@@ -80,6 +104,8 @@ export default function Shortlist() {
   const [profileCandidate, setProfileCandidate] = useState(null); // candidate for detail modal
   const [transitioning, setTransitioning] = useState({}); // id -> true while animation plays
   const [retainedInView, setRetainedInView] = useState(new Set()); // keep card visible after state change
+  const [expanded, setExpanded] = useState(null); // shortlist row id of the expanded card (Decision-style)
+  const [slSort, setSlSort] = useState('recent'); // recent | score | name
 
   useEffect(() => { loadJobs(); }, []);
 
@@ -144,6 +170,10 @@ export default function Shortlist() {
       // "Mark Interviewed" button.
       const sessList = Array.isArray(sessRes) ? sessRes : (sessRes.data || []);
       const interviewedCands = new Set(sessList.map(s => s.candidateId));
+      // Auto-evaluate completed interviews that never got scored (e.g. the
+      // candidate closed their tab before the background eval finished). Runs
+      // HR-side where Ollama lives, so no manual "Re-evaluate" click is needed.
+      autoEvaluatePendingSessions(sessList);
       const bump = [];
       const rows = (slRes.data || []).map(r => {
         if (r.status === 'shortlisted' && interviewedCands.has(r.candidate_id)) {
@@ -168,6 +198,25 @@ export default function Shortlist() {
       setEmailMap(map);
     } catch (err) { showToast('Failed to load shortlist', 'error'); }
     finally { setLoading(false); }
+  }
+
+  // Score any completed-but-unscored interview sessions in the background.
+  function autoEvaluatePendingSessions(sessList) {
+    const parse = (v) => { try { return typeof v === 'string' ? JSON.parse(v) : (v || []); } catch { return []; } };
+    for (const s of sessList) {
+      const pending = !s.scoreOverall && !s.summary;
+      const qa = parse(s.qaPairs);
+      if (!pending || !Array.isArray(qa) || qa.length === 0) continue;
+      if (autoEvalRef.current.has(s.id)) continue;
+      autoEvalRef.current.add(s.id);
+      const base = { jobId: s.jobOpeningId, evaluationId: s.evaluationId, candidateId: s.candidateId, candidateName: s.candidateName, transcript: qa, durationSeconds: s.durationSeconds };
+      runAiTask(`Evaluating ${s.candidateName || 'interview'}…`, async () => {
+        const evalRes = await apiPost('/interview/evaluate', base);
+        const scores = evalRes.data || evalRes;
+        await apiPost('/interview/save-transcript', { ...base, scores, recordingPath: s.recordingPath || '', requirementsMatch: parse(s.requirementsMatch) });
+      }, { to: '/live-interview?tab=results', hint: s.candidateName ? `${s.candidateName}'s interview results` : 'Interview results' })
+        .catch(() => {});
+    }
   }
 
   async function updateStatus(id, status) {
@@ -227,9 +276,9 @@ export default function Shortlist() {
         const newEntry = { email_type: sendType, status: status || 'failed', sent_at: new Date().toISOString(), subject, body, recipient_email: to, error_message: errMsg, direction: 'outbound' };
         setEmailMap(prev => ({ ...prev, [candidateId]: [newEntry, ...(prev[candidateId] || [])] }));
         if (status === 'sent') showToast(`Email sent to ${to}`, 'success');
-        else if (status === 'logged') showToast('Email not sent \u2014 SMTP not configured. Email was saved to log only.', 'error');
+        else if (status === 'logged') showToast('Email not sent — SMTP not configured. Email was saved to log only.', 'error');
         else if (status === 'failed') showToast(`Email failed to send: ${errMsg || 'unknown error'}`, 'error');
-        else showToast('Email delivery uncertain \u2014 check Emails tab for status', 'error');
+        else showToast('Email delivery uncertain — check Emails tab for status', 'error');
       },
     });
   }
@@ -312,10 +361,22 @@ export default function Shortlist() {
 
   // Sort: most recently updated first
   const sortedData = [...data].sort((a, b) => {
+    if (slSort === 'score') return (parseFloat(b.overall_score) || -1) - (parseFloat(a.overall_score) || -1);
+    if (slSort === 'name') return (a.candidate_name || '').localeCompare(b.candidate_name || '');
     const dateA = new Date(a.updated_at || a.shortlisted_at || 0);
     const dateB = new Date(b.updated_at || b.shortlisted_at || 0);
-    return dateB - dateA;
+    return dateB - dateA; // most recent (default)
   });
+
+  // "Invited / awaiting interview" is a derived stage (no DB column): a candidate
+  // who has had an interview invite emailed but hasn't completed the AI interview
+  // yet (still 'shortlisted' — completing one auto-advances them to 'interviewed').
+  const invitedSet = new Set(
+    Object.entries(emailMap)
+      .filter(([, list]) => list.some(e => e.email_type === 'interview_invite' && e.status === 'sent'))
+      .map(([cid]) => Number(cid))
+  );
+  const isInvited = (s) => s.status === 'shortlisted' && invitedSet.has(Number(s.candidate_id));
 
   // Filter data
   const filteredData = sortedData.filter(s => {
@@ -323,46 +384,36 @@ export default function Shortlist() {
     const archived = isSlArchived(s.id);
     if (slFilter === 'all') return true;
     if (slFilter === 'archived') return archived;
-    if (slFilter === 'shortlisted') return !archived && s.status === 'shortlisted';
+    // Shortlisted excludes those already invited so they don't show in two stages.
+    if (slFilter === 'shortlisted') return !archived && s.status === 'shortlisted' && !isInvited(s);
+    if (slFilter === 'invited') return !archived && isInvited(s);
     if (slFilter === 'interviewed') return !archived && s.status === 'interviewed';
     if (slFilter === 'hired') return !archived && s.status === 'hired';
     if (slFilter === 'rejected') return !archived && s.status === 'rejected';
     return true;
   });
 
-  const shortlisted = data.filter(d => d.status === 'shortlisted').length;
+  const shortlisted = data.filter(d => d.status === 'shortlisted' && !isInvited(d)).length;
+  const invited = data.filter(d => isInvited(d)).length;
   const interviewed = data.filter(d => d.status === 'interviewed').length;
   const hired = data.filter(d => d.status === 'hired').length;
   const rejected = data.filter(d => d.status === 'rejected').length;
 
   return (
     <div className="container">
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
-        <div>
-          <h2 style={{ fontSize: '18px', fontWeight: 700 }}>Shortlist & Interview Tracking</h2>
-          <p style={{ fontSize: '13px', color: 'var(--gray-500)' }}>Manage shortlisted candidates through the hiring pipeline.</p>
-        </div>
-      </div>
-
-      <div style={{ display: 'flex', gap: '12px', alignItems: 'center', marginBottom: '16px' }}>
+      <div style={{ display: 'flex', gap: '12px', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap' }}>
         <label style={{ fontWeight: 600, fontSize: '14px', whiteSpace: 'nowrap' }}>Select Job:</label>
-        <select value={jobId} onChange={e => handleJobChange(e.target.value)} style={{ maxWidth: '350px' }}>
-          <option value="">-- Select a job opening --</option>
-          {jobs.filter(j => j.is_active).map(j => <option key={j.id} value={j.id}>{j.job_title} &mdash; {j.department}</option>)}
-          {jobs.some(j => !j.is_active) && (
-            <optgroup label="Closed (reactivate in Job Openings to use)">
-              {jobs.filter(j => !j.is_active).map(j => <option key={j.id} value={j.id} disabled>{j.job_title} &mdash; {j.department}</option>)}
-            </optgroup>
-          )}
-        </select>
+        <Select
+          value={jobId}
+          onChange={handleJobChange}
+          placeholder="Select a job opening…"
+          style={{ minWidth: 280, maxWidth: 360 }}
+          options={[
+            ...jobs.filter(j => j.is_active).map(j => ({ value: j.id, label: `${j.job_title} — ${j.department}` })),
+            ...jobs.filter(j => !j.is_active).map(j => ({ value: j.id, label: `${j.job_title} — ${j.department}`, badge: 'inactive', disabled: true })),
+          ]}
+        />
         <button className="btn btn-secondary btn-sm" onClick={loadShortlist}>Refresh</button>
-      </div>
-
-      <div className="stats">
-        <StatCard label="Shortlisted" value={shortlisted || '-'} />
-        <StatCard label="Interviewed" value={interviewed || '-'} />
-        <StatCard label="Hired" value={hired || '-'} />
-        <StatCard label="Rejected" value={rejected || '-'} />
       </div>
 
       {!loading && jobId && data.length > 0 && (
@@ -370,7 +421,8 @@ export default function Shortlist() {
           <span className="results-filter-label">Show:</span>
           {[
             { key: 'all', label: 'All', count: data.length },
-            { key: 'shortlisted', label: 'Shortlisted', count: data.filter(d => !isSlArchived(d.id) && d.status === 'shortlisted').length },
+            { key: 'shortlisted', label: 'Shortlisted', count: data.filter(d => !isSlArchived(d.id) && d.status === 'shortlisted' && !isInvited(d)).length },
+            { key: 'invited', label: 'Invited', count: data.filter(d => !isSlArchived(d.id) && isInvited(d)).length },
             { key: 'interviewed', label: 'Interviewed', count: data.filter(d => !isSlArchived(d.id) && d.status === 'interviewed').length },
             { key: 'hired', label: 'Hired', count: data.filter(d => !isSlArchived(d.id) && d.status === 'hired').length },
             { key: 'rejected', label: 'Rejected', count: data.filter(d => !isSlArchived(d.id) && d.status === 'rejected').length },
@@ -381,154 +433,131 @@ export default function Shortlist() {
               <span className="results-filter-count">{f.count}</span>
             </button>
           ))}
+          <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, alignItems: 'center' }}>
+            <span style={{ fontSize: 12.5, color: 'var(--gray-500)', whiteSpace: 'nowrap' }}>Sort by</span>
+            <select value={slSort} onChange={e => setSlSort(e.target.value)}
+              style={{ width: 150, flexShrink: 0, padding: '7px 12px', border: '1px solid var(--gray-200)', borderRadius: 'var(--radius)', fontSize: 13, fontFamily: 'inherit', outline: 'none', background: 'var(--surface)', cursor: 'pointer' }}>
+              <option value="recent">Most recent</option>
+              <option value="score">Highest score</option>
+              <option value="name">Name (A–Z)</option>
+            </select>
+          </div>
         </div>
       )}
 
       {loading ? <Loading /> : !jobId ? <EmptyState>Select a job opening to view shortlisted candidates.</EmptyState> : data.length === 0 ? <EmptyState>No shortlisted candidates yet. Go to CV Evaluation to shortlist candidates.</EmptyState> : filteredData.length === 0 ? <EmptyState>No candidates match this filter.</EmptyState> : (
-        <div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           {filteredData.map(s => {
-            const score = s.overall_score != null ? parseFloat(s.overall_score).toFixed(1) : '\u2014';
-            const scoreClsName = s.overall_score >= 7 ? 'score-high' : s.overall_score >= 4 ? 'score-mid' : 'score-low';
-            const isAnimating = !!transitioning[s.id];
-            const candidateEmails = emailMap[s.candidate_id];
-            const hasEmailSent = candidateEmails && candidateEmails.some(e => e.status === 'sent' && e.direction !== 'inbound');
-            const cardCls = [
-              'candidate-card',
-              `candidate-card--${s.status}`,
-              hasEmailSent && s.status === 'shortlisted' ? 'candidate-card--notified' : '',
-              isAnimating ? 'candidate-card--transitioning' : '',
-            ].filter(Boolean).join(' ');
-
+            const archived = isSlArchived(s.id);
+            const invited = isInvited(s);
+            const isOpen = expanded === s.id;
+            const emails = emailMap[s.candidate_id] || [];
+            const hasEmailSent = emails.some(e => e.status === 'sent' && e.direction !== 'inbound');
+            const overall = s.overall_score != null ? parseFloat(s.overall_score) : null;
+            const tint = s.status === 'hired' ? 'var(--tint-success)' : s.status === 'rejected' ? 'var(--tint-danger)' : 'var(--surface)';
+            const statusLabel = archived ? 'archived' : invited ? 'invited' : s.status;
             return (
-              <div key={s.id} className={cardCls}>
-                {/* Status chip in top-right corner */}
-                {(s.status !== 'shortlisted' || isAnimating) && !isSlArchived(s.id) && (
-                  <span className={`card-status-chip card-status-chip--${s.status}`}>
-                    {s.status === 'shortlisted' ? '\u2713 Shortlisted' : s.status === 'interviewed' ? '\u2713 Interviewed' : s.status === 'hired' ? '\u2713 Hired' : '\u2717 Rejected'}
-                  </span>
-                )}
-                <div className="candidate-card-header">
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                    <h3>{s.candidate_name}</h3>
-                    <Badge type={s.status}>{s.status}</Badge>
-                    {hasEmailSent && <span className="card-notified-chip">{'\u2709'} Notified</span>}
+              <div key={s.id} style={{
+                background: tint, border: `1px solid ${isOpen ? '#bfdbfe' : 'var(--gray-200)'}`,
+                borderRadius: 12, overflow: 'hidden',
+                boxShadow: isOpen ? '0 4px 16px rgba(37,99,235,0.08)' : '0 1px 2px rgba(0,0,0,0.04)',
+                transition: 'border-color 0.15s, box-shadow 0.15s',
+              }}>
+                {/* Header row */}
+                <div onClick={() => setExpanded(isOpen ? null : s.id)} style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '14px 18px', cursor: 'pointer', flexWrap: 'wrap' }}>
+                  <div style={{ flex: 1, minWidth: 160 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                      <strong style={{ fontSize: 15, color: 'var(--gray-900)' }}>{s.candidate_name}</strong>
+                      <Badge type={s.status}>{statusLabel}</Badge>
+                      {invited && <span style={SL_CHIP('#fef3c7', '#92400e')}>✉ Awaiting interview</span>}
+                      {hasEmailSent && !invited && <span style={SL_CHIP('#dcfce7', '#166534')}>✉ Notified</span>}
+                    </div>
+                    <div style={{ fontSize: 12, color: 'var(--gray-400)', marginTop: 2 }}>
+                      {s.email || '—'} · Shortlisted {new Date(s.shortlisted_at).toLocaleDateString()}
+                    </div>
                   </div>
-                  <span className={`score-badge ${scoreClsName}`}>{score}</span>
-                </div>
-                <div className="candidate-meta">
-                  {s.email || '\u2014'} &middot; Shortlisted {new Date(s.shortlisted_at).toLocaleDateString()}
-                </div>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px', marginTop: '12px' }}>
-                  {[{ label: 'SKILLS', val: s.skills_score }, { label: 'EXPERIENCE', val: s.experience_score }, { label: 'EDUCATION', val: s.education_score }].map(sc => (
-                    <div key={sc.label} style={{ background: 'var(--gray-50)', padding: '8px 12px', borderRadius: 'var(--radius)', textAlign: 'center' }}>
-                      <div style={{ fontSize: '11px', color: 'var(--gray-500)', fontWeight: 600 }}>{sc.label}</div>
-                      <div style={{ fontSize: '18px', fontWeight: 700, color: 'var(--gray-800)' }}>{sc.val != null ? parseFloat(sc.val).toFixed(1) : '\u2014'}</div>
-                    </div>
-                  ))}
-                </div>
-                {s.strengths && <div style={{ marginTop: '10px', fontSize: '13px', color: 'var(--gray-600)' }}><strong style={{ color: '#166534' }}>Strengths:</strong> {s.strengths}</div>}
-                {(() => {
-                  const emails = emailMap[s.candidate_id];
-                  if (!emails || emails.length === 0) return null;
-                  const em = emails[0]; // latest
-                  const getStatusText = (e) => e.status === 'sent' ? 'sent' : e.status === 'failed' ? 'failed' : e.status === 'logged' ? 'not sent (logged only)' : e.status;
-                  const isInbound = em.direction === 'inbound';
-                  const isSent = em.status === 'sent';
-                  const isFailed = em.status === 'failed';
-                  const isLogged = em.status === 'logged';
-                  const isHandoffEmail = em.email_type === 'recommendation' && isSent;
-                  const time = em.sent_at ? new Date(em.sent_at).toLocaleString() : '';
-                  const isExpanded = !!expandedEmail[s.candidate_id];
-                  const bannerCls = isInbound ? 'sl-email-inbound'
-                    : isFailed || isLogged ? 'sl-email-failed'
-                    : isHandoffEmail ? 'sl-email-handoff'
-                    : isSent ? 'sl-email-sent' : '';
-                  return (
-                    <div className="sl-email-wrapper">
-                      <div
-                        className={`sl-email-status sl-email-clickable ${bannerCls}`}
-                        onClick={() => setExpandedEmail(prev => ({ ...prev, [s.candidate_id]: !prev[s.candidate_id] }))}
-                      >
-                        <span className="sl-email-icon">{isInbound ? '\u{1F4E5}' : isSent ? '\u2709' : '\u26A0'}</span>
-                        <span style={{ flex: 1 }}>
-                          {isInbound ? (
-                            <><strong>Reply from {em.recipient_email || 'sender'}</strong>{em.subject && <span style={{ color: 'var(--gray-600)' }}> &middot; {em.subject}</span>}</>
-                          ) : (
-                            <><strong>{emailTypeLabel(em.email_type)}</strong> {getStatusText(em)}</>
-                          )}
-                          {time && <span className="sl-email-time"> &middot; {time}</span>}
-                        </span>
-                        <span className="sl-email-toggle">{isExpanded ? '\u25B2' : '\u25BC'}</span>
-                      </div>
-                      {isExpanded && (
-                        <div className="sl-email-details">
-                          {emails.map((e, i) => {
-                            const inbound = e.direction === 'inbound';
-                            const itemCls = inbound ? 'sl-detail-inbound'
-                              : e.status === 'sent' ? 'sl-detail-sent'
-                              : e.status === 'failed' || e.status === 'logged' ? 'sl-detail-failed' : '';
-                            return (
-                              <div key={i} className={`sl-email-detail-item ${itemCls}`}>
-                                <div className="sl-email-detail-header">
-                                  <strong>{inbound ? 'Reply received' : emailTypeLabel(e.email_type)}</strong>
-                                  <span className={`sl-email-detail-badge sl-email-detail-badge--${inbound ? 'inbound' : e.status}`}>
-                                    {inbound ? '\u{1F4E5} Inbound' : e.status === 'sent' ? '\u2713 Sent' : e.status === 'failed' ? '\u2717 Failed' : e.status === 'logged' ? '\u26A0 Logged only' : e.status}
-                                  </span>
-                                </div>
-                                {e.recipient_email && <div className="sl-email-detail-row"><span className="sl-email-detail-label">{inbound ? 'From:' : 'To:'}</span> {e.recipient_email}</div>}
-                                {e.subject && <div className="sl-email-detail-row"><span className="sl-email-detail-label">Subject:</span> {e.subject}</div>}
-                                {e.sent_at && <div className="sl-email-detail-row"><span className="sl-email-detail-label">Date:</span> {new Date(e.sent_at).toLocaleString()}</div>}
-                                {e.error_message && <div className="sl-email-detail-row sl-email-detail-error"><span className="sl-email-detail-label">Error:</span> {e.error_message}</div>}
-                                {e.body && <div className="sl-email-detail-body"><pre>{e.body}</pre></div>}
-                              </div>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })()}
-                <div className="card-actions-area" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  {isSlArchived(s.id) ? (
-                    <>
-                      <span style={{ fontSize: '13px', color: 'var(--gray-400)', fontWeight: 600 }}>Archived ({slArchivedMap[s.id] || s.status})</span>
+
+                  {/* Stage actions — inline (no overflow menu, which gets clipped by
+                      the card's overflow:hidden). Secondary actions live in the
+                      expanded panel, consistent with the other tabs. */}
+                  <div onClick={e => e.stopPropagation()} style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 6, flexShrink: 0, flexWrap: 'wrap' }}>
+                    {archived ? (
                       <button className="btn btn-sm btn-secondary" onClick={() => restoreSlArchive(s.id)}>Restore</button>
-                    </>
-                  ) : (s.status === 'shortlisted' || s.status === 'interviewed') ? (
-                    <>
-                      <button className="btn btn-sm btn-primary" onClick={() => setUpInterview(s)}>{'\u2699'} Set Up Interview</button>
-                      <button className="btn btn-sm btn-success" onClick={() => sendEmail(s.candidate_id, s.job_opening_id, s.candidate_name, s.email, 'interview_invite')}>Send Invite</button>
-                      <div style={{ marginLeft: 'auto' }}>
-                        <OverflowMenu items={[
-                          { label: 'View profile', onClick: () => setProfileCandidate(s) },
-                          { label: '\u2717 Reject', onClick: () => rejectFromShortlist(s), danger: true },
-                          { label: 'Archive', onClick: () => archiveShortlistItem(s.id, s.status) },
-                        ]} />
+                    ) : (s.status === 'shortlisted' || s.status === 'interviewed') ? (
+                      <>
+                        {s.status === 'interviewed' && <button className="btn btn-sm btn-primary" onClick={() => navigate('/live-interview?tab=results')} title="See the interview scores, transcript and recording">📊 Results</button>}
+                        <button className={`btn btn-sm ${s.status === 'interviewed' ? 'btn-secondary' : 'btn-primary'}`} onClick={() => setUpInterview(s)}>⚙ Set Up Interview</button>
+                        <button className="btn btn-sm btn-success" onClick={() => sendEmail(s.candidate_id, s.job_opening_id, s.candidate_name, s.email, 'interview_invite')}>Send Invite</button>
+                        <button className="btn btn-sm btn-danger" onClick={() => rejectFromShortlist(s)}>Reject</button>
+                      </>
+                    ) : s.status === 'hired' ? (
+                      <>
+                        <span style={{ fontSize: 13, fontWeight: 700, color: '#166534' }}>✓ Hired</span>
+                        <button className="btn btn-sm btn-secondary" onClick={() => updateStatus(s.id, 'interviewed')} title="Undo — move back to Interviewed">↩ Revert</button>
+                      </>
+                    ) : s.status === 'rejected' ? (
+                      <>
+                        <span style={{ fontSize: 13, fontWeight: 700, color: '#991b1b' }}>✗ Rejected</span>
+                        <button className="btn btn-sm btn-secondary" onClick={() => updateStatus(s.id, 'shortlisted')}>Reconsider</button>
+                      </>
+                    ) : null}
+                  </div>
+
+                  {/* CV score */}
+                  <div style={{ textAlign: 'center', minWidth: 50, borderLeft: '1px solid var(--gray-200)', paddingLeft: 14 }}>
+                    {overall != null
+                      ? <div style={{ fontSize: 22, fontWeight: 800, color: scoreColor(overall), lineHeight: 1 }}>{overall.toFixed(1)}</div>
+                      : <div style={{ fontSize: 18, color: 'var(--gray-300)' }}>—</div>}
+                    <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--gray-400)', marginTop: 3 }}>CV</div>
+                  </div>
+                  <span style={{ color: 'var(--gray-400)', fontSize: 13, flexShrink: 0, transition: 'transform 0.25s ease', transform: isOpen ? 'rotate(180deg)' : 'none' }}>▾</span>
+                </div>
+
+                {/* Smooth-expanding detail */}
+                <div style={{ display: 'grid', gridTemplateRows: isOpen ? '1fr' : '0fr', transition: 'grid-template-rows 0.28s ease' }}>
+                  <div style={{ overflow: 'hidden' }}>
+                    <div style={{ borderTop: '1px solid var(--gray-100)', background: 'var(--surface-2)', padding: 18, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+                      {/* CV side */}
+                      <div style={{ background: 'var(--surface)', border: '1px solid var(--gray-200)', borderRadius: 10, padding: 16 }}>
+                        <div style={{ fontSize: 11, fontWeight: 700, color: '#2563eb', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 12 }}>CV Evaluation</div>
+                        <div style={{ display: 'flex', gap: 8 }}>
+                          <SlChip value={s.skills_score} label="Skills" />
+                          <SlChip value={s.experience_score} label="Experience" />
+                          <SlChip value={s.education_score} label="Education" />
+                        </div>
+                        {s.strengths && <SlCallout label="Strengths" text={s.strengths} color="#166534" />}
+                        {s.weaknesses && <SlCallout label="Weaknesses" text={s.weaknesses} color="#991b1b" />}
+                        <div style={{ display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
+                          <button className="btn btn-sm btn-secondary" onClick={() => setProfileCandidate(s)}>View full profile</button>
+                          {!archived && <button className="btn btn-sm btn-ghost" onClick={() => archiveShortlistItem(s.id, s.status)}>Archive</button>}
+                        </div>
                       </div>
-                    </>
-                  ) : s.status === 'hired' ? (
-                    <>
-                      <span className="card-state-badge card-state-badge--hired card-state-badge--enter">{'\u2713'} Hired</span>
-                      <div style={{ marginLeft: 'auto' }}>
-                        <OverflowMenu items={[
-                          { label: 'View profile', onClick: () => setProfileCandidate(s) },
-                          { label: 'Revert to interviewed', onClick: () => updateStatus(s.id, 'interviewed') },
-                          { label: 'Archive', onClick: () => archiveShortlistItem(s.id, s.status) },
-                        ]} />
+                      {/* Communication side */}
+                      <div style={{ background: 'var(--surface)', border: '1px solid var(--gray-200)', borderRadius: 10, padding: 16 }}>
+                        <div style={{ fontSize: 11, fontWeight: 700, color: '#7c3aed', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 12 }}>Communication</div>
+                        {emails.length === 0 ? (
+                          <p style={{ fontSize: 13, color: 'var(--gray-400)', fontStyle: 'italic', margin: 0 }}>No emails yet.</p>
+                        ) : (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                            {emails.map((e, i) => {
+                              const inbound = e.direction === 'inbound';
+                              const accent = inbound ? '#7c3aed' : e.status === 'sent' ? '#16a34a' : '#dc2626';
+                              return (
+                                <div key={i} style={{ fontSize: 12.5, borderLeft: `3px solid ${accent}`, paddingLeft: 10 }}>
+                                  <div style={{ fontWeight: 600, color: 'var(--gray-800)' }}>
+                                    {inbound ? `📥 Reply from ${e.recipient_email || 'sender'}` : emailTypeLabel(e.email_type)}
+                                    <span style={{ fontWeight: 500, color: 'var(--gray-400)' }}> · {inbound ? 'inbound' : e.status}{e.sent_at ? ` · ${new Date(e.sent_at).toLocaleDateString()}` : ''}</span>
+                                  </div>
+                                  {e.subject && <div style={{ color: 'var(--gray-500)' }}>{e.subject}</div>}
+                                  {e.error_message && <div style={{ color: '#991b1b' }}>{e.error_message}</div>}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
                       </div>
-                    </>
-                  ) : s.status === 'rejected' ? (
-                    <>
-                      <span className="card-state-badge card-state-badge--rejected card-state-badge--enter">{'\u2717'} Rejected</span>
-                      <div style={{ marginLeft: 'auto' }}>
-                        <OverflowMenu items={[
-                          { label: 'View profile', onClick: () => setProfileCandidate(s) },
-                          { label: 'Reconsider', onClick: () => updateStatus(s.id, 'shortlisted') },
-                          { label: 'Archive', onClick: () => archiveShortlistItem(s.id, s.status) },
-                        ]} />
-                      </div>
-                    </>
-                  ) : null}
+                    </div>
+                  </div>
                 </div>
               </div>
             );

@@ -1,4 +1,4 @@
--- HR Automation Database Schema
+-- Diyar HR Database Schema
 -- Phase 1: Job Openings
 
 CREATE TABLE IF NOT EXISTS job_openings (

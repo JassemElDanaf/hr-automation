@@ -67,7 +67,7 @@ export default function Users() {
       </div>
 
       {showNew && (
-        <div style={{ background: '#fff', border: '1px solid var(--gray-200)', borderRadius: 10, padding: 16, marginBottom: 16, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+        <div style={{ background: 'var(--surface)', border: '1px solid var(--gray-200)', borderRadius: 10, padding: 16, marginBottom: 16, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
           <div><label style={lbl}>Email</label><input style={inp} type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} placeholder="person@diyarme.com" /></div>
           <div><label style={lbl}>Full name</label><input style={inp} value={form.full_name} onChange={e => setForm(f => ({ ...f, full_name: e.target.value }))} placeholder="Full name" /></div>
           <div><label style={lbl}>Role</label>
@@ -85,7 +85,7 @@ export default function Users() {
       )}
 
       {loading ? <Loading /> : (
-        <div style={{ background: '#fff', border: '1px solid var(--gray-200)', borderRadius: 10, overflow: 'hidden' }}>
+        <div style={{ background: 'var(--surface)', border: '1px solid var(--gray-200)', borderRadius: 10, overflow: 'hidden' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
             <thead>
               <tr style={{ background: 'var(--gray-50)', textAlign: 'left' }}>

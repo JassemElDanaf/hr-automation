@@ -1,7 +1,10 @@
 import { BrowserRouter, Routes, Route, Outlet, Navigate } from 'react-router-dom';
 import { SelectedJobProvider } from './state/selectedJob';
 import { UIProvider } from './state/uiState';
+import { EvalStatusProvider } from './state/evalStatus';
+import { NotificationsProvider } from './state/notifications';
 import { AuthProvider, useAuth } from './state/auth';
+import { ThemeProvider } from './state/theme';
 import Header from './components/layout/Header';
 import NavTabs from './components/layout/NavTabs';
 import Toast from './components/common/Toast';
@@ -9,6 +12,8 @@ import EmailComposerModal from './components/modals/EmailComposerModal';
 import ConfirmDialog from './components/modals/ConfirmDialog';
 import Login from './pages/Login';
 import Users from './pages/Users';
+import EmailTemplates from './pages/EmailTemplates';
+import AuditLog from './pages/AuditLog';
 import Dashboard from './pages/Dashboard';
 import JobOpenings from './pages/JobOpenings';
 import CVEvaluation from './pages/CVEvaluation';
@@ -50,10 +55,13 @@ function AdminOnly({ children }) {
 export default function App() {
   return (
     <BrowserRouter>
+      <ThemeProvider>
       <AuthProvider>
         <SelectedJobProvider>
           <UIProvider>
-            <Routes>
+            <NotificationsProvider>
+            <EvalStatusProvider>
+              <Routes>
               {/* Standalone candidate-facing route — public, no auth, no HR chrome */}
               <Route path="/interview/:token" element={<CandidateInterview />} />
 
@@ -68,13 +76,18 @@ export default function App() {
                 <Route path="/live-interview" element={<LiveInterview />} />
                 <Route path="/decision" element={<Decision />} />
                 <Route path="/users" element={<AdminOnly><Users /></AdminOnly>} />
+                <Route path="/email-templates" element={<AdminOnly><EmailTemplates /></AdminOnly>} />
+                <Route path="/audit-log" element={<AdminOnly><AuditLog /></AdminOnly>} />
                 {/* AI Interviews now lives as the Results sub-tab of Interview */}
                 <Route path="/ai-interviews" element={<Navigate to="/live-interview?tab=results" replace />} />
               </Route>
-            </Routes>
+              </Routes>
+            </EvalStatusProvider>
+            </NotificationsProvider>
           </UIProvider>
         </SelectedJobProvider>
       </AuthProvider>
+      </ThemeProvider>
     </BrowserRouter>
   );
 }

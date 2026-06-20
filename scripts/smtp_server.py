@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tiny SMTP sidecar for Diyar HR Automation.
+"""Tiny SMTP sidecar for Diyar HR.
 
 Reads SMTP config from env vars (SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS,
 SMTP_FROM). n8n calls this via HTTP Request node instead of the emailSend

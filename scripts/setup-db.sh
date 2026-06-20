@@ -1,5 +1,5 @@
 #!/bin/bash
-# Setup PostgreSQL database for HR Automation
+# Setup PostgreSQL database for Diyar HR
 # Requires: Docker running, postgres container "hr-postgres"
 
 set -e
@@ -15,7 +15,7 @@ DB_USER="hr_admin"
 DB_PASSWORD="hr_pass"
 DB_PORT="5432"
 
-echo "=== HR Automation Database Setup ==="
+echo "=== Diyar HR Database Setup ==="
 
 # Check if Docker is running
 if ! docker info > /dev/null 2>&1; then

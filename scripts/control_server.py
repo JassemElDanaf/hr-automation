@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-HR Automation Control Server — http://127.0.0.1:8903
+Diyar HR Control Server — http://127.0.0.1:8903
 Lets the frontend start/stop services via HTTP.
 POST /service/<name>/start  or  /service/<name>/stop
 """

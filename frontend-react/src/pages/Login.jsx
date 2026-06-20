@@ -26,7 +26,7 @@ export default function Login() {
     <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg,#eef2ff 0%,#f8fafc 60%)', padding: 20 }}>
       <div style={{ width: '100%', maxWidth: 380, background: '#fff', border: '1px solid #e5e7eb', borderRadius: 16, boxShadow: '0 10px 40px rgba(30,64,175,0.10)', overflow: 'hidden' }}>
         <div style={{ background: '#1e40af', padding: '22px 28px' }}>
-          <div style={{ color: '#fff', fontSize: 19, fontWeight: 800, letterSpacing: '-0.01em' }}>Diyar <span style={{ fontWeight: 500 }}>HR Automation</span></div>
+          <div style={{ color: '#fff', fontSize: 19, fontWeight: 800, letterSpacing: '-0.01em' }}>Diyar <span style={{ fontWeight: 500 }}>HR</span></div>
           <div style={{ color: '#bfdbfe', fontSize: 12.5, marginTop: 3 }}>Sign in to continue</div>
         </div>
         <form onSubmit={submit} style={{ padding: '24px 28px 28px' }}>

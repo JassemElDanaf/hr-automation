@@ -60,6 +60,16 @@ export function scoreClass(score) {
   return 'score-low';
 }
 
+// Single source of truth for score number color, used by every tab so a given
+// score looks identical everywhere (green ≥7, orange 4–7, red <4, grey if none).
+export function scoreColor(score) {
+  const s = parseFloat(score);
+  if (isNaN(s)) return 'var(--gray-300)';
+  if (s >= 7) return '#16a34a';
+  if (s >= 4) return '#d97706';
+  return '#dc2626';
+}
+
 // User-facing label for an `email_log.email_type` value. Centralized so the
 // Shortlist banner, Emails table, and detail panels all stay in sync — the
 // 'recommendation' backend type is presented as 'Handed off to HM' everywhere.

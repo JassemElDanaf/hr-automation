@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState } from 'react';
 import * as api from '../services/auth';
 import { setAuthRole } from '../services/api';
+import { setTemplateOverrides } from '../services/email';
 
 const AuthContext = createContext(null);
 
@@ -10,6 +11,12 @@ export function AuthProvider({ children }) {
 
   // Keep the API-layer read-only gate in sync with the current role.
   useEffect(() => { setAuthRole(user?.role || null); }, [user]);
+
+  // Load admin-edited email-template overrides once signed in.
+  useEffect(() => {
+    if (!user) return;
+    api.listEmailTemplates().then(setTemplateOverrides).catch(() => {});
+  }, [user]);
 
   // Restore session from a stored token on first load.
   useEffect(() => {
@@ -35,9 +42,14 @@ export function AuthProvider({ children }) {
     setUser(null);
   }
 
+  // Self-service password change for the signed-in user (no role gate).
+  async function changePassword(currentPassword, newPassword) {
+    return api.changePassword(currentPassword, newPassword);
+  }
+
   const role = user?.role || null;
   const value = {
-    user, role, loading, login, logout,
+    user, role, loading, login, logout, changePassword,
     isAdmin: role === 'admin',
     isViewer: role === 'viewer',
     canWrite: role === 'admin' || role === 'recruiter',  // viewers are read-only

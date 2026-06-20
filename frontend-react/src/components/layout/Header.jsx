@@ -2,7 +2,10 @@ import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useSelectedJob } from '../../state/selectedJob';
 import { useAuth } from '../../state/auth';
+import { useTheme } from '../../state/theme';
 import { apiGet } from '../../services/api';
+import ChangePasswordModal from '../modals/ChangePasswordModal';
+import NotificationBell from './NotificationBell';
 
 const ROLE_META = {
   admin:     ['Admin', '#5b21b6', '#ede9fe'],
@@ -12,17 +15,19 @@ const ROLE_META = {
 
 export default function Header() {
   const navigate = useNavigate();
-  const { selectedJob, setSelectedJob, clearSelectedJob } = useSelectedJob();
+  const { selectedJob, setSelectedJob, clearSelectedJob, jobsNonce } = useSelectedJob();
   const { user, role, isAdmin, logout } = useAuth();
+  const { isDark, toggleTheme } = useTheme();
   const [jobs, setJobs] = useState([]);
   const [open, setOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [pwOpen, setPwOpen] = useState(false);
   const ref = useRef(null);
   const menuRef = useRef(null);
 
   useEffect(() => {
     apiGet('/job-openings').then(r => setJobs(r.data || [])).catch(() => {});
-  }, []);
+  }, [jobsNonce]);
 
   // Close the dropdown on outside click / Escape.
   useEffect(() => {
@@ -53,7 +58,10 @@ export default function Header() {
 
   return (
     <div className="header">
-      <h1><span>Diyar</span> HR Automation</h1>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <img src="/logo.jpg" alt="Diyar" style={{ height: 30, width: 'auto', borderRadius: 6, display: 'block' }} />
+        <h1><span>Diyar</span> HR</h1>
+      </div>
 
       <div className="global-job-picker" ref={ref}>
         <button
@@ -124,15 +132,17 @@ export default function Header() {
         })()}
       </div>
 
+      {user && <div style={{ marginLeft: 'auto' }}><NotificationBell /></div>}
+
       {user && (() => {
         const [rlabel, rcolor, rbg] = ROLE_META[role] || ['', 'var(--gray-500)', 'var(--gray-100)'];
         return (
-          <div ref={menuRef} style={{ position: 'relative', marginLeft: 'auto' }}>
+          <div ref={menuRef} style={{ position: 'relative' }}>
             <button
               type="button"
               onClick={() => setMenuOpen(o => !o)}
               title="Account & settings"
-              style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '5px 10px 5px 6px', borderRadius: 22, border: '1px solid var(--gray-200)', background: menuOpen ? 'var(--gray-50)' : '#fff', cursor: 'pointer', fontFamily: 'inherit' }}
+              style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '5px 10px 5px 6px', borderRadius: 22, border: '1px solid var(--gray-200)', background: menuOpen ? 'var(--gray-50)' : 'var(--surface)', cursor: 'pointer', fontFamily: 'inherit' }}
             >
               <span style={{ width: 30, height: 30, borderRadius: '50%', background: '#1e40af', color: '#fff', fontSize: 12, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{initials}</span>
               <span style={{ textAlign: 'left', lineHeight: 1.2 }}>
@@ -143,7 +153,7 @@ export default function Header() {
             </button>
 
             {menuOpen && (
-              <div style={{ position: 'absolute', right: 0, top: 'calc(100% + 6px)', zIndex: 300, width: 244, background: '#fff', border: '1px solid var(--gray-200)', borderRadius: 12, boxShadow: '0 10px 34px rgba(0,0,0,0.14)', overflow: 'hidden' }}>
+              <div style={{ position: 'absolute', right: 0, top: 'calc(100% + 6px)', zIndex: 300, width: 244, background: 'var(--surface)', border: '1px solid var(--gray-200)', borderRadius: 12, boxShadow: '0 10px 34px rgba(0,0,0,0.14)', overflow: 'hidden' }}>
                 {/* Account header */}
                 <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--gray-100)', display: 'flex', gap: 11, alignItems: 'center' }}>
                   <span style={{ width: 36, height: 36, borderRadius: '50%', background: '#1e40af', color: '#fff', fontSize: 13, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{initials}</span>
@@ -156,11 +166,36 @@ export default function Header() {
 
                 {/* Actions */}
                 <div style={{ padding: '6px 0' }}>
+                  <button onClick={(e) => { e.stopPropagation(); toggleTheme(); }} style={menuItem}
+                    onMouseEnter={e => e.currentTarget.style.background = 'var(--gray-50)'}
+                    onMouseLeave={e => e.currentTarget.style.background = 'none'}>
+                    <span style={menuIcon}>{isDark ? '🌙' : '☀️'}</span> Dark mode
+                    <span style={{ marginLeft: 'auto', fontSize: 10, fontWeight: 800, letterSpacing: '0.04em', padding: '2px 8px', borderRadius: 10, background: isDark ? 'rgba(59,130,246,0.18)' : 'var(--gray-100)', color: isDark ? '#3b82f6' : 'var(--gray-400)' }}>{isDark ? 'ON' : 'OFF'}</span>
+                  </button>
+                  <button onClick={() => { setMenuOpen(false); setPwOpen(true); }} style={menuItem}
+                    onMouseEnter={e => e.currentTarget.style.background = 'var(--gray-50)'}
+                    onMouseLeave={e => e.currentTarget.style.background = 'none'}>
+                    <span style={menuIcon}>🔑</span> Change password
+                  </button>
                   {isAdmin && (
                     <button onClick={() => { setMenuOpen(false); navigate('/users'); }} style={menuItem}
                       onMouseEnter={e => e.currentTarget.style.background = 'var(--gray-50)'}
                       onMouseLeave={e => e.currentTarget.style.background = 'none'}>
                       <span style={menuIcon}>👥</span> Users &amp; Access
+                    </button>
+                  )}
+                  {isAdmin && (
+                    <button onClick={() => { setMenuOpen(false); navigate('/email-templates'); }} style={menuItem}
+                      onMouseEnter={e => e.currentTarget.style.background = 'var(--gray-50)'}
+                      onMouseLeave={e => e.currentTarget.style.background = 'none'}>
+                      <span style={menuIcon}>✉</span> Email templates
+                    </button>
+                  )}
+                  {isAdmin && (
+                    <button onClick={() => { setMenuOpen(false); navigate('/audit-log'); }} style={menuItem}
+                      onMouseEnter={e => e.currentTarget.style.background = 'var(--gray-50)'}
+                      onMouseLeave={e => e.currentTarget.style.background = 'none'}>
+                      <span style={menuIcon}>🧾</span> Audit log
                     </button>
                   )}
                   <button onClick={() => { setMenuOpen(false); logout(); }} style={{ ...menuItem, color: '#b91c1c' }}
@@ -172,7 +207,7 @@ export default function Header() {
 
                 {/* Info footer */}
                 <div style={{ padding: '9px 16px', borderTop: '1px solid var(--gray-100)', background: 'var(--gray-50)' }}>
-                  <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--gray-500)' }}>Diyar HR Automation</div>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--gray-500)' }}>Diyar HR</div>
                   <div style={{ fontSize: 10.5, color: 'var(--gray-400)', marginTop: 1 }}>Local-first hiring workspace</div>
                 </div>
               </div>
@@ -180,6 +215,8 @@ export default function Header() {
           </div>
         );
       })()}
+
+      <ChangePasswordModal isOpen={pwOpen} onClose={() => setPwOpen(false)} />
     </div>
   );
 }

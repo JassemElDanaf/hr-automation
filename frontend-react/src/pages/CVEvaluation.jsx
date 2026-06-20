@@ -2,12 +2,12 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { apiGet, apiPost } from '../services/api';
 import { useSelectedJob } from '../state/selectedJob';
 import { useUI } from '../state/uiState';
-import StatCard from '../components/common/StatCard';
+import { useEvalStatus } from '../state/evalStatus';
 import ScoreBadge from '../components/common/ScoreBadge';
 import Loading from '../components/common/Loading';
 import EmptyState from '../components/common/EmptyState';
 import EvalDetailModal from '../components/modals/EvalDetailModal';
-import { formatDate, nameFromFilename, extractNameFromCV, extractEmail } from '../utils/helpers';
+import { formatDate, nameFromFilename, extractNameFromCV, extractEmail, scoreColor } from '../utils/helpers';
 import { extractTextFromFile, base64ToBlobUrl } from '../utils/pdf';
 
 function readFileAsBase64(file) {
@@ -23,6 +23,19 @@ function readFileAsBase64(file) {
   });
 }
 import { sendEmailRequest, getRejectionTemplate } from '../services/email';
+
+const CVCHIP = (bg, color) => ({ fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', padding: '3px 9px', borderRadius: 10, background: bg, color });
+
+// Compact score chip used inside the expanded result detail (Decision-style).
+function CvChip({ value, label }) {
+  const v = value != null ? parseFloat(value) : null;
+  return (
+    <div style={{ flex: 1, textAlign: 'center', background: 'var(--gray-50)', borderRadius: 8, padding: '8px 6px' }}>
+      <div style={{ fontSize: 17, fontWeight: 800, color: scoreColor(v), lineHeight: 1 }}>{v != null ? v.toFixed(1) : '—'}</div>
+      <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--gray-400)', marginTop: 4 }}>{label}</div>
+    </div>
+  );
+}
 
 export default function CVEvaluation() {
   const { selectedJob, setSelectedJob } = useSelectedJob();
@@ -56,15 +69,29 @@ export default function CVEvaluation() {
   // Step 4 state
   const [candidates, setCandidates] = useState([]);
   const [evaluations, setEvaluations] = useState([]);
-  const [evaluating, setEvaluating] = useState(false);
-  const [evaluatingOneId, setEvaluatingOneId] = useState(null);
-  const [evalProgress, setEvalProgress] = useState(0);
-  const [evalBatchCount, setEvalBatchCount] = useState(1);
-  const evalTimerRef = useRef(null);
+  const { evalState, startEvaluation, runAiTask } = useEvalStatus();
+  // Eval status is global (it survives leaving this tab) — derive the per-page
+  // view from it so returning mid-run still shows live progress.
+  const ev = evalState && evalState.jobId === evalJobId ? evalState : null;
+  const evaluating = !!ev && !ev.candidateId && ev.phase === 'running';
+  const evaluatingOneId = (ev && ev.candidateId && ev.phase === 'running') ? ev.candidateId : null;
+
+  // When the global evaluation finishes for this job, reload the results table.
+  // This is navigation-proof: the eval runs/polls in the provider even if the
+  // user left this tab, so we refresh here whenever it completes (not only from
+  // the inline call in runEvaluation, which can race or be missed).
+  useEffect(() => {
+    if (evalState && evalState.jobId === evalJobId && evalState.phase === 'done') {
+      loadEvalResults();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [evalState?.phase, evalState?.jobId]);
   const [detailCandidate, setDetailCandidate] = useState(null);
   const [shortlistMap, setShortlistMap] = useState({}); // candidateId -> status string
   const [recentlyChanged, setRecentlyChanged] = useState({}); // candidateId -> true (for animation)
   const [resultsFilter, setResultsFilter] = useState('active'); // 'active' | 'shortlisted' | 'rejected' | 'archived' | 'all'
+  const [expandedRow, setExpandedRow] = useState(null); // candidate id of expanded result row (Decision-style)
+  const [resultsSort, setResultsSort] = useState('recent'); // recent | score | name
   const [dupBannerDismissed, setDupBannerDismissed] = useState(false);
   const [archivedMap, setArchivedMap] = useState(() => { // candidateId -> previousStatus
     try { return JSON.parse(localStorage.getItem('hr_archived_candidates_v2') || '{}'); } catch { return {}; }
@@ -198,14 +225,15 @@ export default function CVEvaluation() {
     setGenStatus('Calling Ollama (qwen3:4b)\u2026 30-90 seconds');
     const previous = criteriaText;
     try {
-      const res = await apiPost('/generate-criteria', {
+      const res = await runAiTask('Generating evaluation criteria…', () => apiPost('/generate-criteria', {
         job_title: evalSelectedJob.job_title, department: evalSelectedJob.department,
         seniority_level: evalSelectedJob.seniority_level, employment_type: evalSelectedJob.employment_type,
         job_description: [evalSelectedJob.job_description || '', aiContext ? '\n\nAdditional context:\n' + aiContext : ''].join('').trim(),
         extra_context: aiContext, skills_weight: weights.skills, experience_weight: weights.experience, education_weight: weights.education,
-      });
+      }), { to: '/cv-eval', hint: evalSelectedJob.job_title ? `Back to criteria · ${evalSelectedJob.job_title}` : 'Back to CV Evaluation' });
       if (res.data.success && res.data.criteria_text) {
         setCriteriaText(res.data.criteria_text);
+        setSelectedSetId('');
         setGenStatus(`Generated (${weights.skills}/${weights.experience}/${weights.education} weights). Edit if needed.`);
         showToast('Criteria generated', 'success');
       } else {
@@ -276,22 +304,7 @@ export default function CVEvaluation() {
     } catch (err) { showToast('Failed to load results', 'error'); }
   }
 
-  // Drive the asymptotic progress bar while an evaluation is in flight.
-  // qwen3:4b on the GTX 1650 runs ~10-15s per CV.
-  useEffect(() => {
-    if (!evaluating && evaluatingOneId == null) {
-      if (evalTimerRef.current) { clearInterval(evalTimerRef.current); evalTimerRef.current = null; }
-      return;
-    }
-    const tau = Math.max(6000, evalBatchCount * 4500);
-    const started = Date.now();
-    setEvalProgress(0);
-    evalTimerRef.current = setInterval(() => {
-      const elapsed = Date.now() - started;
-      setEvalProgress(95 * (1 - Math.exp(-elapsed / tau)));
-    }, 150);
-    return () => { if (evalTimerRef.current) { clearInterval(evalTimerRef.current); evalTimerRef.current = null; } };
-  }, [evaluating, evaluatingOneId, evalBatchCount]);
+  // (Progress is driven by the global EvalStatusProvider — no local timer here.)
 
   async function runEvaluation() {
     if (!evalJobId) return;
@@ -305,54 +318,30 @@ export default function CVEvaluation() {
       showToast('All candidates are already evaluated — upload new CVs to evaluate more', 'error');
       return;
     }
-    setEvalBatchCount(unevaluated.length);
-    setEvaluating(true);
-    try {
-      const payload = { job_opening_id: evalJobId, skills_weight: weights.skills, experience_weight: weights.experience, education_weight: weights.education };
-      if (criteriaText) payload.criteria_text = criteriaText;
-      const cleanItems = criteriaItems.filter(it => it.text.trim()).map(({ text, required, importance }) => ({ text: text.trim(), required, importance: clampImportance(importance) }));
-      if (cleanItems.length > 0) payload.criteria_items = cleanItems;
-      const res = await apiPost('/cv-evaluate', payload);
-      if (res.data.success) showToast(res.data.message || 'Evaluation complete', 'success');
-      else if (res.data.error) showToast(`Evaluation failed: ${res.data.error}`, 'error');
-      else if (res.status === 404) showToast('Evaluation failed: no unevaluated candidates found', 'error');
-      else if (res.status >= 500) showToast('Evaluation failed: backend error — check n8n and Ollama', 'error');
-      else showToast('Evaluation failed: unexpected response from server', 'error');
-    } catch (err) {
-      if (err.message?.includes('Failed to fetch') || err.message?.includes('NetworkError'))
-        showToast('Evaluation failed: cannot reach n8n — is it running?', 'error');
-      else
-        showToast(`Evaluation failed: ${err.message || 'unknown error'}`, 'error');
-    }
-    finally {
-      setEvalProgress(100);
-      setTimeout(() => { setEvaluating(false); setEvalProgress(0); }, 300);
-      loadEvalResults();
-    }
+    const payload = { job_opening_id: evalJobId, skills_weight: weights.skills, experience_weight: weights.experience, education_weight: weights.education };
+    if (criteriaText) payload.criteria_text = criteriaText;
+    const cleanItems = criteriaItems.filter(it => it.text.trim()).map(({ text, required, importance }) => ({ text: text.trim(), required, importance: clampImportance(importance) }));
+    if (cleanItems.length > 0) payload.criteria_items = cleanItems;
+    // Hand off to the global eval provider: it keeps running and polling even if
+    // the user navigates away, and owns the indicator + completion toast.
+    await startEvaluation({
+      jobId: evalJobId, jobTitle: evalSelectedJob?.job_title,
+      total: unevaluated.length, baselineCount: Object.keys(evalMap).length, payload,
+    });
+    loadEvalResults();
   }
 
   async function evaluateOne(candidateId) {
     if (evaluating || evaluatingOneId != null) return;
-    setEvalBatchCount(1);
-    setEvaluatingOneId(candidateId);
-    showToast('AI evaluating candidate\u2026 (~15s on GPU)', 'info');
-    try {
-      const payload = { job_opening_id: evalJobId, candidate_id: candidateId, skills_weight: weights.skills, experience_weight: weights.experience, education_weight: weights.education };
-      if (criteriaText) payload.criteria_text = criteriaText;
-      const cleanItems = criteriaItems.filter(it => it.text.trim()).map(({ text, required, importance }) => ({ text: text.trim(), required, importance: clampImportance(importance) }));
-      if (cleanItems.length > 0) payload.criteria_items = cleanItems;
-      const res = await apiPost('/cv-evaluate', payload);
-      if (res.data.success) { showToast('AI evaluation complete!', 'success'); loadEvalResults(); }
-      else showToast(`Evaluation failed: ${res.data.error || 'Ollama may not have responded'}`, 'error');
-    } catch (err) {
-      if (err.message?.includes('Failed to fetch') || err.message?.includes('NetworkError'))
-        showToast('Evaluation failed: cannot reach n8n \u2014 is it running?', 'error');
-      else
-        showToast(`Evaluation failed: ${err.message || 'network error'}`, 'error');
-    } finally {
-      setEvalProgress(100);
-      setTimeout(() => { setEvaluatingOneId(null); setEvalProgress(0); }, 300);
-    }
+    const payload = { job_opening_id: evalJobId, candidate_id: candidateId, skills_weight: weights.skills, experience_weight: weights.experience, education_weight: weights.education };
+    if (criteriaText) payload.criteria_text = criteriaText;
+    const cleanItems = criteriaItems.filter(it => it.text.trim()).map(({ text, required, importance }) => ({ text: text.trim(), required, importance: clampImportance(importance) }));
+    if (cleanItems.length > 0) payload.criteria_items = cleanItems;
+    await startEvaluation({
+      jobId: evalJobId, jobTitle: evalSelectedJob?.job_title,
+      total: 1, baselineCount: Object.keys(evalMap).length, candidateId, payload,
+    });
+    loadEvalResults();
   }
 
   async function viewCV(candidateId, candidateName) {
@@ -489,10 +478,11 @@ export default function CVEvaluation() {
   const activeDuplicateCount = candidates.filter(c => isDuplicate(c.id) && !isArchived(c.id)).length;
   const uniqueCount = candidates.length - candidates.filter(c => isDuplicate(c.id)).length;
 
-  // Sort: most recently submitted first (newly uploaded CVs always at the top).
-  // Status pills above let HR narrow to shortlisted/rejected/etc — sort itself doesn't group by status.
+  // Sort: honors the Sort-by dropdown. Default = most recently submitted first.
   const sorted = [...candidates].sort((a, b) => {
-    return new Date(b.submitted_at || 0) - new Date(a.submitted_at || 0);
+    if (resultsSort === 'score') return (parseFloat(evalMap[b.id]?.overall_score) || -1) - (parseFloat(evalMap[a.id]?.overall_score) || -1);
+    if (resultsSort === 'name') return (a.candidate_name || '').localeCompare(b.candidate_name || '');
+    return new Date(b.submitted_at || 0) - new Date(a.submitted_at || 0); // recent
   });
 
   // Filter candidates based on resultsFilter; retained candidates stay visible until filter switches
@@ -572,11 +562,6 @@ export default function CVEvaluation() {
 
   return (
     <div className="container">
-      <div style={{ textAlign: 'center', marginBottom: 0 }}>
-        <h2 style={{ fontSize: '18px', fontWeight: 700, marginTop: '2px' }}>AI-Powered CV Evaluation</h2>
-        <p style={{ fontSize: '13px', color: 'var(--gray-500)', marginTop: '2px' }}>Select a job, define criteria, upload CVs, and get an instant AI evaluation report.</p>
-      </div>
-
       {/* Wizard steps */}
       <div className="wizard-steps">
         {[1, 2, 3, 4].map(n => (
@@ -642,10 +627,6 @@ export default function CVEvaluation() {
       {/* STEP 2 */}
       {step === 2 && (
         <div className="wizard-panel active">
-          <div style={{ marginBottom: '16px' }}>
-            <h3 style={{ fontSize: '18px', fontWeight: 700, color: 'var(--gray-900)' }}>Define Evaluation Criteria</h3>
-            <p style={{ fontSize: '13px', color: 'var(--gray-500)', marginTop: '4px' }}>Tell the AI what matters for this role.</p>
-          </div>
           {/* Row 1: Criteria Source + Scoring Preferences side by side */}
           <div className="criteria-grid">
             <div className="criteria-section">
@@ -710,6 +691,7 @@ export default function CVEvaluation() {
                     </p>
                     <button className="btn btn-primary" style={{ width: '100%' }} onClick={() => {
                       setCriteriaText(evalSelectedJob.job_description);
+                      setSelectedSetId('');
                       showToast('Job description loaded as criteria', 'success');
                     }}>
                       Load Job Description
@@ -735,7 +717,7 @@ export default function CVEvaluation() {
                 <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--gray-600)', display: 'block', marginBottom: '6px' }}>Upload a PDF or TXT file with criteria</label>
                 <input type="file" accept=".pdf,.txt" onChange={async (e) => {
                   if (!e.target.files.length) return;
-                  try { const text = await extractTextFromFile(e.target.files[0]); setCriteriaText(text); showToast('Criteria extracted', 'success'); }
+                  try { const text = await extractTextFromFile(e.target.files[0]); setCriteriaText(text); setSelectedSetId(''); showToast('Criteria extracted', 'success'); }
                   catch { showToast('Failed to read file', 'error'); }
                 }} />
               </div>
@@ -752,7 +734,7 @@ export default function CVEvaluation() {
               <h4>Criteria Draft</h4>
               <span className="criteria-section-hint">Edit criteria before continuing. All sources populate this editor.</span>
             </div>
-            <textarea className="criteria-draft" value={criteriaText} onChange={e => setCriteriaText(e.target.value)} placeholder="Your criteria will appear here. You can always edit before continuing." />
+            <textarea className="criteria-draft" value={criteriaText} onChange={e => { setCriteriaText(e.target.value); if (selectedSetId) setSelectedSetId(''); }} placeholder="Your criteria will appear here. You can always edit before continuing." />
 
             {/* Structured criteria items — required/optional + per-item weight */}
             <div style={{ marginTop: '16px', paddingTop: '16px', borderTop: '1px solid var(--gray-200)' }}>
@@ -793,7 +775,7 @@ export default function CVEvaluation() {
                 </div>
               )}
             </div>
-            {criteriaText && !saveCriteria && (
+            {criteriaText && !saveCriteria && !selectedSetId && (
               <div className="unsaved-warning-card">
                 <span className="warn-ico">{'\u26A0'}</span>
                 <div>
@@ -878,15 +860,9 @@ export default function CVEvaluation() {
       {/* STEP 4 */}
       {step === 4 && (
         <div className="wizard-panel active">
-          <div className="stats">
-            <StatCard label="Candidates" value={uniqueCount || '-'} />
-            <StatCard label="Evaluated" value={evalCount || '-'} />
-            <StatCard label="Avg Score" value={avgScore} />
-            <StatCard label="Top Score" value={topScore} />
-          </div>
           <div className="table-wrap">
             <div className="table-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' }}>
-              <h2>Evaluation Results</h2>
+              <h2 style={{ margin: 0 }}>Evaluation Results</h2>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 {(() => {
                   const unevalCount = candidates.filter(c => !evalMap[c.id]).length;
@@ -895,7 +871,7 @@ export default function CVEvaluation() {
                   return (
                     <button className="btn btn-primary" onClick={runEvaluation} disabled={busy || allDone}
                       title={allDone ? 'All candidates are already evaluated' : ''}>
-                      {evaluating ? `AI evaluating\u2026 ${Math.round(evalProgress)}%` : allDone ? '\u2713 All Evaluated' : `\u2728 Run Evaluation${unevalCount ? ` (${unevalCount})` : ''}`}
+                      {evaluating ? `AI evaluating\u2026 ${ev.done}/${ev.total}` : allDone ? '\u2713 All Evaluated' : `\u2728 Run Evaluation${unevalCount ? ` (${unevalCount})` : ''}`}
                     </button>
                   );
                 })()}
@@ -903,12 +879,10 @@ export default function CVEvaluation() {
             </div>
             {(evaluating || evaluatingOneId != null) && (
               <div style={{ padding: '8px 16px 12px' }}>
-                <div className="progress-bar" aria-label="AI evaluation in progress">
-                  <div className="progress-fill" style={{ width: evalProgress + '%', background: 'var(--primary, #3b82f6)' }} />
-                </div>
+                <div className="eval-bar" aria-label="AI evaluation in progress"><i /></div>
                 <div style={{ fontSize: '12px', color: 'var(--gray-600)', marginTop: '6px' }}>
                   {evaluating
-                    ? `Scoring ${evalBatchCount} candidate${evalBatchCount > 1 ? 's' : ''} on GTX 1650 \u2014 ~${Math.max(5, Math.round(evalBatchCount * 12))}s total`
+                    ? `Scoring ${ev.done}/${ev.total} candidate${ev.total > 1 ? 's' : ''} on GTX 1650 \u2014 ~${Math.max(5, Math.round(ev.total * 12))}s total`
                     : 'Scoring candidate on GTX 1650 \u2014 ~15s'}
                 </div>
               </div>
@@ -938,94 +912,121 @@ export default function CVEvaluation() {
                   <span className="results-filter-count">{f.count}</span>
                 </button>
               ))}
+              <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, alignItems: 'center' }}>
+                <span style={{ fontSize: 12.5, color: 'var(--gray-500)', whiteSpace: 'nowrap' }}>Sort by</span>
+                <select value={resultsSort} onChange={e => setResultsSort(e.target.value)}
+                  style={{ width: 150, flexShrink: 0, padding: '7px 12px', border: '1px solid var(--gray-200)', borderRadius: 'var(--radius)', fontSize: 13, fontFamily: 'inherit', outline: 'none', background: 'var(--surface)', cursor: 'pointer' }}>
+                  <option value="recent">Most recent</option>
+                  <option value="score">Highest score</option>
+                  <option value="name">Name (A–Z)</option>
+                </select>
+              </div>
             </div>
             {candidates.length === 0 ? <EmptyState>No candidates submitted yet. Upload CVs first.</EmptyState> : filtered.length === 0 ? <EmptyState>No candidates match this filter.</EmptyState> : (
-              <table>
-                <thead><tr><th>Candidate</th><th>Email</th><th>Submitted</th><th>Overall</th><th>Actions</th></tr></thead>
-                <tbody>
-                  {filtered.map(c => {
-                    const e = evalMap[c.id];
-                    const status = shortlistMap[c.id];
-                    const justChanged = recentlyChanged[c.id];
-                    const archived = isArchived(c.id);
-                    const fading = fadingOut[c.id];
-                    const dup = isDuplicate(c.id);
-                    const rowClass = [
-                      status === 'rejected' ? 'row-rejected' : (status === 'shortlisted' || status === 'interviewed' || status === 'hired') ? 'row-shortlisted' : '',
-                      archived ? 'row-archived' : '',
-                      fading ? 'row-fading-out' : '',
-                      dup && !archived ? 'row-duplicate' : '',
-                    ].filter(Boolean).join(' ');
-                    return (
-                      <tr key={c.id} className={rowClass}>
-                        <td>
-                          <strong>{c.candidate_name}</strong>
-                          {dup && !archived && <span className="dup-badge">Duplicate</span>}
-                        </td>
-                        <td>{c.email || '\u2014'}</td>
-                        <td>{formatDate(c.submitted_at)}</td>
-                        <td><ScoreBadge score={e?.overall_score} /></td>
-                        <td className="actions-cell">
-                          <div className="actions-container">
-                            {archived ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: '4px 0' }}>
+                {filtered.map(c => {
+                  const e = evalMap[c.id];
+                  const status = shortlistMap[c.id];
+                  const archived = isArchived(c.id);
+                  const dup = isDuplicate(c.id);
+                  const isOpen = expandedRow === c.id;
+                  const overall = e?.overall_score != null ? parseFloat(e.overall_score) : null;
+                  const tint = status === 'rejected' ? 'var(--tint-danger)'
+                    : (status === 'shortlisted' || status === 'interviewed' || status === 'hired') ? 'var(--tint-success)'
+                    : 'var(--surface)';
+                  return (
+                    <div key={c.id} style={{
+                      background: tint, border: `1px solid ${isOpen ? '#bfdbfe' : 'var(--gray-200)'}`,
+                      borderRadius: 12, overflow: 'hidden',
+                      boxShadow: isOpen ? '0 4px 16px rgba(37,99,235,0.08)' : '0 1px 2px rgba(0,0,0,0.04)',
+                      transition: 'border-color 0.15s, box-shadow 0.15s, opacity 0.35s', opacity: fadingOut[c.id] ? 0 : 1,
+                    }}>
+                      <div onClick={() => setExpandedRow(isOpen ? null : c.id)} style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '14px 18px', cursor: 'pointer', flexWrap: 'wrap' }}>
+                        <div style={{ flex: 1, minWidth: 160 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                            <strong style={{ fontSize: 15, color: 'var(--gray-900)' }}>{c.candidate_name}</strong>
+                            {dup && !archived && <span style={CVCHIP('#fef3c7', '#92400e')}>Duplicate</span>}
+                            {!archived && status === 'rejected' && <span style={CVCHIP('#fee2e2', '#991b1b')}>{'✗'} Rejected</span>}
+                            {!archived && (status === 'shortlisted' || status === 'interviewed' || status === 'hired') && <span style={CVCHIP('#dcfce7', '#166534')}>{'✓'} {status.charAt(0).toUpperCase() + status.slice(1)}</span>}
+                            {archived && <span style={CVCHIP('#f1f5f9', '#475569')}>{'\u{1F4E6}'} Archived</span>}
+                          </div>
+                          <div style={{ fontSize: 12, color: 'var(--gray-400)', marginTop: 2 }}>{c.email || '—'} {'·'} {formatDate(c.submitted_at)}</div>
+                        </div>
+
+                        <div onClick={ev => ev.stopPropagation()} style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 6, flexShrink: 0, flexWrap: 'wrap' }}>
+                          {archived ? (
+                            <button className="btn btn-sm btn-ghost" onClick={() => restoreCandidate(c.id)}>Restore</button>
+                          ) : status === 'rejected' ? (
+                            <>
+                              <button className="btn btn-sm btn-ghost" onClick={() => revertDecision(c.id, 'reject')} title="Revert this rejection">Unreject</button>
+                              <button className="btn btn-sm btn-ghost" onClick={() => archiveCandidate(c.id)}>Archive</button>
+                            </>
+                          ) : (status === 'shortlisted' || status === 'interviewed' || status === 'hired') ? (
+                            <>
+                              {status === 'shortlisted' && <button className="btn btn-sm btn-ghost" onClick={() => revertDecision(c.id, 'shortlist')}>Unshortlist</button>}
+                              <button className="btn btn-sm btn-ghost" onClick={() => archiveCandidate(c.id)}>Archive</button>
+                            </>
+                          ) : (
+                            <>
+                              {!e && (
+                                <button className="btn btn-sm btn-purple" onClick={() => evaluateOne(c.id)}
+                                  disabled={evaluating || (evaluatingOneId != null && evaluatingOneId !== c.id)}>
+                                  {evaluatingOneId === c.id ? 'Evaluating…' : 'Evaluate'}
+                                </button>
+                              )}
+                              {dup ? (
+                                <button className="btn btn-sm btn-ghost" onClick={() => archiveCandidate(c.id)}>Archive Duplicate</button>
+                              ) : (
+                                <>
+                                  <button className="btn btn-sm btn-success" onClick={() => addToShortlist(c.id)}>Shortlist</button>
+                                  <button className="btn btn-sm btn-danger" onClick={() => rejectCandidate(c.id, c.candidate_name, c.email)}>Reject</button>
+                                  <button className="btn btn-sm btn-ghost" onClick={() => archiveCandidate(c.id)}>Archive</button>
+                                </>
+                              )}
+                            </>
+                          )}
+                        </div>
+
+                        <div style={{ textAlign: 'center', minWidth: 50, borderLeft: '1px solid var(--gray-200)', paddingLeft: 14 }}>
+                          {overall != null
+                            ? <div style={{ fontSize: 22, fontWeight: 800, color: scoreColor(overall), lineHeight: 1 }}>{overall.toFixed(1)}</div>
+                            : <div style={{ fontSize: 11, color: 'var(--gray-400)', fontStyle: 'italic', lineHeight: 1.15 }}>Not<br />evaluated</div>}
+                          <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--gray-400)', marginTop: 3 }}>Overall</div>
+                        </div>
+                        <span style={{ color: 'var(--gray-400)', fontSize: 13, flexShrink: 0, transition: 'transform 0.25s ease', transform: isOpen ? 'rotate(180deg)' : 'none' }}>{'▾'}</span>
+                      </div>
+
+                      <div style={{ display: 'grid', gridTemplateRows: isOpen ? '1fr' : '0fr', transition: 'grid-template-rows 0.28s ease' }}>
+                        <div style={{ overflow: 'hidden' }}>
+                          <div style={{ borderTop: '1px solid var(--gray-100)', background: 'var(--surface-2)', padding: 18 }}>
+                            {e ? (
                               <>
-                                {(() => {
-                                  const prev = archivedMap[c.id];
-                                  if (prev === 'rejected') return <span className="status-action-badge status-rejected">{'\u2717'} Rejected</span>;
-                                  if (!prev || prev === 'pending') return <span className="status-action-badge status-archived">{'\u{1F4E6}'} Archived</span>;
-                                  return <span className="status-action-badge status-shortlisted">{'\u2713'} {prev.charAt(0).toUpperCase() + prev.slice(1)}</span>;
-                                })()}
-                                {c.cv_file_available && <button className="btn btn-sm btn-ghost" onClick={() => viewCV(c.id, c.candidate_name)} title="Open original PDF">View CV</button>}
-                                <button className="btn btn-sm btn-ghost" onClick={() => restoreCandidate(c.id)}>Restore</button>
-                              </>
-                            ) : status === 'rejected' ? (
-                              <>
-                                <span className={`status-action-badge status-rejected${justChanged ? ' status-pop' : ''}`}>{'\u2717'} Rejected</span>
-                                {c.cv_file_available && <button className="btn btn-sm btn-ghost" onClick={() => viewCV(c.id, c.candidate_name)} title="Open original PDF">View CV</button>}
-                                <button className="btn btn-sm btn-ghost" onClick={() => revertDecision(c.id, 'reject')} title="Revert this rejection — candidate returns to pending">Unreject</button>
-                                <button className="btn btn-sm btn-ghost" onClick={() => archiveCandidate(c.id)}>Archive</button>
-                              </>
-                            ) : status === 'shortlisted' || status === 'interviewed' || status === 'hired' ? (
-                              <>
-                                <span className={`status-action-badge status-shortlisted${justChanged ? ' status-pop' : ''}`}>{'\u2713'} {status.charAt(0).toUpperCase() + status.slice(1)}</span>
-                                {c.cv_file_available && <button className="btn btn-sm btn-ghost" onClick={() => viewCV(c.id, c.candidate_name)} title="Open original PDF">View CV</button>}
-                                {status === 'shortlisted' && (
-                                  <button className="btn btn-sm btn-ghost" onClick={() => revertDecision(c.id, 'shortlist')}>Unshortlist</button>
-                                )}
-                                <button className="btn btn-sm btn-ghost" onClick={() => archiveCandidate(c.id)}>Archive</button>
+                                <div style={{ display: 'flex', gap: 8, maxWidth: 380 }}>
+                                  <CvChip value={e.skills_score} label="Skills" />
+                                  <CvChip value={e.experience_score} label="Experience" />
+                                  <CvChip value={e.education_score} label="Education" />
+                                </div>
+                                {e.strengths && <div style={{ marginTop: 12, fontSize: 12.5, lineHeight: 1.5, color: 'var(--gray-700)' }}><strong style={{ color: '#166534' }}>Strengths:</strong> {e.strengths}</div>}
+                                {e.weaknesses && <div style={{ marginTop: 8, fontSize: 12.5, lineHeight: 1.5, color: 'var(--gray-700)' }}><strong style={{ color: '#991b1b' }}>Weaknesses:</strong> {e.weaknesses}</div>}
                               </>
                             ) : (
-                              <>
-                                {!e && (
-                                  <button className="btn btn-sm btn-purple" onClick={() => evaluateOne(c.id)}
-                                    disabled={evaluating || (evaluatingOneId != null && evaluatingOneId !== c.id)}>
-                                    {evaluatingOneId === c.id ? `Evaluating\u2026 ${Math.round(evalProgress)}%` : 'Run Evaluation'}
-                                  </button>
-                                )}
-                                <button className="btn btn-sm btn-secondary" onClick={() => setDetailCandidate(c)}>{e ? 'Details' : 'View Text'}</button>
-                                {c.cv_file_available && <button className="btn btn-sm btn-secondary" onClick={() => viewCV(c.id, c.candidate_name)} title="Open original PDF">View CV</button>}
-                                {dup ? (
-                                  <button className="btn btn-sm btn-ghost" onClick={() => archiveCandidate(c.id)}>Archive Duplicate</button>
-                                ) : (
-                                  <>
-                                    <button className="btn btn-sm btn-success" onClick={() => addToShortlist(c.id)}>Shortlist</button>
-                                    <button className="btn btn-sm btn-danger" onClick={() => rejectCandidate(c.id, c.candidate_name, c.email)}>Reject</button>
-                                    <button className="btn btn-sm btn-ghost" onClick={() => archiveCandidate(c.id)}>Archive</button>
-                                  </>
-                                )}
-                              </>
+                              <p style={{ fontSize: 13, color: 'var(--gray-400)', fontStyle: 'italic', margin: 0 }}>Not evaluated yet — run the evaluation to see the score breakdown.</p>
                             )}
+                            <div style={{ display: 'flex', gap: 8, marginTop: 14, flexWrap: 'wrap' }}>
+                              <button className="btn btn-sm btn-secondary" onClick={() => setDetailCandidate(c)}>{e ? 'Full details' : 'View CV text'}</button>
+                              {c.cv_file_available && <button className="btn btn-sm btn-secondary" onClick={() => viewCV(c.id, c.candidate_name)}>View original PDF</button>}
+                            </div>
                           </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             )}
           </div>
           <div className="wizard-footer">
-            <button className="btn btn-secondary" onClick={() => { setEvalSelectedJob(null); setUploadedFiles([]); setCriteriaText(''); setStep(1); loadJobs(); }}>&larr; Start New Evaluation</button>
+            <button className="btn btn-secondary" onClick={() => { setEvalSelectedJob(null); setUploadedFiles([]); setCriteriaText(''); setSelectedSetId(''); setStep(1); loadJobs(); }}>&larr; Start New Evaluation</button>
             <span className="step-info">Step 4 of 4</span>
           </div>
         </div>

@@ -354,7 +354,7 @@ export default function CandidateInterview() {
     return () => {
       document.body.style.background = prevBg;
       document.body.style.overflow = prevOv;
-      document.title = 'HR Automation';
+      document.title = 'Diyar HR';
       document.getElementById('ci-css')?.remove();
     };
   }, []);

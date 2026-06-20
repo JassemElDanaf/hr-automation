@@ -326,7 +326,7 @@ export default function EmailComposerModal() {
                 {uploadedFiles.length > 0 && (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '10px' }}>
                     {uploadedFiles.map(f => (
-                      <div key={f.filename} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 10px', background: '#fff', border: '1px solid var(--gray-200)', borderRadius: '6px' }}>
+                      <div key={f.filename} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 10px', background: 'var(--surface)', border: '1px solid var(--gray-200)', borderRadius: '6px' }}>
                         <span style={{ fontSize: '14px' }}>📄</span>
                         <span style={{ flex: 1, fontSize: '13px', color: 'var(--gray-800)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{f.filename}</span>
                         <span style={{ fontSize: '11px', color: 'var(--gray-400)', whiteSpace: 'nowrap' }}>{fmtSize(f.size)}</span>

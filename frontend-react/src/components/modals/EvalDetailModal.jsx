@@ -2,7 +2,6 @@ import { useState } from 'react';
 import Modal from './Modal';
 import { apiGet } from '../../services/api';
 import { useUI } from '../../state/uiState';
-import { getRecommendationTemplate, sendEmailRequest, getEmailStatus } from '../../services/email';
 import { base64ToBlobUrl } from '../../utils/pdf';
 
 function ScoreBar({ label, score }) {
@@ -115,49 +114,6 @@ export default function EvalDetailModal({ candidate, allCandidates, job, isOpen,
   const c = candidate;
   const canViewOriginal = !!c.cv_file_available;
 
-  function emailRecommendation() {
-    const jobTitle = job?.job_title || job?.title || 'the position';
-    const department = job?.department || '';
-    const reportingTo = job?.reporting_to || '';
-    // Per request: leave the To: field empty by default. The cached HM email and
-    // job.reporting_to fallback are no longer used for prefill (we still cache on
-    // send, so re-enabling later is a one-line change).
-    const initialEmail = '';
-    const tmpl = getRecommendationTemplate({
-      candidateName: c.candidate_name,
-      candidateEmail: c.email,
-      jobTitle,
-      department,
-      evaluation: c,
-    });
-    openEmailComposer({
-      title: 'Email Recommendation to Hiring Manager',
-      description: `Send the evaluation summary for ${c.candidate_name} to the hiring manager.`,
-      candidate: { id: c.id, name: c.candidate_name, email: c.email },
-      job: { id: job?.id, title: jobTitle },
-      emailType: 'recommendation',
-      recipientLabel: 'Hiring manager',
-      recipientName: reportingTo || 'Hiring manager',
-      recipientEmail: initialEmail,
-      editableRecipient: true,
-      defaultSubject: tmpl.subject,
-      defaultBody: tmpl.body,
-      sendLabel: 'Send Recommendation',
-      sendClass: 'btn-primary',
-      onSend: async ({ subject, body, recipientEmail, attachmentFiles }) => {
-        if (!looksLikeEmail(recipientEmail)) { showToast('Please enter a valid hiring manager email', 'error'); throw new Error('invalid recipient'); }
-        const res = await sendEmailRequest({
-          candidateId: c.id, jobId: job?.id, emailType: 'recommendation',
-          recipientEmail, candidateName: c.candidate_name, jobTitle,
-          subject, body, attachments: attachmentFiles,
-        });
-        if (job?.id) saveHMEmail(job.id, recipientEmail);
-        const status = getEmailStatus(res);
-        showToast(status.message, status.type);
-      },
-    });
-  }
-
   async function viewOriginalCV() {
     // Open the tab synchronously inside the click handler so the popup blocker
     // treats it as a user-initiated navigation. We then redirect it once the
@@ -241,11 +197,6 @@ export default function EvalDetailModal({ candidate, allCandidates, job, isOpen,
             <div style={{ fontSize: '56px', fontWeight: 800, color: overallColor, lineHeight: 1 }}>{overall.toFixed(1)}</div>
             <div style={{ fontSize: '16px', fontWeight: 600, color: overallColor, marginTop: '4px' }}>{overallLabel}</div>
             <div style={{ fontSize: '13px', color: 'var(--gray-400)', marginTop: '2px' }}>Overall Score / 10</div>
-            <div style={{ marginTop: '14px', display: 'flex', justifyContent: 'center', gap: '8px', flexWrap: 'wrap' }}>
-              <button className="btn btn-sm btn-primary" onClick={emailRecommendation}>
-                {'\u2709'} Email Recommendation to Hiring Manager
-              </button>
-            </div>
           </div>
 
           <RequiredItemsBlock missing={reqItems.missing} met={reqItems.met} />
