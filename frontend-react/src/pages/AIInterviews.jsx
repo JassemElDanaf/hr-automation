@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { apiGet, apiPost } from '../services/api';
 import { useUI } from '../state/uiState';
 import { useEvalStatus } from '../state/evalStatus';
@@ -71,6 +72,7 @@ function formatDate(ts) {
 // `embedded` renders without the page container/heading so the whole view can
 // live as the "Results" sub-tab inside the Interview page.
 export default function AIInterviews({ embedded = false }) {
+  const navigate = useNavigate();
   const { showToast, openEmailComposer } = useUI();
   const { runAiTask } = useEvalStatus();
   const { selectedJob } = useSelectedJob();
@@ -89,6 +91,21 @@ export default function AIInterviews({ embedded = false }) {
   const [manualEditing, setManualEditing] = useState({}); // sessionId → { comm, tech, conf, culture, overall, recommendation, summary }
   const pollingRef = useRef(null);
   const autoEvalRef = useRef(new Set()); // session ids we've already auto-evaluated (no loops)
+  const focusedRef = useRef(false);      // deep-link ?focus=<candidateId> applied once
+
+  // Deep-link from the Shortlist "Results" button: ?focus=<candidateId> expands
+  // and scrolls to that candidate's interview session.
+  useEffect(() => {
+    if (focusedRef.current || sessions.length === 0) return;
+    const focus = new URLSearchParams(window.location.search).get('focus');
+    if (!focus) return;
+    const s = sessions.find(x => String(x.candidateId) === String(focus));
+    if (s && !isPending(s)) {
+      focusedRef.current = true;
+      setExpandedId(s.id);
+      setTimeout(() => document.getElementById(`session-${s.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 200);
+    }
+  }, [sessions]);
 
   // Auto-evaluate: whenever a pending session with a transcript appears (the
   // candidate's background eval may have failed or never run), kick off the
@@ -367,7 +384,7 @@ HR Department`;
               const recUrl     = hasRec ? `${RECORDING_SERVER}/recording/${s.recordingPath}` : null;
 
               return (
-                <div key={s.id} style={{
+                <div key={s.id} id={`session-${s.id}`} style={{
                   background: 'var(--surface)', border: `1px solid ${isOpen ? '#bfdbfe' : 'var(--gray-200)'}`,
                   borderRadius: 12, overflow: 'hidden',
                   boxShadow: isOpen ? '0 4px 16px rgba(37,99,235,0.08)' : '0 1px 2px rgba(0,0,0,0.04)',
@@ -406,6 +423,12 @@ HR Department`;
                       </div>
                     ) : (
                       <>
+                        <button
+                          onClick={ev => { ev.stopPropagation(); navigate(`/decision?job=${s.jobOpeningId}&focus=${s.candidateId}`); }}
+                          className="btn btn-sm btn-primary"
+                          title="Open this candidate in the Decision tab to hire / reject / send to HM"
+                          style={{ flexShrink: 0, whiteSpace: 'nowrap' }}
+                        >⚖ Decide</button>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 18, flexShrink: 0 }}>
                           {[
                             { lbl: 'Communication', score: s.scoreComm },

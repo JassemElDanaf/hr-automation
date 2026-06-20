@@ -85,6 +85,7 @@ export default function Shortlist() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const inviteHandledRef = useRef(false);
+  const focusHandledRef = useRef(false);
   const { selectedJob, setSelectedJob } = useSelectedJob();
   const { showToast, openEmailComposer } = useUI();
   const { runAiTask } = useEvalStatus();
@@ -137,6 +138,28 @@ export default function Shortlist() {
     inviteHandledRef.current = true;
     sendEmail(row.candidate_id, row.job_opening_id, row.candidate_name, row.email, 'interview_invite');
     searchParams.delete('emailInvite'); searchParams.delete('job');
+    setSearchParams(searchParams, { replace: true });
+  }, [data, jobs, jobId, searchParams]);
+
+  // /shortlist?focus=<candidateId>&job=<jobId> — from "← Back to Shortlist":
+  // switch to the job, then expand + scroll to that candidate's card (no composer).
+  useEffect(() => {
+    const focusCand = searchParams.get('focus');
+    const focusJob = searchParams.get('job');
+    if (!focusCand || focusHandledRef.current) return;
+    if (focusJob && jobs.length && String(jobId) !== String(focusJob)) {
+      const j = jobs.find(j => String(j.id) === String(focusJob));
+      if (j) setSelectedJob({ id: j.id, job_title: j.job_title, department: j.department });
+      return;
+    }
+    if (data.length === 0) return;
+    const row = data.find(s => String(s.candidate_id) === String(focusCand));
+    if (!row) return;
+    focusHandledRef.current = true;
+    setSlFilter('all'); // make sure the card isn't hidden by the active filter
+    setExpanded(row.id);
+    setTimeout(() => document.getElementById(`sl-cand-${row.candidate_id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 200);
+    searchParams.delete('focus'); searchParams.delete('job');
     setSearchParams(searchParams, { replace: true });
   }, [data, jobs, jobId, searchParams]);
 
@@ -444,7 +467,7 @@ export default function Shortlist() {
             const tint = s.status === 'hired' ? 'var(--tint-success)' : s.status === 'rejected' ? 'var(--tint-danger)' : 'var(--surface)';
             const statusLabel = archived ? 'archived' : invited ? 'invited' : s.status;
             return (
-              <div key={s.id} style={{
+              <div key={s.id} id={`sl-cand-${s.candidate_id}`} style={{
                 background: tint, border: `1px solid ${isOpen ? '#bfdbfe' : 'var(--gray-200)'}`,
                 borderRadius: 12, overflow: 'hidden',
                 boxShadow: isOpen ? '0 4px 16px rgba(37,99,235,0.08)' : '0 1px 2px rgba(0,0,0,0.04)',
@@ -472,7 +495,7 @@ export default function Shortlist() {
                       <button className="btn btn-sm btn-secondary" onClick={() => restoreSlArchive(s.id)}>Restore</button>
                     ) : (s.status === 'shortlisted' || s.status === 'interviewed') ? (
                       <>
-                        {s.status === 'interviewed' && <button className="btn btn-sm btn-primary" onClick={() => navigate('/live-interview?tab=results')} title="See the interview scores, transcript and recording">📊 Results</button>}
+                        {s.status === 'interviewed' && <button className="btn btn-sm btn-primary" onClick={() => navigate(`/live-interview?tab=results&focus=${s.candidate_id}`)} title="See the interview scores, transcript and recording">📊 Results</button>}
                         <button className={`btn btn-sm ${s.status === 'interviewed' ? 'btn-secondary' : 'btn-primary'}`} onClick={() => setUpInterview(s)}>⚙ Set Up Interview</button>
                         <button className="btn btn-sm btn-success" onClick={() => sendEmail(s.candidate_id, s.job_opening_id, s.candidate_name, s.email, 'interview_invite')}>Send Invite</button>
                         <button className="btn btn-sm btn-danger" onClick={() => rejectFromShortlist(s)}>Reject</button>

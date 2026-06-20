@@ -120,12 +120,8 @@ export default function JobOpenings() {
   return (
     <div className="container">
       <div className="table-wrap">
-        <div className="table-header">
-          <span style={{ fontSize: '13px', color: 'var(--gray-400)' }}>{filtered.length} of {allJobs.length} jobs</span>
-          <button className="btn btn-primary btn-sm" onClick={() => { resetForm(); setShowCreate(true); }}>+ New Job</button>
-        </div>
-        <div style={{ padding: '12px 24px', borderBottom: '1px solid var(--gray-200)', display: 'flex', alignItems: 'center', gap: '16px' }}>
-          <input type="text" className="search-bar" placeholder="Search by title, department..." value={search} onChange={e => setSearch(e.target.value)} style={{ maxWidth: '400px' }} />
+        <div style={{ padding: '12px 24px', borderBottom: '1px solid var(--gray-200)', display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
+          <input type="text" className="search-bar" placeholder="Search by title, department..." value={search} onChange={e => setSearch(e.target.value)} style={{ maxWidth: '320px', flex: 1, minWidth: 180 }} />
           <div className="filter-tabs">
             {['all', 'active', 'inactive'].map(f => (
               <button key={f} className={`filter-tab ${filter === f ? 'active' : ''}`} onClick={() => setFilter(f)}>
@@ -133,6 +129,8 @@ export default function JobOpenings() {
               </button>
             ))}
           </div>
+          <span style={{ fontSize: '13px', color: 'var(--gray-400)', marginLeft: 'auto' }}>{filtered.length} of {allJobs.length} jobs</span>
+          <button className="btn btn-primary btn-sm" onClick={() => { resetForm(); setShowCreate(true); }}>+ New Job</button>
         </div>
         {loading ? <Loading /> : filtered.length === 0 ? (
           <div className="empty-state"><p>No job openings found.</p></div>

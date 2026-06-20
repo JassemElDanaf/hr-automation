@@ -170,7 +170,9 @@ export default function Header() {
                     onMouseEnter={e => e.currentTarget.style.background = 'var(--gray-50)'}
                     onMouseLeave={e => e.currentTarget.style.background = 'none'}>
                     <span style={menuIcon}>{isDark ? '🌙' : '☀️'}</span> Dark mode
-                    <span style={{ marginLeft: 'auto', fontSize: 10, fontWeight: 800, letterSpacing: '0.04em', padding: '2px 8px', borderRadius: 10, background: isDark ? 'rgba(59,130,246,0.18)' : 'var(--gray-100)', color: isDark ? '#3b82f6' : 'var(--gray-400)' }}>{isDark ? 'ON' : 'OFF'}</span>
+                    <span aria-hidden style={{ marginLeft: 'auto', width: 38, height: 22, borderRadius: 11, background: isDark ? '#3b82f6' : 'var(--gray-300)', position: 'relative', flexShrink: 0, transition: 'background 0.2s ease' }}>
+                      <span style={{ position: 'absolute', top: 2, left: isDark ? 18 : 2, width: 18, height: 18, borderRadius: '50%', background: '#fff', boxShadow: '0 1px 3px rgba(0,0,0,0.3)', transition: 'left 0.2s ease' }} />
+                    </span>
                   </button>
                   <button onClick={() => { setMenuOpen(false); setPwOpen(true); }} style={menuItem}
                     onMouseEnter={e => e.currentTarget.style.background = 'var(--gray-50)'}

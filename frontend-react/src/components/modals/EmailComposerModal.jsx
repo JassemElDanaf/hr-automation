@@ -268,8 +268,8 @@ export default function EmailComposerModal() {
             </label>
           )}
 
-          {/* Subject + body — shown once we have a valid recipient (or toggle permits no-send) */}
-          {(hasEmail || (showToggle && !sendEmail)) && (
+          {/* Subject + body — collapse when "Also send email" is unticked. */}
+          {(hasEmail && (!showToggle || sendEmail)) && (
             <div>
               <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: 'var(--gray-700)', marginBottom: '4px' }}>Subject</label>
               <input

@@ -17,7 +17,22 @@ export default function NotificationBell() {
   const [rechecking, setRechecking] = useState(false);
   const [expanded, setExpanded] = useState(false);   // pill slid out of the bell?
   const [displayItem, setDisplayItem] = useState(null); // retained during slide-back
+  const [preview, setPreview] = useState(null);       // transient toast beside the bell
+  const seenTopRef = useRef(undefined);
   const ref = useRef(null);
+
+  // When a new notification arrives, flash a preview card beside the bell for a
+  // few seconds before it "settles" into the panel.
+  useEffect(() => {
+    const top = items[0];
+    if (seenTopRef.current === undefined) { seenTopRef.current = top ? top.id : null; return; } // baseline on mount
+    if (top && top.id !== seenTopRef.current) {
+      seenTopRef.current = top.id;
+      setPreview(top);
+      const t = setTimeout(() => setPreview(null), 5000);
+      return () => clearTimeout(t);
+    }
+  }, [items]);
 
   // Notify when a service drops or recovers (skip the initial 'checking' baseline).
   const prevStates = useRef({});
@@ -108,6 +123,25 @@ export default function NotificationBell() {
 
   return (
     <div ref={ref} style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+      {/* Transient preview that slides in beside the bell when a new notification
+          arrives, then disappears (settling into the panel). Click to act on it. */}
+      {preview && (
+        <div
+          onClick={() => { go(preview.nav); setPreview(null); }}
+          style={{ position: 'absolute', right: 'calc(100% + 10px)', top: '50%', transform: 'translateY(-50%)',
+            width: 270, display: 'flex', gap: 10, alignItems: 'flex-start', padding: '10px 13px',
+            background: 'var(--surface)', border: '1px solid var(--gray-200)', borderRadius: 12,
+            boxShadow: '0 10px 30px rgba(0,0,0,0.16)', cursor: preview.nav ? 'pointer' : 'default',
+            zIndex: 330, animation: 'notifPreviewIn 0.28s cubic-bezier(.34,1.2,.5,1)' }}>
+          <span style={{ fontSize: 17, flexShrink: 0 }}>{preview.icon || '•'}</span>
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <div style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--gray-800)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{preview.title}</div>
+            {preview.body && <div style={{ fontSize: 11.5, color: 'var(--gray-500)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{preview.body}</div>}
+          </div>
+          <button onClick={e => { e.stopPropagation(); setPreview(null); }} title="Dismiss"
+            style={{ background: 'none', border: 'none', color: 'var(--gray-300)', cursor: 'pointer', fontSize: 15, lineHeight: 1, flexShrink: 0, padding: 0 }}>×</button>
+        </div>
+      )}
       {/* Sliding status pill — emerges from the bell while a task runs. */}
       <button type="button" onClick={toggle} title="Open notifications"
         aria-hidden={!expanded} tabIndex={expanded ? 0 : -1}

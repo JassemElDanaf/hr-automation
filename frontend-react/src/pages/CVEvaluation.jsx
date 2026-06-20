@@ -26,6 +26,20 @@ import { sendEmailRequest, getRejectionTemplate } from '../services/email';
 
 const CVCHIP = (bg, color) => ({ fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', padding: '3px 9px', borderRadius: 10, background: bg, color });
 
+// Pull the "Required items met / NOT met" lines the n8n parser appends to
+// reasoning, and return the cleaned prose separately.
+function extractReq(reasoning) {
+  if (!reasoning) return { missing: [], met: [], clean: '' };
+  const split = s => s.split(/[;,]/).map(x => x.trim()).filter(Boolean);
+  const mMiss = reasoning.match(/Required items NOT met:\s*([^\n]+)/i);
+  const mMet = reasoning.match(/Required items met:\s*([^\n]+)/i);
+  const clean = reasoning
+    .replace(/Required items NOT met:\s*[^\n]+/i, '')
+    .replace(/Required items met:\s*[^\n]+/i, '')
+    .trim();
+  return { missing: mMiss ? split(mMiss[1]) : [], met: mMet ? split(mMet[1]) : [], clean };
+}
+
 // Compact score chip used inside the expanded result detail (Decision-style).
 function CvChip({ value, label }) {
   const v = value != null ? parseFloat(value) : null;
@@ -75,6 +89,27 @@ export default function CVEvaluation() {
   const ev = evalState && evalState.jobId === evalJobId ? evalState : null;
   const evaluating = !!ev && !ev.candidateId && ev.phase === 'running';
   const evaluatingOneId = (ev && ev.candidateId && ev.phase === 'running') ? ev.candidateId : null;
+  const evalBusy = evaluating || evaluatingOneId != null;
+
+  // Tick a timer while evaluating so the progress bar advances. The backend
+  // scores the whole batch and writes rows at the end (so the real done-count
+  // stays 0 until then) — we estimate progress from elapsed time instead, and
+  // blend in the real count if/when it moves.
+  useEffect(() => {
+    if (!evalBusy) { evalStartRef.current = 0; return; }
+    if (!evalStartRef.current) evalStartRef.current = Date.now();
+    const id = setInterval(() => setEvalTick(t => t + 1), 400);
+    return () => clearInterval(id);
+  }, [evalBusy]);
+
+  function evalProgressPct() {
+    const total = Math.max(1, ev?.total || 1);
+    const realPct = ((ev?.done || 0) / total) * 100;
+    const estMs = Math.max(8000, total * 12000); // ~12s per candidate
+    const elapsed = evalStartRef.current ? Date.now() - evalStartRef.current : 0;
+    const timePct = Math.min(95, (elapsed / estMs) * 100); // cap at 95% until truly done
+    return Math.round(Math.max(realPct, timePct));
+  }
 
   // When the global evaluation finishes for this job, reload the results table.
   // This is navigation-proof: the eval runs/polls in the provider even if the
@@ -99,6 +134,9 @@ export default function CVEvaluation() {
   const [fadingOut, setFadingOut] = useState({}); // candidateId -> true (for fade-out animation)
   const [pendingArchive, setPendingArchive] = useState(null); // { candidateId, previousStatus, timeoutId }
   const archiveTimeoutRef = useRef(null);
+  const selectJobReqRef = useRef(0); // guards against stale selectJob fetch races
+  const evalStartRef = useRef(0);
+  const [, setEvalTick] = useState(0); // forces a re-render so the progress bar advances
   const [retainedInView, setRetainedInView] = useState(new Set()); // candidates kept visible after status change until filter switches
   function switchFilter(f) { setResultsFilter(f); setRetainedInView(new Set()); }
 
@@ -141,14 +179,20 @@ export default function CVEvaluation() {
   }
 
   async function selectJob(job) {
+    // Track the latest requested job so a slow fetch from a previously-clicked
+    // card can't resolve late and clobber the current selection (the glitch
+    // where clicking one job sometimes lands on another).
+    const reqId = ++selectJobReqRef.current;
     setEvalSelectedJob(job);
     setEvalJobId(job.id);
     setSelectedJob(job);
+    setJobState(null);
     const [full, state] = await Promise.all([
       apiGet(`/job-opening?id=${job.id}`).catch(() => null),
       fetchJobState(job.id),
     ]);
-    if (full?.data) setEvalSelectedJob(prev => ({ ...prev, ...full.data }));
+    if (selectJobReqRef.current !== reqId) return; // superseded by a newer click
+    if (full?.data) setEvalSelectedJob(prev => (prev && prev.id === job.id ? { ...prev, ...full.data } : prev));
     setJobState(state);
   }
 
@@ -577,8 +621,6 @@ export default function CVEvaluation() {
       {/* STEP 1 */}
       {step === 1 && (
         <div className="wizard-panel active">
-          <h3 style={{ fontSize: '16px', fontWeight: 700, marginBottom: '2px' }}>Select a Job Opening</h3>
-          <p style={{ fontSize: '13px', color: 'var(--gray-500)', marginBottom: '10px' }}>Choose the role you want to evaluate candidates for.</p>
           <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
             <input type="text" className="search-bar" placeholder="Search jobs..." value={jobSearch} onChange={e => setJobSearch(e.target.value)} style={{ flex: 1 }} />
             <button className="btn btn-secondary btn-sm" onClick={loadJobs}>Refresh</button>
@@ -817,11 +859,9 @@ export default function CVEvaluation() {
       {/* STEP 3 */}
       {step === 3 && (
         <div className="wizard-panel active">
-          <h3 style={{ fontSize: '16px', fontWeight: 700, marginBottom: '4px' }}>Upload Candidate CVs</h3>
-          <p style={{ fontSize: '13px', color: 'var(--gray-500)', marginBottom: '16px' }}>Upload one or more PDF CVs. Duplicates are automatically detected.</p>
           <div className="criteria-bar">
-            <div><strong>{evalSelectedJob?.job_title}</strong> &mdash; {criteriaText.length > 0 ? criteriaText.length + ' char criteria' : 'Using job description'}</div>
-            <div>Skills: <strong>{weights.skills}%</strong> &middot; Exp: <strong>{weights.experience}%</strong> &middot; Edu: <strong>{weights.education}%</strong></div>
+            <div><strong>{evalSelectedJob?.job_title}</strong> &middot; {criteriaText.length > 0 ? 'Custom criteria set' : 'Using job description'}</div>
+            <div>Skills <strong>{weights.skills}%</strong> &middot; Experience <strong>{weights.experience}%</strong> &middot; Education <strong>{weights.education}%</strong></div>
           </div>
           <div className="dropzone" onClick={() => document.getElementById('cv-file-input').click()} onDragOver={e => { e.preventDefault(); e.currentTarget.classList.add('dragover'); }} onDragLeave={e => e.currentTarget.classList.remove('dragover')}
             onDrop={e => { e.preventDefault(); e.currentTarget.classList.remove('dragover'); if (e.dataTransfer.files.length) processFiles(e.dataTransfer.files); }}>
@@ -861,32 +901,22 @@ export default function CVEvaluation() {
       {step === 4 && (
         <div className="wizard-panel active">
           <div className="table-wrap">
-            <div className="table-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' }}>
-              <h2 style={{ margin: 0 }}>Evaluation Results</h2>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                {(() => {
-                  const unevalCount = candidates.filter(c => !evalMap[c.id]).length;
-                  const allDone = candidates.length > 0 && unevalCount === 0;
-                  const busy = evaluating || evaluatingOneId != null;
-                  return (
-                    <button className="btn btn-primary" onClick={runEvaluation} disabled={busy || allDone}
-                      title={allDone ? 'All candidates are already evaluated' : ''}>
-                      {evaluating ? `AI evaluating\u2026 ${ev.done}/${ev.total}` : allDone ? '\u2713 All Evaluated' : `\u2728 Run Evaluation${unevalCount ? ` (${unevalCount})` : ''}`}
-                    </button>
-                  );
-                })()}
-              </div>
-            </div>
-            {(evaluating || evaluatingOneId != null) && (
-              <div style={{ padding: '8px 16px 12px' }}>
-                <div className="eval-bar" aria-label="AI evaluation in progress"><i /></div>
-                <div style={{ fontSize: '12px', color: 'var(--gray-600)', marginTop: '6px' }}>
-                  {evaluating
-                    ? `Scoring ${ev.done}/${ev.total} candidate${ev.total > 1 ? 's' : ''} on GTX 1650 \u2014 ~${Math.max(5, Math.round(ev.total * 12))}s total`
-                    : 'Scoring candidate on GTX 1650 \u2014 ~15s'}
+            {evalBusy && (() => {
+              const pct = evalProgressPct();
+              return (
+                <div style={{ padding: '8px 16px 12px' }}>
+                  <div style={{ height: 7, background: 'var(--gray-200)', borderRadius: 4, overflow: 'hidden' }}>
+                    <div style={{ height: '100%', width: `${pct}%`, background: '#7c3aed', borderRadius: 4, transition: 'width 0.4s ease' }} />
+                  </div>
+                  <div style={{ fontSize: '12px', color: 'var(--gray-600)', marginTop: '6px', display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+                    <span>{evaluating
+                      ? `Scoring ${ev.done}/${ev.total} candidate${ev.total > 1 ? 's' : ''} on GTX 1650 \u2014 ~${Math.max(5, Math.round(ev.total * 12))}s total`
+                      : 'Scoring candidate on GTX 1650 \u2014 ~15s'}</span>
+                    <strong style={{ color: '#7c3aed' }}>{pct}%</strong>
+                  </div>
                 </div>
-              </div>
-            )}
+              );
+            })()}
             {/* Duplicate warning banner */}
             {activeDuplicateCount > 0 && resultsFilter !== 'duplicates' && !dupBannerDismissed && (
               <div className="dup-warning-banner">
@@ -913,6 +943,17 @@ export default function CVEvaluation() {
                 </button>
               ))}
               <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, alignItems: 'center' }}>
+                {(() => {
+                  const unevalCount = candidates.filter(c => !evalMap[c.id]).length;
+                  const allDone = candidates.length > 0 && unevalCount === 0;
+                  const busy = evaluating || evaluatingOneId != null;
+                  return (
+                    <button className="btn btn-primary btn-sm" onClick={runEvaluation} disabled={busy || allDone}
+                      title={allDone ? 'All candidates are already evaluated' : ''} style={{ whiteSpace: 'nowrap' }}>
+                      {evaluating ? `AI evaluating… ${ev.done}/${ev.total}` : allDone ? '✓ All Evaluated' : `✨ Run Evaluation${unevalCount ? ` (${unevalCount})` : ''}`}
+                    </button>
+                  );
+                })()}
                 <span style={{ fontSize: 12.5, color: 'var(--gray-500)', whiteSpace: 'nowrap' }}>Sort by</span>
                 <select value={resultsSort} onChange={e => setResultsSort(e.target.value)}
                   style={{ width: 150, flexShrink: 0, padding: '7px 12px', border: '1px solid var(--gray-200)', borderRadius: 'var(--radius)', fontSize: 13, fontFamily: 'inherit', outline: 'none', background: 'var(--surface)', cursor: 'pointer' }}>
@@ -999,21 +1040,31 @@ export default function CVEvaluation() {
                       <div style={{ display: 'grid', gridTemplateRows: isOpen ? '1fr' : '0fr', transition: 'grid-template-rows 0.28s ease' }}>
                         <div style={{ overflow: 'hidden' }}>
                           <div style={{ borderTop: '1px solid var(--gray-100)', background: 'var(--surface-2)', padding: 18 }}>
-                            {e ? (
-                              <>
-                                <div style={{ display: 'flex', gap: 8, maxWidth: 380 }}>
-                                  <CvChip value={e.skills_score} label="Skills" />
-                                  <CvChip value={e.experience_score} label="Experience" />
-                                  <CvChip value={e.education_score} label="Education" />
-                                </div>
-                                {e.strengths && <div style={{ marginTop: 12, fontSize: 12.5, lineHeight: 1.5, color: 'var(--gray-700)' }}><strong style={{ color: '#166534' }}>Strengths:</strong> {e.strengths}</div>}
-                                {e.weaknesses && <div style={{ marginTop: 8, fontSize: 12.5, lineHeight: 1.5, color: 'var(--gray-700)' }}><strong style={{ color: '#991b1b' }}>Weaknesses:</strong> {e.weaknesses}</div>}
-                              </>
-                            ) : (
+                            {e ? (() => {
+                              const req = extractReq(e.reasoning);
+                              return (
+                                <>
+                                  <div style={{ display: 'flex', gap: 8, maxWidth: 380 }}>
+                                    <CvChip value={e.skills_score} label="Skills" />
+                                    <CvChip value={e.experience_score} label="Experience" />
+                                    <CvChip value={e.education_score} label="Education" />
+                                  </div>
+                                  {(req.missing.length > 0 || req.met.length > 0) && (
+                                    <div style={{ marginTop: 12, display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                                      {req.met.map((t, i) => <span key={'m' + i} style={{ fontSize: 11.5, fontWeight: 600, padding: '3px 9px', borderRadius: 10, background: '#dcfce7', color: '#166534' }}>✓ {t}</span>)}
+                                      {req.missing.map((t, i) => <span key={'x' + i} style={{ fontSize: 11.5, fontWeight: 600, padding: '3px 9px', borderRadius: 10, background: '#fee2e2', color: '#991b1b' }}>✗ {t}</span>)}
+                                    </div>
+                                  )}
+                                  {e.strengths && <div style={{ marginTop: 12, fontSize: 12.5, lineHeight: 1.55, color: 'var(--gray-700)' }}><strong style={{ color: '#166534' }}>Strengths:</strong> {e.strengths}</div>}
+                                  {e.weaknesses && <div style={{ marginTop: 8, fontSize: 12.5, lineHeight: 1.55, color: 'var(--gray-700)' }}><strong style={{ color: '#991b1b' }}>Weaknesses:</strong> {e.weaknesses}</div>}
+                                  {req.clean && <div style={{ marginTop: 8, fontSize: 12.5, lineHeight: 1.55, color: 'var(--gray-700)' }}><strong style={{ color: 'var(--gray-600)' }}>Reasoning:</strong> {req.clean}</div>}
+                                </>
+                              );
+                            })() : (
                               <p style={{ fontSize: 13, color: 'var(--gray-400)', fontStyle: 'italic', margin: 0 }}>Not evaluated yet — run the evaluation to see the score breakdown.</p>
                             )}
                             <div style={{ display: 'flex', gap: 8, marginTop: 14, flexWrap: 'wrap' }}>
-                              <button className="btn btn-sm btn-secondary" onClick={() => setDetailCandidate(c)}>{e ? 'Full details' : 'View CV text'}</button>
+                              {!e && <button className="btn btn-sm btn-secondary" onClick={() => setDetailCandidate(c)}>View CV text</button>}
                               {c.cv_file_available && <button className="btn btn-sm btn-secondary" onClick={() => viewCV(c.id, c.candidate_name)}>View original PDF</button>}
                             </div>
                           </div>

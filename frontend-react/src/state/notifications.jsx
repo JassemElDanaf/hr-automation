@@ -11,6 +11,7 @@ const NotificationsContext = createContext(null);
 
 const STORE_KEY = 'hr_notifications';        // persisted notification list
 const SEEN_KEY  = 'hr_notif_seen_inbound';   // highest inbound email id already surfaced
+const SEEN_SESS_KEY = 'hr_notif_seen_session'; // highest completed-interview session id surfaced
 const MAX_ITEMS = 50;
 const POLL_MS   = 60000;
 
@@ -82,6 +83,35 @@ export function NotificationsProvider({ children }) {
           showToast(fresh.length === 1
             ? `📥 New email reply from ${fresh[0].recipient_email || 'a candidate'}`
             : `📥 ${fresh.length} new email replies`, 'info');
+        }
+      } catch {}
+
+      // ── Completed AI interviews ──
+      try {
+        const jobsRes = await apiGet('/job-openings');
+        const jobs = jobsRes.data || [];
+        const sessLists = await Promise.all(
+          jobs.map(j => apiGet(`/interview/sessions?jobId=${j.id}`).then(r => (Array.isArray(r) ? r : r.data) || []).catch(() => []))
+        );
+        const sessions = sessLists.flat().filter(s => s && s.id);
+        if (cancelled || !sessions.length) return;
+        const seen = Number(localStorage.getItem(SEEN_SESS_KEY) || 0);
+        const newMax = Math.max(seen, ...sessions.map(s => Number(s.id)));
+        localStorage.setItem(SEEN_SESS_KEY, String(newMax));
+        if (seen === 0) return; // baseline on first run
+        const freshSess = sessions.filter(s => Number(s.id) > seen);
+        freshSess.forEach(s => addNotification({
+          type: 'interview',
+          dedupeKey: `sess-${s.id}`,
+          icon: '🎤',
+          title: `${s.candidateName || 'A candidate'} completed the interview`,
+          body: 'Tap to view the results',
+          nav: s.candidateId ? `/live-interview?tab=results&focus=${s.candidateId}` : '/live-interview?tab=results',
+        }));
+        if (freshSess.length) {
+          showToast(freshSess.length === 1
+            ? `🎤 ${freshSess[0].candidateName || 'A candidate'} completed the interview`
+            : `🎤 ${freshSess.length} interviews completed`, 'success');
         }
       } catch {}
     }

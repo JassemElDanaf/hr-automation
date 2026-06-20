@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { apiGet, apiPost } from '../services/api';
 import { useSelectedJob } from '../state/selectedJob';
 import { useUI } from '../state/uiState';
@@ -61,6 +62,8 @@ export default function Decision() {
   const [expanded, setExpanded] = useState(null);
   const [sentToHM, setSentToHM] = useState(new Set());   // candidate_ids with a sent recommendation email
   const [sortBy, setSortBy] = useState('recent'); // recent | combined | cv | interview | name
+  const [navbarSlot, setNavbarSlot] = useState(null); // nav-row portal target for the score blend
+  useEffect(() => { setNavbarSlot(document.getElementById('navbar-slot')); }, []);
   const [statusFilter, setStatusFilter] = useState('all');  // Decision list status filter pills
   const [pendingFocus, setPendingFocus] = useState(null);   // candidate_id to expand+scroll once rows load
   const focusAppliedRef = useRef(false);
@@ -320,39 +323,32 @@ HR Department`;
 
   return (
     <div className="container tab-fade-in">
-      <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 16, flexWrap: 'wrap' }}>
-        <button className="btn btn-secondary btn-sm" onClick={loadData}>↻ Refresh</button>
-
-        {/* Combined-score weighting — sits inline on the right of the row to
-            save vertical space. Step of 5 + a snap to 50 make a balanced 50/50
-            split easy to hit. */}
-        {jobId && rows.length > 0 && (
-          <div className="weight-row compact" style={{ marginBottom: 0, marginLeft: 'auto', width: 420, background: 'var(--surface)', border: '1px solid var(--gray-200)', borderRadius: 'var(--radius)', padding: '6px 14px' }}>
-            <label title="Drag toward CV or Interview; releases snap to a clean balance">Score blend</label>
-            <input
-              type="range" min="0" max="100" step="5" value={sliderVal}
-              className="weight-slider"
-              style={{ background: `linear-gradient(to right, #2563eb 0%, #2563eb ${sliderVal}%, var(--gray-200) ${sliderVal}%, var(--gray-200) 100%)` }}
-              onChange={e => {
-                let v = Number(e.target.value);
-                if (Math.abs(v - 50) <= 5) v = 50; // magnet to a clean 50/50
-                setSliderVal(v);
-                clearTimeout(weightCommitRef.current);
-                weightCommitRef.current = setTimeout(() => setWeight(v), 120);
-              }}
-              onPointerUp={e => { let v = Number(e.currentTarget.value); if (Math.abs(v - 50) <= 5) v = 50; setSliderVal(v); clearTimeout(weightCommitRef.current); setWeight(v); }}
-              onKeyUp={e => { clearTimeout(weightCommitRef.current); setWeight(Number(e.currentTarget.value)); }}
-            />
-            <span className="weight-val" style={{ whiteSpace: 'nowrap', minWidth: 110, textAlign: 'right' }}>
-              CV <strong style={{ color: '#2563eb' }}>{100 - sliderVal}</strong> · Int <strong style={{ color: '#16a34a' }}>{sliderVal}</strong>
-            </span>
-          </div>
-        )}
-      </div>
+      {/* Score blend — portalled into the nav-row's empty right space (Decision-only). */}
+      {jobId && rows.length > 0 && navbarSlot && createPortal(
+        <div style={{ display: 'flex', alignItems: 'center', gap: 9 }} title="Drag toward CV or Interview; snaps to a clean 50/50">
+          <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--gray-500)', textTransform: 'uppercase', letterSpacing: '0.04em', whiteSpace: 'nowrap' }}>Score</span>
+          <input
+            type="range" min="0" max="100" step="5" value={sliderVal}
+            className="weight-slider"
+            style={{ width: 130, background: `linear-gradient(to right, #2563eb 0%, #2563eb ${sliderVal}%, var(--gray-200) ${sliderVal}%, var(--gray-200) 100%)` }}
+            onChange={e => {
+              let v = Number(e.target.value);
+              if (Math.abs(v - 50) <= 5) v = 50;
+              setSliderVal(v);
+              clearTimeout(weightCommitRef.current);
+              weightCommitRef.current = setTimeout(() => setWeight(v), 120);
+            }}
+            onPointerUp={e => { let v = Number(e.currentTarget.value); if (Math.abs(v - 50) <= 5) v = 50; setSliderVal(v); clearTimeout(weightCommitRef.current); setWeight(v); }}
+            onKeyUp={e => { clearTimeout(weightCommitRef.current); setWeight(Number(e.currentTarget.value)); }}
+          />
+          <span style={{ fontSize: 12, whiteSpace: 'nowrap' }}>CV <strong style={{ color: '#2563eb' }}>{100 - sliderVal}</strong> : <strong style={{ color: '#16a34a' }}>{sliderVal}</strong> Interview</span>
+        </div>,
+        navbarSlot
+      )}
 
       {jobId && rows.length > 0 && (
         <>
-          {/* Status filter pills (same styling as Shortlist) + ranking actions */}
+          {/* Top bar like Shortlist: filter pills + sort + refresh */}
           <div className="results-filter-bar" style={{ marginBottom: 14 }}>
             <span className="results-filter-label">Show:</span>
             {STATUS_FILTERS.map(f => {
@@ -366,12 +362,12 @@ HR Department`;
                 </button>
               );
             })}
-            <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, alignItems: 'center' }}>
+            <div style={{ marginLeft: 'auto', display: 'flex', gap: 10, alignItems: 'center' }}>
               <span style={{ fontSize: 12.5, color: 'var(--gray-500)', whiteSpace: 'nowrap' }}>Sort by</span>
               <select
                 value={sortBy}
                 onChange={e => setSortBy(e.target.value)}
-                style={{ width: 170, flexShrink: 0, padding: '7px 12px', border: '1px solid var(--gray-200)', borderRadius: 'var(--radius)', fontSize: 13, fontFamily: 'inherit', outline: 'none', background: 'var(--surface)', cursor: 'pointer' }}
+                style={{ width: 150, flexShrink: 0, padding: '7px 12px', border: '1px solid var(--gray-200)', borderRadius: 'var(--radius)', fontSize: 13, fontFamily: 'inherit', outline: 'none', background: 'var(--surface)', cursor: 'pointer' }}
               >
                 <option value="recent">Most recent</option>
                 <option value="combined">Combined score</option>
@@ -379,6 +375,7 @@ HR Department`;
                 <option value="interview">Interview score</option>
                 <option value="name">Name (A–Z)</option>
               </select>
+              <button onClick={loadData} title="Refresh" className="btn btn-sm btn-secondary" style={{ flexShrink: 0 }}>↻</button>
             </div>
           </div>
         </>
@@ -407,7 +404,6 @@ HR Department`;
               }}>
                 {/* Header row */}
                 <div onClick={() => setExpanded(isOpen ? null : r.id)} style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '14px 18px', cursor: 'pointer', flexWrap: 'wrap' }}>
-                  <div style={{ width: 22, textAlign: 'center', fontWeight: 800, color: 'var(--gray-300)', fontSize: 15, flexShrink: 0 }}>{i + 1}</div>
                   <div style={{ flex: 1, minWidth: 160 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                       <strong style={{ fontSize: 15, color: 'var(--gray-900)' }}>{r.candidate_name}</strong>

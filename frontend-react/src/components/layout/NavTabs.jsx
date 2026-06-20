@@ -18,7 +18,7 @@ export default function NavTabs() {
   const navigate = useNavigate();
 
   return (
-    <div className="nav-tabs">
+    <div className="nav-tabs" style={{ display: 'flex', alignItems: 'center' }}>
       <div style={{ display: 'flex' }}>
         {tabs.map(tab => (
           <button
@@ -30,6 +30,9 @@ export default function NavTabs() {
           </button>
         ))}
       </div>
+      {/* Right-side slot — pages portal toolbar widgets here (e.g. Decision's
+          score blend) so they sit in the empty nav-row space. */}
+      <div id="navbar-slot" style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center' }} />
     </div>
   );
 }

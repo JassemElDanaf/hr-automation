@@ -81,6 +81,18 @@ export default function Emails() {
     } else setCandidates([]);
   }
 
+  // Reply to an inbound message — prefill the composer to the sender, with a
+  // "Re:" subject, linked to the candidate so it threads into their history.
+  async function replyToInbound(e) {
+    const subj = /^re:/i.test((e.subject || '').trim()) ? e.subject : `Re: ${e.subject || ''}`.trim();
+    setCompose({ candidateId: e.candidate_id ? String(e.candidate_id) : '', to: e.recipient_email || '', subject: subj, body: '' });
+    setShowCompose(true);
+    if (jobId && jobId !== 'all') {
+      try { const res = await apiGet(`/candidates?job_id=${jobId}`); setCandidates(res.data || []); }
+      catch { setCandidates([]); }
+    } else setCandidates([]);
+  }
+
   function onComposeCandidate(cid) {
     const c = candidates.find(c => String(c.id) === String(cid));
     // Picking a candidate fills the recipient with their email (still editable).
@@ -296,19 +308,23 @@ export default function Emails() {
                                 : <iframe title="Email preview" srcDoc={buildEmailHtml(e.body)} sandbox="" style={{ width: '100%', height: 380, border: '1px solid var(--gray-200)', borderRadius: 8, background: '#fff', display: 'block' }} />}
                             </div>
                           )}
-                          {/* Inbound HM reply → jump straight to the Decision tab to act on it. */}
-                          {inbound && e.candidate_id && (
+                          {/* Inbound reply → reply directly, or jump to the Decision tab to act on it. */}
+                          {inbound && (
                             <div style={{ marginTop: 12, padding: '12px 14px', background: 'var(--tint-info)', border: '1px solid #bfdbfe', borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
                               <div style={{ fontSize: 13, color: 'var(--gray-700)' }}>
-                                <strong>Make the final call on {e.candidate_name || 'this candidate'}.</strong> Open the Decision tab to hire or reject.
+                                {e.candidate_id
+                                  ? <><strong>Reply to {e.candidate_name || 'them'}</strong>, or make the final call in the Decision tab.</>
+                                  : <><strong>Reply to {e.recipient_email || 'the sender'}.</strong></>}
                               </div>
                               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                                <button className="btn btn-sm btn-secondary" onClick={() => navigate(`/decision?job=${jobId}&filter=sent-hm`)} title="See everyone sent to the hiring manager for this job">
-                                  📋 Sent to HM
+                                <button className="btn btn-sm btn-primary" onClick={(ev) => { ev.stopPropagation(); replyToInbound(e); }} title="Reply to this message">
+                                  ↩ Reply
                                 </button>
-                                <button className="btn btn-sm btn-primary" onClick={() => navigate(`/decision?job=${jobId}&focus=${e.candidate_id}`)} title="Open the Decision tab with this candidate ready to hire or reject">
-                                  ⚖ Decide on {(e.candidate_name || '').trim().split(/\s+/)[0] || 'candidate'} →
-                                </button>
+                                {e.candidate_id && (
+                                  <button className="btn btn-sm btn-secondary" onClick={() => navigate(`/decision?job=${jobId}&focus=${e.candidate_id}`)} title="Open the Decision tab with this candidate ready to hire or reject">
+                                    ⚖ Decide on {(e.candidate_name || '').trim().split(/\s+/)[0] || 'candidate'} →
+                                  </button>
+                                )}
                               </div>
                             </div>
                           )}

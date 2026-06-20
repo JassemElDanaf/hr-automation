@@ -4,6 +4,8 @@ import { apiGet, apiPost } from '../services/api';
 import { useEvalStatus } from '../state/evalStatus';
 import { useUI } from '../state/uiState';
 import { useSelectedJob } from '../state/selectedJob';
+import { scoreColor } from '../utils/helpers';
+import EmptyState from '../components/common/EmptyState';
 import AIInterviews from './AIInterviews';
 
 const CAT_LABELS = { hr: 'Behavioural', technical: 'Technical', salary: 'Salary', iqama: 'Iqama / Visa', notice: 'Notice Period', location: 'Location' };
@@ -35,10 +37,11 @@ export default function LiveInterview() {
   const { selectedJob } = useSelectedJob();
   const { runAiTask } = useEvalStatus();
 
-  // ── Main sub-tab ── ('setup' | 'bank' | 'prep' | 'results')
+  // ── Main steps ── ('candidate' | 'questions' | 'results'; 'bank' is an
+  // off-stepper management view reached from the Interview Questions step)
   // ?tab=results deep-links to Results (used by the old /ai-interviews redirect)
   const [mainTab, setMainTab] = useState(() =>
-    new URLSearchParams(window.location.search).get('tab') === 'results' ? 'results' : 'setup'
+    new URLSearchParams(window.location.search).get('tab') === 'results' ? 'results' : 'candidate'
   );
 
   // ── Setup state ──
@@ -49,6 +52,7 @@ export default function LiveInterview() {
   const [interviewedIds, setInterviewedIds] = useState(new Set()); // CandidateIds with a completed session
   const [evaluationId, setEvaluationId]   = useState('');
   const [candidateId, setCandidateId]     = useState('');
+  const [cvPanel, setCvPanel]             = useState({ open: false, url: '', loading: false }); // inline CV viewer
   const [candidateName, setCandidateName] = useState('');
   const [loadingJobs, setLoadingJobs]     = useState(true);
   const [loadingCands, setLoadingCands]   = useState(false);
@@ -92,7 +96,9 @@ export default function LiveInterview() {
     const setupJob = params.get('setupJob');
     if (!setupCand) return;
     setupAppliedRef.current = true;
-    setMainTab('setup');
+    // "Set Up Interview" jumps straight to step 2 (Interview Questions) — the
+    // candidate is auto-selected below via pendingPrep.
+    setMainTab('questions');
     if (setupJob) handleJobChange(String(setupJob));
     setPendingPrep({ candidateId: setupCand, questions: [] });
     window.history.replaceState({}, '', '/live-interview');
@@ -178,8 +184,25 @@ export default function LiveInterview() {
     finally { setLoadingCands(false); }
   }
 
+  // Toggle the inline CV viewer (expands the PDF on this page, no new tab).
+  async function toggleCv() {
+    if (cvPanel.open) { setCvPanel(p => ({ ...p, open: false })); return; }
+    if (cvPanel.url) { setCvPanel(p => ({ ...p, open: true })); return; }
+    setCvPanel({ open: false, url: '', loading: true });
+    try {
+      const res = await apiGet(`/cv-file?candidate_id=${candidateId}`);
+      const d = res?.data?.data || res?.data || {};
+      if (!d.cv_file_data) { showToast('No CV file available', 'error'); setCvPanel({ open: false, url: '', loading: false }); return; }
+      const b64 = d.cv_file_data.includes(',') ? d.cv_file_data.split(',')[1] : d.cv_file_data;
+      const bytes = Uint8Array.from(atob(b64), ch => ch.charCodeAt(0));
+      const url = URL.createObjectURL(new Blob([bytes], { type: d.cv_file_mime || 'application/pdf' }));
+      setCvPanel({ open: true, url, loading: false });
+    } catch { showToast('Failed to load CV', 'error'); setCvPanel({ open: false, url: '', loading: false }); }
+  }
+
   async function handleCandidateChange(val, { silent = false } = {}) {
     setLink(''); setCopied(false);
+    setCvPanel({ open: false, url: '', loading: false });
     const c = candidates.find(c => String(c.CandidateId) === val);
     if (!c) {
       setCandidateId(''); setEvaluationId(''); setCandidateName('');
@@ -374,80 +397,107 @@ export default function LiveInterview() {
 
   return (
     <div className="container tab-fade-in">
-      {/* Sub-tabs styled like the CV Evaluation numbered stepper */}
+      {/* Numbered stepper (CV-Evaluation style) */}
       <div className="wizard-steps">
-        {[{ key: 'setup', label: 'Setup' }, { key: 'bank', label: 'Question Bank' }, { key: 'results', label: 'Results' }].map((t, i) => (
-          <div key={t.key} style={{ display: 'contents' }}>
-            <div className={`wizard-step ${mainTab === t.key ? 'active' : ''}`} onClick={() => setMainTab(t.key)}>
-              <span className="step-num">{i + 1}</span> {t.label}
+        {[{ key: 'candidate', label: 'Select Candidate' }, { key: 'questions', label: 'Interview Questions' }, { key: 'results', label: 'Results' }].map((t, i) => {
+          const active = mainTab === t.key || (mainTab === 'bank' && t.key === 'questions');
+          return (
+            <div key={t.key} style={{ display: 'contents' }}>
+              <div className={`wizard-step ${active ? 'active' : ''}`} onClick={() => setMainTab(t.key)}>
+                <span className="step-num">{i + 1}</span> {t.label}
+              </div>
+              {i < 2 && <div className="wizard-connector"></div>}
             </div>
-            {i < 2 && <div className="wizard-connector"></div>}
-          </div>
-        ))}
+          );
+        })}
       </div>
 
-      {mainTab === 'setup' && (
+      {mainTab === 'candidate' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
 
-          {/* Section 1 */}
+          {/* Select Candidate — card grid, mirroring CV Evaluation's Select Job */}
           <div style={cardStyle}>
-            <SectionTitle number={1} title="Select Candidate" />
-            <div className="form-group" style={{ marginBottom: 0 }}>
-              <label>Candidate {jobTitle && <span style={{ fontWeight: 500, color: 'var(--gray-400)' }}>· {jobTitle}</span>}</label>
-              <select value={candidateId} onChange={e => handleCandidateChange(e.target.value)} disabled={!jobId || loadingCands}>
-                <option value="">
-                  {loadingCands ? 'Loading…' : !jobId ? 'Pick a job from the “Current Job” selector at the top' : candidates.length === 0 ? 'No shortlisted candidates' : '— Select a candidate —'}
-                </option>
+            {!jobId ? (
+              <EmptyState>Pick a job from the “Current Job” selector at the top.</EmptyState>
+            ) : loadingCands ? (
+              <EmptyState>Loading candidates…</EmptyState>
+            ) : candidates.length === 0 ? (
+              <EmptyState>No shortlisted candidates for this job yet.</EmptyState>
+            ) : (
+              <div className="job-card-grid">
                 {[...candidates]
                   .sort((a, b) => (interviewedIds.has(String(a.CandidateId)) ? 1 : 0) - (interviewedIds.has(String(b.CandidateId)) ? 1 : 0))
                   .map(c => {
                     const done = interviewedIds.has(String(c.CandidateId));
+                    const sel = String(candidateId) === String(c.CandidateId);
                     return (
-                      <option key={c.CandidateId} value={c.CandidateId}>
-                        {done ? '✓ ' : ''}{c.FullName}{c.OverallScore ? ` — Score: ${c.OverallScore}` : ''}{done ? ' (interviewed)' : ''}
-                      </option>
+                      <div key={c.CandidateId} className={`job-card ${sel ? 'selected' : ''}`} onClick={() => handleCandidateChange(String(c.CandidateId))}>
+                        <div className="job-card-title">{c.FullName}</div>
+                        <div className="job-card-meta">
+                          {c.OverallScore != null && <span style={{ fontWeight: 700, color: scoreColor(c.OverallScore) }}>CV {parseFloat(c.OverallScore).toFixed(1)}</span>}
+                          {done && <span className="dot" style={{ color: '#166534', fontWeight: 600 }}>✓ Interviewed</span>}
+                        </div>
+                        {(c.Email || c.email) && <div className="job-card-stats"><span>{c.Email || c.email}</span></div>}
+                      </div>
                     );
                   })}
-              </select>
-            </div>
+              </div>
+            )}
+
             {candidateName && interviewedIds.has(String(candidateId)) && (
               <div style={{ marginTop: 12, padding: '9px 14px', background: '#fef3c7', border: '1px solid #fde68a', borderRadius: 6, fontSize: 12.5, color: '#92400e' }}>
-                ⚠️ <strong>{candidateName}</strong> already completed an interview — see the <strong>Results</strong> tab. Generating a new link will let them interview again.
+                ⚠️ <strong>{candidateName}</strong> already completed an interview — see the <strong>Results</strong> step. Generating a new link will let them interview again.
               </div>
             )}
             {candidateName && (
-              <div style={{ marginTop: 12, padding: '9px 14px', background: '#eff6ff', border: '1px solid #dbeafe', borderRadius: 6, fontSize: 13, color: '#1e40af', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <span>Interviewing <strong>{candidateName}</strong>{jobTitle && <> for <strong>{jobTitle}</strong></>}</span>
-                <button
-                  onClick={async () => {
-                    const win = window.open('about:blank', '_blank');
-                    try {
-                      const res = await apiGet(`/cv-file?candidate_id=${candidateId}`);
-                      const d = res?.data?.data || res?.data || {};
-                      if (!d.cv_file_data) { win.close(); showToast('No CV file available', 'error'); return; }
-                      const b64 = d.cv_file_data.includes(',') ? d.cv_file_data.split(',')[1] : d.cv_file_data;
-                      const bytes = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
-                      const blob = new Blob([bytes], { type: d.cv_file_mime || 'application/pdf' });
-                      win.location.href = URL.createObjectURL(blob);
-                    } catch { win.close(); showToast('Failed to load CV', 'error'); }
-                  }}
-                  style={{ fontSize: 12, fontWeight: 600, padding: '4px 12px', borderRadius: 6, border: '1px solid #bfdbfe', background: 'var(--surface)', color: '#2563eb', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}
-                >
-                  📄 View CV
-                </button>
-              </div>
+              <>
+                <div style={{ marginTop: 12, padding: '9px 14px', background: '#eff6ff', border: '1px solid #dbeafe', borderRadius: 6, fontSize: 13, color: '#1e40af', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
+                  <span>Interviewing <strong>{candidateName}</strong>{jobTitle && <> for <strong>{jobTitle}</strong></>}</span>
+                  <button onClick={toggleCv}
+                    style={{ fontSize: 12, fontWeight: 600, padding: '4px 12px', borderRadius: 6, border: '1px solid #bfdbfe', background: 'var(--surface)', color: '#2563eb', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>
+                    📄 {cvPanel.open ? 'Hide CV' : cvPanel.loading ? 'Loading…' : 'View CV'}
+                  </button>
+                </div>
+                {cvPanel.open && cvPanel.url && (
+                  <div style={{ marginTop: 10, border: '1px solid var(--gray-200)', borderRadius: 8, overflow: 'hidden' }}>
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', padding: '6px 10px', background: 'var(--gray-50)', borderBottom: '1px solid var(--gray-200)' }}>
+                      <a href={cvPanel.url} target="_blank" rel="noreferrer" style={{ fontSize: 12, color: '#2563eb', textDecoration: 'none' }}>Open in new tab ↗</a>
+                    </div>
+                    <iframe title="Candidate CV" src={cvPanel.url} style={{ width: '100%', height: 600, border: 'none', display: 'block' }} />
+                  </div>
+                )}
+              </>
             )}
           </div>
 
-          {/* Section 2 */}
+          {candidateName && (
+            <div className="wizard-footer">
+              <span className="step-info">Step 1 of 3</span>
+              <button className="btn btn-primary" onClick={() => setMainTab('questions')}>Continue to Interview Questions →</button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {mainTab === 'questions' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+
+          {/* Interview Questions */}
           <div style={cardStyle}>
-            <SectionTitle number={2} title="Interview Questions">
-              {savedQsLoaded && (
-                <span style={{ marginLeft: 10, padding: '3px 10px', background: '#dcfce7', border: '1px solid #86efac', borderRadius: 12, fontSize: 11, fontWeight: 600, color: '#166534', whiteSpace: 'nowrap' }}>
-                  ↩ Saved questions loaded
-                </span>
-              )}
-            </SectionTitle>
+            {candidateName ? (
+              <div style={{ marginBottom: 14, fontSize: 13, color: 'var(--gray-500)', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                <span>Questions for <strong style={{ color: 'var(--gray-900)' }}>{candidateName}</strong>{jobTitle && <> · {jobTitle}</>}</span>
+                {savedQsLoaded && (
+                  <span style={{ padding: '3px 10px', background: '#dcfce7', border: '1px solid #86efac', borderRadius: 12, fontSize: 11, fontWeight: 600, color: '#166534', whiteSpace: 'nowrap' }}>↩ Saved questions loaded</span>
+                )}
+                <button className="btn btn-secondary btn-sm" onClick={() => setMainTab('bank')} title="Add, edit or remove saved questions" style={{ marginLeft: 'auto' }}>⚙ Manage bank</button>
+              </div>
+            ) : (
+              <div style={{ marginBottom: 14, padding: '9px 14px', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 6, fontSize: 12.5, color: '#92400e', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                <span>No candidate selected yet — the link is personalised to one candidate.</span>
+                <button className="btn btn-sm btn-secondary" onClick={() => setMainTab('candidate')}>← Select candidate</button>
+              </div>
+            )}
 
             <div style={{ display: 'flex', gap: 12, marginBottom: 20 }}>
               {[
@@ -616,7 +666,7 @@ export default function LiveInterview() {
 
           {/* Section 3 */}
           <div style={cardStyle}>
-            <SectionTitle number={3} title="Generate & Send" />
+            <SectionTitle title="Generate & Send" />
             {/* Explain why the button is disabled so a built question set isn't a dead end. */}
             {(!jobId || !candidateId) ? (
               <div style={{ marginBottom: 14, padding: '10px 14px', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, fontSize: 13, color: '#92400e', display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -651,7 +701,7 @@ export default function LiveInterview() {
                 <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8 }}>
                   <button
                     className="btn btn-secondary btn-sm"
-                    onClick={() => navigate(`/shortlist?emailInvite=${candidateId}&job=${jobId}`)}
+                    onClick={() => navigate(`/shortlist?focus=${candidateId}&job=${jobId}`)}
                     title="Go back to Shortlist and open the invitation email with this link filled in"
                   >
                     ← Back to Shortlist
@@ -678,14 +728,19 @@ export default function LiveInterview() {
       )}
 
       {mainTab === 'results' && <AIInterviews embedded />}
-      {mainTab === 'bank' && <QuestionBankTab showToast={showToast} />}
+      {mainTab === 'bank' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <button className="btn btn-secondary btn-sm" style={{ alignSelf: 'flex-start' }} onClick={() => setMainTab('questions')}>← Back to Interview Questions</button>
+          <QuestionBankTab showToast={showToast} />
+        </div>
+      )}
       {mainTab === 'prep' && (
         <CandidatePrepTab
           showToast={showToast}
           jobs={jobs}
           selectedJob={selectedJob}
           onUseForInterview={(cand, prepData) => {
-            setMainTab('setup');
+            setMainTab('candidate');
             // Queue the candidate + questions to be applied once candidates load
             setPendingPrep({ candidateId: cand.candidate_id, questions: prepData?.questions || [] });
             handleJobChange(String(cand.job_opening_id));
@@ -1217,9 +1272,11 @@ const cardStyle = {
 function SectionTitle({ number, title, children }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
-      <span style={{ width: 24, height: 24, borderRadius: '50%', background: '#2563eb', color: '#fff', fontSize: 12, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-        {number}
-      </span>
+      {number != null && (
+        <span style={{ width: 24, height: 24, borderRadius: '50%', background: '#2563eb', color: '#fff', fontSize: 12, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+          {number}
+        </span>
+      )}
       <span style={{ fontSize: 15, fontWeight: 600, color: 'var(--gray-800)' }}>{title}</span>
       {children}
     </div>
