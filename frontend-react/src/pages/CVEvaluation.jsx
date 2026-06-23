@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { apiGet, apiPost } from '../services/api';
 import { useSelectedJob } from '../state/selectedJob';
 import { useUI } from '../state/uiState';
@@ -7,7 +8,7 @@ import ScoreBadge from '../components/common/ScoreBadge';
 import Loading from '../components/common/Loading';
 import EmptyState from '../components/common/EmptyState';
 import EvalDetailModal from '../components/modals/EvalDetailModal';
-import { formatDate, nameFromFilename, extractNameFromCV, extractEmail, scoreColor } from '../utils/helpers';
+import { formatDate, nameFromFilename, extractNameFromCV, extractEmail, scoreColor, shortDept } from '../utils/helpers';
 import { extractTextFromFile, base64ToBlobUrl } from '../utils/pdf';
 
 function readFileAsBase64(file) {
@@ -84,6 +85,7 @@ export default function CVEvaluation() {
   const [candidates, setCandidates] = useState([]);
   const [evaluations, setEvaluations] = useState([]);
   const { evalState, startEvaluation, runAiTask } = useEvalStatus();
+  const navigate = useNavigate();
   // Eval status is global (it survives leaving this tab) — derive the per-page
   // view from it so returning mid-run still shows live progress.
   const ev = evalState && evalState.jobId === evalJobId ? evalState : null;
@@ -630,8 +632,8 @@ export default function CVEvaluation() {
               filteredJobs.map(job => (
                 <div key={job.id} className={`job-card ${evalSelectedJob?.id === job.id ? 'selected' : ''}`} onClick={() => selectJob(job)}>
                   <div className="job-card-title">{job.job_title}</div>
-                  <div className="job-card-meta">
-                    <span>{job.department}</span>
+                  <div className="job-card-meta" title={[job.department, job.seniority_level, job.employment_type].filter(Boolean).join(' · ')}>
+                    <span>{shortDept(job.department)}</span>
                     <span className="dot">{job.seniority_level}</span>
                     <span className="dot">{job.employment_type}</span>
                   </div>
@@ -1004,6 +1006,7 @@ export default function CVEvaluation() {
                             </>
                           ) : (status === 'shortlisted' || status === 'interviewed' || status === 'hired') ? (
                             <>
+                              <button className="btn btn-sm btn-primary" onClick={() => navigate(`/shortlist?focus=${c.id}&job=${evalJobId}`)} title="Open this candidate in the Shortlist tab">View in Shortlist →</button>
                               {status === 'shortlisted' && <button className="btn btn-sm btn-ghost" onClick={() => revertDecision(c.id, 'shortlist')}>Unshortlist</button>}
                               <button className="btn btn-sm btn-ghost" onClick={() => archiveCandidate(c.id)}>Archive</button>
                             </>

@@ -79,7 +79,7 @@ export default function Header() {
           ) : (
             <span className="global-job-label">Select a job opening to continue</span>
           )}
-          <span className="global-job-caret">{open ? '▴' : '▾'}</span>
+          <span className={`global-job-caret${open ? ' open' : ''}`} aria-hidden="true">▾</span>
         </button>
 
         {open && (() => {

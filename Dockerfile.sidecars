@@ -1,0 +1,24 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# System deps
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    supervisor \
+    libpq-dev \
+    gcc \
+    && rm -rf /var/lib/apt/lists/*
+
+# Python deps
+RUN pip install --no-cache-dir psycopg2-binary
+
+# Copy project files needed by sidecars
+COPY scripts/ ./scripts/
+# recordings dir is created at runtime via volume mount
+RUN mkdir -p /app/recordings /app/logs
+
+COPY scripts/supervisord.conf /etc/supervisor/conf.d/sidecars.conf
+
+EXPOSE 8901 8902 8903 8904
+
+CMD ["supervisord", "-n", "-c", "/etc/supervisor/supervisord.conf"]

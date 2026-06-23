@@ -32,7 +32,7 @@ from urllib.parse import urlparse, parse_qs
 import psycopg2
 from psycopg2.extras import RealDictCursor
 
-LISTEN_HOST = '127.0.0.1'
+LISTEN_HOST = os.environ.get('SIDECAR_HOST', '127.0.0.1')
 LISTEN_PORT = 8904
 SESSION_HOURS = 12
 

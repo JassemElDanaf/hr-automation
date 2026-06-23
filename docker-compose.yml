@@ -1,0 +1,161 @@
+# Diyar HR — Docker Compose
+# Usage:
+#   1. cp .env.example .env  &&  edit .env  (fill in SMTP/IMAP creds)
+#   2. docker compose up -d
+#   3. docker compose exec ollama ollama pull qwen3:4b   (one-time, ~3 GB)
+#
+# On Ubuntu with an NVIDIA GPU add --profile gpu to steps 2+3.
+# All data is persisted in named volumes; nothing is lost on restart.
+
+services:
+
+  # ── PostgreSQL ────────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER:     ${POSTGRES_USER:-hr_admin}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-hr_pass}
+      POSTGRES_DB:       ${POSTGRES_DB:-hr_automation}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./db:/docker-initdb:ro
+      - ./scripts/docker-pg-init.sh:/docker-entrypoint-initdb.d/00-init.sh:ro
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-hr_admin} -d ${POSTGRES_DB:-hr_automation}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  # ── n8n workflow engine ───────────────────────────────────────────────────
+  n8n:
+    image: n8nio/n8n:latest
+    restart: unless-stopped
+    entrypoint: ["sh", "/n8n-entrypoint.sh"]
+    environment:
+      # n8n runtime
+      N8N_USER_MANAGEMENT_DISABLED: "true"
+      N8N_BASIC_AUTH_ACTIVE: "false"
+      N8N_AUTH_EXCLUDE_ENDPOINTS: "*"
+      N8N_DIAGNOSTICS_ENABLED: "false"
+      N8N_HOST: "0.0.0.0"
+      N8N_PORT: "5678"
+      N8N_PROTOCOL: "http"
+      WEBHOOK_URL: "http://n8n:5678/"
+      # HR PostgreSQL credential overwrite (applied to ALL postgres-type credentials)
+      # n8n reads these and injects them at query time — no UI config needed.
+      DB_HOST:    postgres
+      DB_PORT:    "5432"
+      DB_NAME:    ${POSTGRES_DB:-hr_automation}
+      DB_USER:    ${POSTGRES_USER:-hr_admin}
+      DB_PASS:    ${POSTGRES_PASSWORD:-hr_pass}
+      # Ollama base URL used by workflow HTTP Request nodes (patched at import)
+      OLLAMA_DOCKER_HOST: ollama
+    volumes:
+      - n8n_data:/home/node/.n8n
+      - ./workflows:/workflows:ro
+      - ./scripts/n8n-entrypoint.sh:/n8n-entrypoint.sh:ro
+    ports:
+      - "5678:5678"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:5678/healthz || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 60s
+
+  # ── Ollama (local AI) ─────────────────────────────────────────────────────
+  # After first `docker compose up`, run:
+  #   docker compose exec ollama ollama pull qwen3:4b
+  ollama:
+    image: ollama/ollama:latest
+    restart: unless-stopped
+    volumes:
+      - ollama_data:/root/.ollama
+    ports:
+      - "11434:11434"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:11434/api/tags || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
+
+  # GPU variant — activate with: docker compose --profile gpu up
+  ollama-gpu:
+    image: ollama/ollama:latest
+    restart: unless-stopped
+    profiles: ["gpu"]
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    volumes:
+      - ollama_data:/root/.ollama
+    ports:
+      - "11434:11434"
+
+  # ── Python sidecars (SMTP / IMAP / Recording / Auth) ─────────────────────
+  sidecars:
+    build:
+      context: .
+      dockerfile: Dockerfile.sidecars
+    restart: unless-stopped
+    environment:
+      SIDECAR_HOST: "0.0.0.0"
+      # PostgreSQL (auth sidecar)
+      PG_HOST:     postgres
+      PG_PORT:     "5432"
+      PG_USER:     ${POSTGRES_USER:-hr_admin}
+      PG_PASSWORD: ${POSTGRES_PASSWORD:-hr_pass}
+      PG_DB:       ${POSTGRES_DB:-hr_automation}
+      # SMTP
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      SMTP_FROM: ${SMTP_FROM:-}
+      # IMAP
+      IMAP_HOST:     ${IMAP_HOST:-}
+      IMAP_PORT:     ${IMAP_PORT:-993}
+      IMAP_USER:     ${IMAP_USER:-}
+      IMAP_PASS:     ${IMAP_PASS:-}
+      IMAP_FOLDER:   ${IMAP_FOLDER:-INBOX}
+      IMAP_POLL_SEC: ${IMAP_POLL_SEC:-60}
+      N8N_INBOUND_URL: http://n8n:5678/webhook/inbound-email
+    volumes:
+      - recordings:/app/recordings
+    ports:
+      - "8901:8901"
+      - "8902:8902"
+      - "8903:8903"
+      - "8904:8904"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # ── React frontend (nginx) ────────────────────────────────────────────────
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    restart: unless-stopped
+    ports:
+      - "3001:80"
+    depends_on:
+      - n8n
+      - sidecars
+
+volumes:
+  postgres_data:
+  n8n_data:
+  ollama_data:
+  recordings:

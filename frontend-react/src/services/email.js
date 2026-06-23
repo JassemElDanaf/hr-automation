@@ -92,9 +92,12 @@ export async function sendEmailRequest({ candidateId, jobId, emailType, recipien
   // goes by filename only — the SMTP sidecar reads it from recordings/ itself.
   if (Array.isArray(attachments) && attachments.length) payload.attachments = attachments;
   if (recordingFile) payload.recording_file = recordingFile;
-  // Every send also carries a styled HTML version of the same text (the
-  // recipient sees the branded card; plain text is logged + used as fallback).
-  if (body) payload.html_body = buildEmailHtml(body);
+  // Emails go out as plain text (cleaner, broadest device compatibility, and
+  // already the multipart fallback). The ONE exception is the interview invite:
+  // its link is a long (~500-char) URL-safe-base64 token that wraps badly / can
+  // become unclickable as raw text, so that flow keeps the branded HTML version
+  // (which renders the link as a "Start Your Interview" button).
+  if (body && emailType === 'interview_invite') payload.html_body = buildEmailHtml(body);
   const res = await apiPost('/send-email', payload);
   return res;
 }
@@ -115,26 +118,44 @@ export const TEMPLATE_DEFS = {
   interview_invite: {
     name: 'Interview invitation',
     placeholders: ['candidate_name', 'job_title', 'interview_link'],
-    subject: 'Interview Invitation - {job_title}',
-    body: `Dear {candidate_name},\n\nCongratulations! After reviewing your application for the {job_title} position, we would like to invite you to the next stage: a short online interview that you can complete on your own time.\n\nPlease use your personal interview link below to begin. It works in any modern browser and will guide you through the questions one by one — no scheduling needed.\n\nYour interview link:\n{interview_link}\n\nPlease aim to complete it within the next few days. If you have any trouble opening the link, just reply to this email.\n\nWe look forward to learning more about you.\n\nBest regards,\nHR Department`,
+    subject: 'Interview Invitation — {job_title}',
+    body: `Dear {candidate_name},\n\nCongratulations! After reviewing your application for the {job_title} role, we'd like to invite you to the next step: a short online interview you can complete in your own time.\n\nHow it works\nThe interview runs in your web browser and guides you through each question, one at a time. There's nothing to install and nothing to schedule — just open your personal link below whenever you're ready.\n\nYour interview link\n{interview_link}\n\nPlease try to complete it within the next few days. If the link doesn't open or you run into any trouble, simply reply to this email and we'll be glad to help.\n\nWe're looking forward to learning more about you.\n\nWarm regards,\nHR Department\nDiyar United Company`,
   },
   shortlist: {
     name: 'Shortlisted',
     placeholders: ['candidate_name', 'job_title'],
     subject: 'You have been shortlisted — {job_title}',
-    body: `Dear {candidate_name},\n\nGreat news! After reviewing your application for the {job_title} position, we are pleased to inform you that you have been shortlisted for the next stage of our hiring process.\n\nWe were impressed by your background and would like to move forward with your candidacy. A member of our team will be in touch shortly with next steps.\n\nThank you for your interest in joining our team.\n\nBest regards,\nHR Department`,
+    body: `Dear {candidate_name},\n\nGreat news — you've been shortlisted for the {job_title} role.\n\nAfter reviewing your application, we were impressed by your background and would like to move you forward to the next stage of our hiring process.\n\nA member of our team will be in touch shortly with the next steps. In the meantime, thank you for your interest in joining us.\n\nWarm regards,\nHR Department\nDiyar United Company`,
   },
   rejection: {
     name: 'Rejection',
     placeholders: ['candidate_name', 'job_title'],
-    subject: 'Application Update - {job_title}',
-    body: `Dear {candidate_name},\n\nThank you for your interest in the {job_title} position and for taking the time to apply.\n\nAfter careful review of all applications, we regret to inform you that we have decided to move forward with other candidates whose qualifications more closely match our current requirements.\n\nWe appreciate your interest in our organization and encourage you to apply for future openings that match your skills and experience.\n\nWe wish you all the best in your job search and future endeavors.\n\nBest regards,\nHR Department`,
+    subject: 'Application Update — {job_title}',
+    body: `Dear {candidate_name},\n\nThank you for applying for the {job_title} role and for the time you put into your application.\n\nAfter careful consideration, we've decided to move forward with other candidates whose experience more closely matches what this position needs right now. This was not an easy decision, and it isn't a reflection of your abilities.\n\nWe'd genuinely welcome your application for future roles that fit your skills, and we wish you every success in your search.\n\nWarm regards,\nHR Department\nDiyar United Company`,
   },
   offer: {
     name: 'Job offer',
     placeholders: ['candidate_name', 'job_title'],
-    subject: 'Job Offer - {job_title}',
-    body: `Dear {candidate_name},\n\nWe are delighted to extend an offer for the {job_title} position.\n\nPlease find the details of the offer attached. We kindly ask you to review and respond within 5 business days.\n\nCongratulations, and we look forward to welcoming you to our team!\n\nBest regards,\nHR Department`,
+    subject: 'Job Offer — {job_title}',
+    body: `Dear {candidate_name},\n\nWe're delighted to offer you the {job_title} position — congratulations!\n\nThe full details of your offer are attached. Please take the time to review them and let us know your decision within 5 business days. If you have any questions at all, just reply to this email and we'll be happy to help.\n\nWe're excited at the prospect of you joining the team and look forward to hearing from you.\n\nWarm regards,\nHR Department\nDiyar United Company`,
+  },
+  // ── Hiring-manager-facing templates ──────────────────────────────────────
+  // These carry computed data blocks (scores, strengths, question lists,
+  // meeting details) that can't be expressed as simple word substitutions, so
+  // those blocks are pre-rendered into composite tokens by the get*Template()
+  // functions below. The admin can move the tokens around and rewrite the prose
+  // between them, but shouldn't edit inside a token's generated content.
+  recommendation: {
+    name: 'Recommendation to hiring manager',
+    placeholders: ['candidate_name', 'job_title', 'role_label', 'candidate_line', 'evaluation_summary', 'strengths', 'areas_to_probe', 'notes'],
+    subject: 'Candidate recommendation: {candidate_name} — {job_title}',
+    body: `Hi,\n\nI'd like to recommend {candidate_name} for the {role_label} role. A quick summary of where they landed in our evaluation is below.\n\n{candidate_line}\n\nScores (out of 10)\n{evaluation_summary}\n\nStrengths\n{strengths}\n\nAreas to probe\n{areas_to_probe}\n\n{notes}Happy to talk through any of this. Let me know if you'd like to take them forward to an interview.\n\nBest regards,\nHR Department`,
+  },
+  interview_pack: {
+    name: 'Interview pack to hiring manager',
+    placeholders: ['candidate_name', 'job_title', 'candidate_ref', 'role_label', 'evaluation_summary', 'meeting_details', 'questions', 'general_notes'],
+    subject: 'Interview pack: {candidate_name} — {job_title}',
+    body: `Hi,\n\nI'm handing off {candidate_ref} for the {role_label} role. From here, scheduling, interviewing, and the offer are yours — everything I've prepared to make that easy is below.\n\n{evaluation_summary}{meeting_details}\n\nSuggested questions\n{questions}\n{general_notes}\nLet me know if you'd like anything adjusted before the interview.\n\nBest regards,\nHR Department`,
   },
 };
 
@@ -203,18 +224,19 @@ export function getInterviewPackTemplate({ candidateName, candidateEmail, jobTit
   const meetingLines = ['Meeting details', '  ' + conductedLine, '  Date / time: ' + (when || '(to be confirmed)')];
   if (detailLine) meetingLines.push('  ' + detailLine);
   if (interviewers) meetingLines.push('  Interviewer(s): ' + interviewers);
-  const meetingBlock = meetingLines.join('\n');
+  const meeting_details = meetingLines.join('\n');
 
   const e = evaluation || {};
-  const hasEval = e.overall_score != null;
-  let evalBlock = '';
-  if (hasEval) {
-    const fmt = v => v != null ? Number(v).toFixed(1) : '\u2014';
-    const fmtList = raw => {
-      if (!raw) return '  \u2014 None noted';
-      return raw.split(';').map(s => s.trim()).filter(Boolean).map(s => '  \u2022 ' + s).join('\n') || '  \u2014 None noted';
-    };
-    evalBlock =
+  const fmt = v => v != null ? Number(v).toFixed(1) : '\u2014';
+  const fmtList = raw => {
+    if (!raw) return '  \u2014 None noted';
+    return raw.split(';').map(s => s.trim()).filter(Boolean).map(s => '  \u2022 ' + s).join('\n') || '  \u2014 None noted';
+  };
+  // Whole eval block is one composite token (it's optional \u2014 empty when the
+  // candidate hasn't been scored, so the pack can carry meeting details alone).
+  let evaluation_summary = '';
+  if (e.overall_score != null) {
+    evaluation_summary =
 `Evaluation summary
   Overall:     ${fmt(e.overall_score)} / 10
   Skills:      ${fmt(e.skills_score)} / 10
@@ -230,7 +252,7 @@ ${fmtList(e.weaknesses)}
 `;
   }
 
-  const qBlock = (Array.isArray(questions) && questions.length)
+  const questionsBlock = (Array.isArray(questions) && questions.length)
     ? questions.map((q, i) => {
         const cat = q.category ? '[' + q.category.toUpperCase() + '] ' : '';
         const hint = q.hints ? '\n   Hint: ' + q.hints : '';
@@ -238,60 +260,36 @@ ${fmtList(e.weaknesses)}
       }).join('\n\n')
     : '(No questions generated yet \u2014 pack only includes meeting details.)';
   const notesBlock = (generalNotes || '').trim();
-  const subject = `Interview pack: ${candidateName} \u2014 ${jobTitle}`;
-  const body =
-`Hi,
+  const general_notes = notesBlock ? 'General notes\n' + notesBlock + '\n' : '';
+  const candidate_ref = candidateName + (candidateEmail ? ' <' + candidateEmail + '>' : '');
+  const role_label = jobTitle + (department ? ' (' + department + ')' : '');
 
-Handing off ${candidateName}${candidateEmail ? ' <' + candidateEmail + '>' : ''} for the ${jobTitle}${department ? ' (' + department + ')' : ''} role. From here you own scheduling, interviewing, and the offer \u2014 below is everything I prepared.
-
-${evalBlock}${meetingBlock}
-
-Suggested questions
-${qBlock}
-${notesBlock ? '\nGeneral notes\n' + notesBlock + '\n' : ''}
-Let me know if you'd like anything adjusted before the interview.
-
-Best regards,
-HR Department`;
-  return { subject, body };
+  return fillTemplate(effectiveTemplate('interview_pack'), {
+    candidate_name: candidateName, job_title: jobTitle,
+    candidate_ref, role_label, evaluation_summary, meeting_details,
+    questions: questionsBlock, general_notes,
+  });
 }
 
 export function getRecommendationTemplate({ candidateName, candidateEmail, jobTitle, department, evaluation }) {
   const e = evaluation || {};
-  const overall = e.overall_score != null ? Number(e.overall_score).toFixed(1) : '\u2014';
-  const skills = e.skills_score != null ? Number(e.skills_score).toFixed(1) : '\u2014';
-  const experience = e.experience_score != null ? Number(e.experience_score).toFixed(1) : '\u2014';
-  const education = e.education_score != null ? Number(e.education_score).toFixed(1) : '\u2014';
+  const fmt = v => v != null ? Number(v).toFixed(1) : '\u2014';
   const fmtList = (raw) => {
     if (!raw) return '  \u2014 None noted';
     return raw.split(';').map(s => s.trim()).filter(Boolean).map(s => '  \u2022 ' + s).join('\n') || '  \u2014 None noted';
   };
-  const strengths = fmtList(e.strengths);
-  const weaknesses = fmtList(e.weaknesses);
+  const evaluation_summary =
+`  Overall:     ${fmt(e.overall_score)} / 10
+  Skills:      ${fmt(e.skills_score)} / 10
+  Experience:  ${fmt(e.experience_score)} / 10
+  Education:   ${fmt(e.education_score)} / 10`;
   const reasoning = (e.reasoning || '').trim();
-  const subject = `Candidate recommendation: ${candidateName} \u2014 ${jobTitle}`;
-  const body =
-`Hi,
+  const role_label = jobTitle + (department ? ' (' + department + ')' : '');
+  const candidate_line = `Candidate: ${candidateName}` + (candidateEmail ? ' <' + candidateEmail + '>' : '');
 
-I'd like to share a candidate recommendation for the ${jobTitle}${department ? ' (' + department + ')' : ''} role.
-
-Candidate: ${candidateName}${candidateEmail ? ' <' + candidateEmail + '>' : ''}
-
-Evaluation summary
-  Overall:     ${overall} / 10
-  Skills:      ${skills} / 10
-  Experience:  ${experience} / 10
-  Education:   ${education} / 10
-
-Strengths
-${strengths}
-
-Areas to probe
-${weaknesses}
-
-${reasoning ? 'Notes\n' + reasoning + '\n\n' : ''}Happy to discuss next steps \u2014 let me know if you'd like to move forward with an interview.
-
-Best regards,
-HR Department`;
-  return { subject, body };
+  return fillTemplate(effectiveTemplate('recommendation'), {
+    candidate_name: candidateName, job_title: jobTitle, role_label, candidate_line,
+    evaluation_summary, strengths: fmtList(e.strengths), areas_to_probe: fmtList(e.weaknesses),
+    notes: reasoning ? 'Notes\n' + reasoning + '\n\n' : '',
+  });
 }

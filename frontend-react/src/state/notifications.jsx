@@ -61,28 +61,30 @@ export function NotificationsProvider({ children }) {
           jobs.map(j => apiGet(`/email-history?job_id=${j.id}`).then(r => r.data || []).catch(() => []))
         );
         const inbound = lists.flat().filter(e => e && e.direction === 'inbound' && e.id);
-        if (cancelled || !inbound.length) return;
+        // NOTE: guard with `if`, don't `return` — an early return here would also
+        // skip the completed-interview check below when there are no email replies.
+        if (!cancelled && inbound.length) {
+          const maxSeen = Number(localStorage.getItem(SEEN_KEY) || 0);
+          const newMax = Math.max(maxSeen, ...inbound.map(e => Number(e.id)));
+          localStorage.setItem(SEEN_KEY, String(newMax));
 
-        const maxSeen = Number(localStorage.getItem(SEEN_KEY) || 0);
-        const newMax = Math.max(maxSeen, ...inbound.map(e => Number(e.id)));
-        localStorage.setItem(SEEN_KEY, String(newMax));
-
-        // First run just sets the baseline so we don't replay the whole history.
-        if (maxSeen === 0) return;
-
-        const fresh = inbound.filter(e => Number(e.id) > maxSeen);
-        fresh.forEach(e => addNotification({
-          type: 'email',
-          dedupeKey: `email-${e.id}`,
-          icon: '📥',
-          title: `New reply from ${e.recipient_email || 'a candidate'}`,
-          body: e.subject || '(no subject)',
-          nav: '/emails',
-        }));
-        if (fresh.length) {
-          showToast(fresh.length === 1
-            ? `📥 New email reply from ${fresh[0].recipient_email || 'a candidate'}`
-            : `📥 ${fresh.length} new email replies`, 'info');
+          // First run just sets the baseline so we don't replay the whole history.
+          if (maxSeen !== 0) {
+            const fresh = inbound.filter(e => Number(e.id) > maxSeen);
+            fresh.forEach(e => addNotification({
+              type: 'email',
+              dedupeKey: `email-${e.id}`,
+              icon: '📥',
+              title: `New reply from ${e.recipient_email || 'a candidate'}`,
+              body: e.subject || '(no subject)',
+              nav: '/emails',
+            }));
+            if (fresh.length) {
+              showToast(fresh.length === 1
+                ? `📥 New email reply from ${fresh[0].recipient_email || 'a candidate'}`
+                : `📥 ${fresh.length} new email replies`, 'info');
+            }
+          }
         }
       } catch {}
 
@@ -94,11 +96,16 @@ export function NotificationsProvider({ children }) {
           jobs.map(j => apiGet(`/interview/sessions?jobId=${j.id}`).then(r => (Array.isArray(r) ? r : r.data) || []).catch(() => []))
         );
         const sessions = sessLists.flat().filter(s => s && s.id);
-        if (cancelled || !sessions.length) return;
-        const seen = Number(localStorage.getItem(SEEN_SESS_KEY) || 0);
-        const newMax = Math.max(seen, ...sessions.map(s => Number(s.id)));
-        localStorage.setItem(SEEN_SESS_KEY, String(newMax));
-        if (seen === 0) return; // baseline on first run
+        if (cancelled) return;
+        // Use key-EXISTENCE (not value) as the "baseline established" marker. The
+        // old `seen === 0` check meant that when there were no prior sessions, the
+        // very first completed interview was treated as baseline and never notified.
+        const seenRaw = localStorage.getItem(SEEN_SESS_KEY);
+        const baselined = seenRaw !== null;
+        const seen = Number(seenRaw || 0);
+        const newMax = sessions.length ? Math.max(seen, ...sessions.map(s => Number(s.id))) : seen;
+        localStorage.setItem(SEEN_SESS_KEY, String(newMax)); // records baseline even at 0
+        if (!baselined) return; // first run only establishes the baseline
         const freshSess = sessions.filter(s => Number(s.id) > seen);
         freshSess.forEach(s => addNotification({
           type: 'interview',

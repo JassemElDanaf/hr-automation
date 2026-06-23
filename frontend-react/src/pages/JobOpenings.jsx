@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { apiGet, apiPost } from '../services/api';
 import { useSelectedJob } from '../state/selectedJob';
 import { useUI } from '../state/uiState';
+import { useEvalStatus } from '../state/evalStatus';
 import Badge from '../components/common/Badge';
 import Loading from '../components/common/Loading';
 import JobDetailModal from '../components/modals/JobDetailModal';
@@ -9,9 +10,18 @@ import { formatDate } from '../utils/helpers';
 
 const DEPARTMENTS = ['Engineering', 'IT', 'Marketing', 'Sales', 'HR', 'Finance', 'Operations', 'Design', 'Product', 'Legal', 'Other'];
 
+// Persist an in-progress "New Job" draft so accidentally closing the modal
+// (overlay click / ×) — or even a full page reload — never loses what was typed.
+const DRAFT_KEY = 'hr_job_draft';
+const EMPTY_FORM = {
+  title: '', department: '', departmentCustom: '', employment: 'Full-time',
+  seniority: 'Mid-level', location: 'On-site', reporting: '', description: '', aiContext: '',
+};
+
 export default function JobOpenings() {
   const { showToast } = useUI();
   const { refreshJobs } = useSelectedJob();
+  const { runAiTask } = useEvalStatus();
   const [allJobs, setAllJobs] = useState([]);
   const [filter, setFilter] = useState('all');
   const [search, setSearch] = useState('');
@@ -42,12 +52,36 @@ export default function JobOpenings() {
   }, [creating, descSource]);
 
   // Form state
-  const [form, setForm] = useState({
-    title: '', department: '', departmentCustom: '', employment: 'Full-time',
-    seniority: 'Mid-level', location: 'On-site', reporting: '', description: '',
-  });
+  const [form, setForm] = useState(EMPTY_FORM);
 
   useEffect(() => { loadJobs(); }, []);
+
+  // Restore a saved draft (if any) once, on mount — survives reloads.
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(DRAFT_KEY);
+      if (raw) {
+        const d = JSON.parse(raw);
+        if (d && d.form) {
+          setForm({ ...EMPTY_FORM, ...d.form });
+          setCreateStep(d.createStep || 1);
+          setDescSource(d.descSource || 'manual');
+        }
+      }
+    } catch { /* ignore corrupt draft */ }
+  }, []);
+
+  // Save the draft whenever the form changes while the modal is open and it has
+  // any meaningful content, so a stray close/reload doesn't wipe it.
+  useEffect(() => {
+    if (!showCreate) return;
+    const hasContent = form.title || form.description || form.aiContext || form.reporting || form.department || form.departmentCustom;
+    if (hasContent) localStorage.setItem(DRAFT_KEY, JSON.stringify({ form, createStep, descSource }));
+  }, [form, createStep, descSource, showCreate]);
+
+  const draftHasContent = !!(form.title || form.description || form.aiContext || form.reporting || form.department || form.departmentCustom);
+
+  function clearDraft() { try { localStorage.removeItem(DRAFT_KEY); } catch { /* noop */ } }
 
   async function loadJobs() {
     setLoading(true);
@@ -86,12 +120,22 @@ export default function JobOpenings() {
       description_source: descSource,
     };
     if (descSource === 'manual') payload.job_description = form.description.trim();
+    // Optional tailoring keywords/guidance for AI generation (degrees, years of
+    // experience, specific skills/tools/languages). The phase1 Ollama prompt
+    // injects this when present so the JD is tailored to HR's requirements.
+    if (descSource === 'ai_generate' && form.aiContext.trim()) payload.ai_context = form.aiContext.trim();
 
     try {
-      const res = await apiPost('/job-openings', payload);
+      // For AI generation, surface the global "AI is working" indicator next to
+      // the bell (same as CV evaluation / criteria gen) so progress is visible
+      // even if the user navigates away from this modal.
+      const res = descSource === 'ai_generate'
+        ? await runAiTask('Generating job description…', () => apiPost('/job-openings', payload))
+        : await apiPost('/job-openings', payload);
       if (res.status === 201 || res.data.success) {
         showToast('Job opening created!', 'success');
         setShowCreate(false);
+        clearDraft();
         resetForm();
         loadJobs();
       } else {
@@ -103,9 +147,16 @@ export default function JobOpenings() {
   }
 
   function resetForm() {
-    setForm({ title: '', department: '', departmentCustom: '', employment: 'Full-time', seniority: 'Mid-level', location: 'On-site', reporting: '', description: '' });
+    setForm(EMPTY_FORM);
     setCreateStep(1);
     setDescSource('manual');
+  }
+
+  // Explicit "start over" — wipes the draft too. Used by the modal's Start fresh button.
+  function discardDraft() {
+    clearDraft();
+    resetForm();
+    showToast('Draft cleared', 'info');
   }
 
   // Filtering
@@ -130,7 +181,7 @@ export default function JobOpenings() {
             ))}
           </div>
           <span style={{ fontSize: '13px', color: 'var(--gray-400)', marginLeft: 'auto' }}>{filtered.length} of {allJobs.length} jobs</span>
-          <button className="btn btn-primary btn-sm" onClick={() => { resetForm(); setShowCreate(true); }}>+ New Job</button>
+          <button className="btn btn-primary btn-sm" onClick={() => setShowCreate(true)}>+ New Job</button>
         </div>
         {loading ? <Loading /> : filtered.length === 0 ? (
           <div className="empty-state"><p>No job openings found.</p></div>
@@ -167,8 +218,17 @@ export default function JobOpenings() {
         <div className="modal-overlay active" onClick={e => e.target === e.currentTarget && setShowCreate(false)}>
           <div className="modal">
             <div className="modal-header">
-              <h2>New Job Opening</h2>
-              <button className="modal-close" onClick={() => setShowCreate(false)}>&times;</button>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, flexWrap: 'wrap' }}>
+                <h2>New Job Opening</h2>
+                {draftHasContent && (
+                  <button
+                    onClick={discardDraft}
+                    style={{ background: 'none', border: 'none', color: 'var(--gray-400)', fontSize: 12, cursor: 'pointer', textDecoration: 'underline', padding: 0 }}
+                    title="Clear everything and start a blank job"
+                  >Start fresh</button>
+                )}
+              </div>
+              <button className="modal-close" onClick={() => setShowCreate(false)} title="Close — your draft is saved">&times;</button>
             </div>
             <div className="modal-body">
               <div className="wizard-steps" style={{ paddingTop: 0, marginBottom: '24px' }}>
@@ -243,10 +303,16 @@ export default function JobOpenings() {
                     </div>
                   )}
                   {descSource === 'ai_generate' && (
-                    <div style={{ background: 'var(--gray-50)', padding: '16px', borderRadius: 'var(--radius)', color: 'var(--gray-600)', fontSize: '14px' }}>
-                      <strong>{'\u2728'} AI-Powered Generation</strong><br /><br />
-                      The job description will be automatically generated based on the job details from Step 1.
-                      <br /><br /><em>Requires Ollama running locally.</em>
+                    <div>
+                      <div className="form-group">
+                        <label>Keywords <span style={{ color: 'var(--gray-400)', fontWeight: 400 }}>(Optional)</span></label>
+                        <textarea
+                          value={form.aiContext}
+                          onChange={e => setForm({ ...form, aiContext: e.target.value })}
+                          style={{ minHeight: '220px' }}
+                          placeholder={"e.g. Bachelor's in Marketing, 0\u20132 years experience, must know SEO and Google Analytics, Arabic & English required, on-site in Riyadh"}
+                        />
+                      </div>
                     </div>
                   )}
                 </div>

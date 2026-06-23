@@ -5,8 +5,9 @@ with HTTP range support so <video> seeking works in the browser.
 """
 import http.server, json, os, pathlib, socketserver, mimetypes, sys
 
-RECORDINGS_DIR = pathlib.Path(__file__).parent.parent / 'recordings'
+RECORDINGS_DIR = pathlib.Path(os.environ.get('RECORDINGS_DIR', str(pathlib.Path(__file__).parent.parent / 'recordings')))
 PORT = int(os.environ.get('RECORDING_PORT', '8903'))
+HOST = os.environ.get('SIDECAR_HOST', '127.0.0.1')
 RECORDINGS_DIR.mkdir(exist_ok=True)
 
 
@@ -120,8 +121,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
 if __name__ == '__main__':
     socketserver.TCPServer.allow_reuse_address = True
-    with socketserver.TCPServer(('127.0.0.1', PORT), Handler) as httpd:
-        print(f'[RecordingServer] Listening on http://127.0.0.1:{PORT}', flush=True)
+    with socketserver.TCPServer((HOST, PORT), Handler) as httpd:
+        print(f'[RecordingServer] Listening on http://{HOST}:{PORT}', flush=True)
         print(f'[RecordingServer] Storing recordings in {RECORDINGS_DIR}', flush=True)
         try:
             httpd.serve_forever()

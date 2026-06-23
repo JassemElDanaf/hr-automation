@@ -84,6 +84,18 @@ export function emailTypeLabel(type) {
   }
 }
 
+// Compact department label for tight one-line meta rows (job cards) — long
+// names like "Human Resources" wrap and break the layout, so abbreviate the
+// known long ones. Full name is still shown everywhere there's room.
+const DEPT_ABBREV = {
+  'Human Resources': 'HR',
+  'Information Technology': 'IT',
+  'Operations': 'Ops',
+};
+export function shortDept(dept) {
+  return DEPT_ABBREV[dept] || dept || '';
+}
+
 export function scoreLabel(score) {
   const s = parseFloat(score);
   if (s >= 8) return 'Excellent';

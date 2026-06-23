@@ -687,40 +687,46 @@ export default function LiveInterview() {
                 Ready — <strong style={{ color: 'var(--gray-800)' }}>{filledCount}</strong> question{filledCount !== 1 ? 's' : ''} for <strong style={{ color: 'var(--gray-800)' }}>{candidateName}</strong>.
               </div>
             )}
-            <button
-              className="btn btn-primary"
-              onClick={generateLink}
-              disabled={!jobId || !candidateId}
-              style={{ padding: '10px 28px', fontSize: 14 }}
-            >
-              Generate Interview Link
-            </button>
+            {/* Everything on one row: Generate button + (once generated) a compact
+                link field, Copy and Back to Shortlist — the link is purposely
+                narrow (you don't need to read the whole token) to save space. */}
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+              <button
+                className="btn btn-primary"
+                onClick={generateLink}
+                disabled={!jobId || !candidateId}
+                style={{ padding: '10px 24px', fontSize: 14, flexShrink: 0 }}
+              >
+                Generate Interview Link
+              </button>
 
-            {link && (
-              <div style={{ marginTop: 16 }}>
-                <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8 }}>
+              {link && (
+                <>
+                  <input
+                    type="text" readOnly value={link} onClick={e => e.target.select()}
+                    title={link}
+                    style={{ flex: '1 1 160px', minWidth: 100, maxWidth: 320, fontSize: 12, padding: '9px 12px', border: '1px solid var(--gray-300)', borderRadius: 6, background: 'var(--gray-50)', color: 'var(--gray-800)', fontFamily: 'monospace', outline: 'none', cursor: 'text', textOverflow: 'ellipsis' }}
+                  />
+                  <button className={`btn ${copied ? 'btn-secondary' : 'btn-primary'}`} onClick={copyLink} style={{ whiteSpace: 'nowrap', flexShrink: 0 }}>
+                    {copied ? '✓ Copied!' : 'Copy Link'}
+                  </button>
                   <button
                     className="btn btn-secondary btn-sm"
                     onClick={() => navigate(`/shortlist?focus=${candidateId}&job=${jobId}`)}
                     title="Go back to Shortlist and open the invitation email with this link filled in"
+                    style={{ flexShrink: 0 }}
                   >
                     ← Back to Shortlist
                   </button>
-                </div>
-                <div style={{ display: 'flex', gap: 8 }}>
-                  <input
-                    type="text" readOnly value={link} onClick={e => e.target.select()}
-                    style={{ flex: 1, fontSize: 12, padding: '9px 12px', border: '1px solid var(--gray-300)', borderRadius: 6, background: 'var(--gray-50)', color: 'var(--gray-800)', fontFamily: 'monospace', outline: 'none', cursor: 'text' }}
-                  />
-                  <button className={`btn ${copied ? 'btn-secondary' : 'btn-primary'}`} onClick={copyLink} style={{ whiteSpace: 'nowrap', minWidth: 96 }}>
-                    {copied ? '✓ Copied!' : 'Copy Link'}
-                  </button>
-                </div>
-                <div style={{ marginTop: 10, padding: '10px 14px', background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 6, fontSize: 13, color: '#1e40af', lineHeight: 1.6 }}>
-                  <strong>Send this link to {candidateName}.</strong>
-                  {filledCount > 0 && <> The AI will ask your <strong>{filledCount} question{filledCount !== 1 ? 's' : ''}</strong> in order.</>}
-                  {' '}Results save automatically once they submit.
-                </div>
+                </>
+              )}
+            </div>
+
+            {link && (
+              <div style={{ marginTop: 10, padding: '10px 14px', background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 6, fontSize: 13, color: '#1e40af', lineHeight: 1.6 }}>
+                <strong>Send this link to {candidateName}.</strong>
+                {filledCount > 0 && <> The AI will ask your <strong>{filledCount} question{filledCount !== 1 ? 's' : ''}</strong> in order.</>}
+                {' '}Results save automatically once they submit.
               </div>
             )}
           </div>
@@ -772,11 +778,17 @@ function BankPicker({ onSelect, selected }) {
   }
 
   const cats = ['all', ...Object.keys(CAT_LABELS)];
-  const visible = bank.filter(b => {
-    const matchCat = catFilter === 'all' || b.category === catFilter;
-    const matchSearch = !search || b.question.toLowerCase().includes(search.toLowerCase());
-    return matchCat && matchSearch;
-  });
+  const CAT_ORDER = Object.keys(CAT_LABELS);
+  const catRank = c => { const i = CAT_ORDER.indexOf(c); return i === -1 ? 99 : i; };
+  const visible = bank
+    .filter(b => {
+      const matchCat = catFilter === 'all' || b.category === catFilter;
+      const matchSearch = !search || b.question.toLowerCase().includes(search.toLowerCase());
+      return matchCat && matchSearch;
+    })
+    // Group by category (Behavioural together, then Technical, Salary, …) so the
+    // list reads in tidy blocks instead of interleaved categories, especially on "All".
+    .sort((a, b) => catRank(a.category) - catRank(b.category));
 
   // Fully controlled by the parent's interview set: a row is "checked" iff it's
   // already in the set (matched by bankId). No internal selection state — so

@@ -24,9 +24,9 @@ from email.mime.text import MIMEText
 from email.utils import make_msgid
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
-LISTEN_HOST = '127.0.0.1'
+LISTEN_HOST = os.environ.get('SIDECAR_HOST', '127.0.0.1')
 LISTEN_PORT = 8901
-RECORDINGS_DIR = pathlib.Path(__file__).parent.parent / 'recordings'
+RECORDINGS_DIR = pathlib.Path(os.environ.get('RECORDINGS_DIR', str(pathlib.Path(__file__).parent.parent / 'recordings')))
 MAX_ATTACH_BYTES = 18 * 1024 * 1024  # stay under Gmail's 25 MB cap incl. b64 overhead
 
 

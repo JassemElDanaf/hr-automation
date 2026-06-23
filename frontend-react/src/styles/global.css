@@ -134,7 +134,19 @@ body {
 .global-job-badge .global-job-label { color: var(--gray-500); font-weight: 500; }
 .global-job-badge .global-job-title { color: var(--primary); font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 220px; }
 .global-job-badge .global-job-dept { color: var(--gray-500); }
-.global-job-badge .global-job-caret { color: var(--gray-400); font-size: 11px; margin-left: 2px; }
+.global-job-badge .global-job-caret {
+  margin-left: auto;
+  padding-left: 8px;
+  color: var(--gray-400);
+  font-size: 12px;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  transition: transform 0.2s ease, color 0.15s;
+}
+.global-job-badge:hover .global-job-caret { color: var(--primary); }
+.global-job-badge .global-job-caret.open { transform: rotate(180deg); }
 
 .global-job-menu {
   position: absolute; top: calc(100% + 8px); right: 0; z-index: 200;
@@ -592,7 +604,7 @@ textarea { resize: vertical; min-height: 120px; }
 .job-card:hover { border-color: var(--gray-300); box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
 .job-card.selected { border-color: var(--primary); background: var(--tint-info); }
 .job-card-title { font-size: 16px; font-weight: 700; color: var(--gray-900); margin-bottom: 8px; }
-.job-card-meta { font-size: 13px; color: var(--gray-500); display: flex; flex-wrap: wrap; gap: 6px; }
+.job-card-meta { font-size: 13px; color: var(--gray-500); display: flex; flex-wrap: nowrap; gap: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .job-card-meta .dot::before { content: '\00b7'; margin-right: 6px; }
 .job-card-stats { display: flex; gap: 16px; margin-top: 12px; font-size: 12px; color: var(--gray-400); }
 
@@ -1072,22 +1084,31 @@ textarea { resize: vertical; min-height: 120px; }
   background: var(--gray-50) !important;
 }
 .email-row-toggle {
-  font-size: 10px;
-  color: var(--gray-400);
-  display: inline-block;
-  width: 12px;
-  text-align: center;
+  font-size: 13px;
+  color: var(--gray-500);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  transition: transform 0.25s ease, background 0.15s ease, color 0.15s ease;
+}
+.email-row-toggle.open { transform: rotate(180deg); }
+.email-row-clickable:hover .email-row-toggle {
+  background: var(--gray-100);
+  color: var(--gray-700);
 }
 .email-detail-row td {
   padding: 0 !important;
+  border: none !important;
   background: var(--surface);
 }
 .email-detail-panel {
   padding: 16px 20px;
-  background: var(--gray-50);
-  border-top: 1px solid var(--gray-200);
+  background: var(--surface-2);
+  border-top: 1px solid var(--gray-100);
   border-bottom: 1px solid var(--gray-200);
-  animation: emailDetailsSlideIn 0.2s ease-out;
   font-size: 13px;
 }
 .email-detail-grid {

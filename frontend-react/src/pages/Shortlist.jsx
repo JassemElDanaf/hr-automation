@@ -107,6 +107,7 @@ export default function Shortlist() {
   const [retainedInView, setRetainedInView] = useState(new Set()); // keep card visible after state change
   const [expanded, setExpanded] = useState(null); // shortlist row id of the expanded card (Decision-style)
   const [slSort, setSlSort] = useState('recent'); // recent | score | name
+  const [sessionCands, setSessionCands] = useState(() => new Set()); // candidate_ids with a real interview session (results exist)
 
   useEffect(() => { loadJobs(); }, []);
 
@@ -193,6 +194,10 @@ export default function Shortlist() {
       // "Mark Interviewed" button.
       const sessList = Array.isArray(sessRes) ? sessRes : (sessRes.data || []);
       const interviewedCands = new Set(sessList.map(s => s.candidateId));
+      // Drives the "Results" button: only show it when a real interview session
+      // exists, not merely because status==='interviewed' (which can come from
+      // seed data with no actual interview to display).
+      setSessionCands(interviewedCands);
       // Auto-evaluate completed interviews that never got scored (e.g. the
       // candidate closed their tab before the background eval finished). Runs
       // HR-side where Ollama lives, so no manual "Re-evaluate" click is needed.
@@ -227,7 +232,10 @@ export default function Shortlist() {
   function autoEvaluatePendingSessions(sessList) {
     const parse = (v) => { try { return typeof v === 'string' ? JSON.parse(v) : (v || []); } catch { return []; } };
     for (const s of sessList) {
-      const pending = !s.scoreOverall && !s.summary;
+      // scoreOverall is a STRING from Postgres ("0.0") — !"0.0" is false, so a
+      // failed/zero eval would wrongly look "done". Parse it; a real eval always
+      // writes a summary, so "no summary" is the reliable pending signal.
+      const pending = !s.summary && (parseFloat(s.scoreOverall) || 0) === 0;
       const qa = parse(s.qaPairs);
       if (!pending || !Array.isArray(qa) || qa.length === 0) continue;
       if (autoEvalRef.current.has(s.id)) continue;
@@ -495,7 +503,7 @@ export default function Shortlist() {
                       <button className="btn btn-sm btn-secondary" onClick={() => restoreSlArchive(s.id)}>Restore</button>
                     ) : (s.status === 'shortlisted' || s.status === 'interviewed') ? (
                       <>
-                        {s.status === 'interviewed' && <button className="btn btn-sm btn-primary" onClick={() => navigate(`/live-interview?tab=results&focus=${s.candidate_id}`)} title="See the interview scores, transcript and recording">📊 Results</button>}
+                        {s.status === 'interviewed' && sessionCands.has(s.candidate_id) && <button className="btn btn-sm btn-primary" onClick={() => navigate(`/live-interview?tab=results&focus=${s.candidate_id}`)} title="See the interview scores, transcript and recording">📊 Results</button>}
                         <button className={`btn btn-sm ${s.status === 'interviewed' ? 'btn-secondary' : 'btn-primary'}`} onClick={() => setUpInterview(s)}>⚙ Set Up Interview</button>
                         <button className="btn btn-sm btn-success" onClick={() => sendEmail(s.candidate_id, s.job_opening_id, s.candidate_name, s.email, 'interview_invite')}>Send Invite</button>
                         <button className="btn btn-sm btn-danger" onClick={() => rejectFromShortlist(s)}>Reject</button>

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { apiGet } from '../services/api';
 import { useSelectedJob } from '../state/selectedJob';
@@ -23,17 +23,23 @@ export default function Emails() {
   const [allJobs, setAllJobs] = useState(false); // "All jobs" cross-view (Emails-only)
   const [emailData, setEmailData] = useState([]);
   const [statusFilter, setStatusFilter] = useState('all');
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(false);       // first load (no cache) → dim + big spinner
+  const [revalidating, setRevalidating] = useState(false); // any background fetch → spins the ↺ icon
   const [showSmtpHelp, setShowSmtpHelp] = useState(false);
   const [showTest, setShowTest] = useState(false);
   const [testTo, setTestTo] = useState('');
   const [testSending, setTestSending] = useState(false);
   const [expandedRow, setExpandedRow] = useState(null); // email id of expanded row
+  const [retryingId, setRetryingId] = useState(null);   // email_log id currently being re-sent
   // Compose new email
   const [showCompose, setShowCompose] = useState(false);
   const [candidates, setCandidates] = useState([]);
   const [compose, setCompose] = useState({ candidateId: '', to: '', subject: '', body: '' });
   const [composing, setComposing] = useState(false);
+  // Stale-while-revalidate cache keyed by jobId ('all' or a numeric id). Toggling
+  // between "All jobs" and a single job shows the cached rows instantly (no flash,
+  // no network wait) while a fresh fetch updates them in the background.
+  const cacheRef = useRef({});
 
   useEffect(() => {
     loadJobs();
@@ -133,23 +139,49 @@ export default function Emails() {
     finally { setComposing(false); }
   }
 
+  // Re-send a failed (or logged-only) outbound email using its stored fields —
+  // routes back through /send-email so it re-logs and the row updates. Useful
+  // when a send failed on a transient SMTP timeout.
+  async function retrySend(e) {
+    setRetryingId(e.id);
+    try {
+      const jobTitle = jobs.find(j => j.id === e.job_opening_id)?.job_title || '';
+      const res = await sendEmailRequest({
+        candidateId: e.candidate_id, jobId: e.job_opening_id, emailType: e.email_type,
+        recipientEmail: e.recipient_email, candidateName: e.candidate_name, jobTitle,
+        subject: e.subject, body: e.body,
+      });
+      const st = getEmailStatus(res);
+      showToast(st.message, st.type);
+      if (res.data?.status === 'sent' || res.data?.status === 'logged') loadEmails();
+    } catch { showToast('Retry failed — is the SMTP sidecar running?', 'error'); }
+    finally { setRetryingId(null); }
+  }
+
   async function loadEmails() {
     if (!jobId) { setEmailData([]); return; }
-    setLoading(true);
+    const key = String(jobId);
+    const cached = cacheRef.current[key];
+    // Show cached rows instantly; only dim/spin if we have nothing for this view yet.
+    if (cached) setEmailData(cached);
+    setLoading(!cached);
+    setRevalidating(true);
     try {
+      let data;
       if (jobId === 'all') {
         // Merge every job's history so an inbound reply for any job is never missed.
         const lists = await Promise.all(
           jobs.map(j => apiGet(`/email-history?job_id=${j.id}`).then(r => (r.data || []).filter(e => e.id)).catch(() => []))
         );
-        const merged = lists.flat().sort((a, b) => new Date(b.sent_at) - new Date(a.sent_at));
-        setEmailData(merged);
+        data = lists.flat().sort((a, b) => new Date(b.sent_at) - new Date(a.sent_at));
       } else {
         const res = await apiGet(`/email-history?job_id=${jobId}`);
-        setEmailData((res.data || []).filter(e => e.id));
+        data = (res.data || []).filter(e => e.id);
       }
-    } catch (err) { showToast('Failed to load emails', 'error'); }
-    finally { setLoading(false); }
+      cacheRef.current[key] = data;
+      setEmailData(data);
+    } catch (err) { if (!cached) showToast('Failed to load emails', 'error'); }
+    finally { setLoading(false); setRevalidating(false); }
   }
 
   // Test-send straight to the SMTP sidecar (port 8901) — bypasses n8n and
@@ -230,23 +262,33 @@ export default function Emails() {
           <button className="btn btn-primary btn-sm" onClick={openCompose}>✉ New Email</button>
           <button
             onClick={loadEmails}
-            disabled={loading}
+            disabled={revalidating}
             title="Refresh email history"
             style={{
               width: 32, height: 32, borderRadius: '50%', flexShrink: 0,
               border: '1px solid var(--gray-200)', background: 'var(--surface)',
               cursor: 'pointer', fontSize: 15, color: 'var(--gray-500)',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              animation: loading ? 'spin 0.8s linear infinite' : 'none',
+              animation: revalidating ? 'spin 0.8s linear infinite' : 'none',
             }}
           >↺</button>
         </div>
       </div>
 
       <div className="table-wrap">
-        {loading ? <Loading /> : !jobId ? <EmptyState>Pick a job from the “Current Job” selector at the top (or toggle “All jobs”) to view email history.</EmptyState> : filtered.length === 0 ? <EmptyState>No emails match the current filter.</EmptyState> : (
-          <table>
-            <thead><tr><th>Date</th><th>Candidate</th><th>Type</th><th>Recipient</th><th>Subject</th><th>Status</th><th style={{ width: '28px' }}></th></tr></thead>
+        {(loading && emailData.length === 0) ? <Loading /> : !jobId ? <EmptyState>Pick a job from the “Current Job” selector at the top (or toggle “All jobs”) to view email history.</EmptyState> : (filtered.length === 0 && !loading) ? <EmptyState>No emails match the current filter.</EmptyState> : (
+          // Keep current rows on screen while refetching (e.g. toggling "All jobs")
+          // — just dim them — instead of swapping the whole table for a spinner,
+          // which caused a flash + layout jump. The ↺ icon spins to show activity.
+          <table style={{ width: '100%', tableLayout: 'fixed', opacity: loading ? 0.5 : 1, transition: 'opacity 0.18s ease' }}>
+            <thead><tr>
+              <th style={{ width: '148px' }}>Date</th>
+              <th style={{ width: '138px' }}>Candidate</th>
+              <th style={{ width: '130px' }}>Type</th>
+              <th style={{ width: '200px' }}>Recipient</th>
+              <th>Subject</th>
+              <th style={{ width: '108px' }}>Status</th>
+            </tr></thead>
             <tbody>
               {filtered.map(e => {
                 const inbound = e.direction === 'inbound';
@@ -258,32 +300,38 @@ export default function Emails() {
                     onClick={() => setExpandedRow(expandedRow === e.id ? null : e.id)}
                     style={rowBg}
                   >
-                    <td style={{ fontSize: '13px', color: 'var(--gray-500)' }}>{new Date(e.sent_at).toLocaleDateString()} {new Date(e.sent_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</td>
-                    <td><strong>{e.candidate_name || '\u2014'}</strong></td>
-                    <td>
+                    <td style={{ fontSize: '13px', color: 'var(--gray-500)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{new Date(e.sent_at).toLocaleDateString()} {new Date(e.sent_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</td>
+                    <td style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}><strong>{e.candidate_name || '\u2014'}</strong></td>
+                    <td style={{ overflow: 'hidden' }}>
                       {inbound
-                        ? <span className="badge" style={{ background: '#ede9fe', color: '#6b21a8', border: '1px solid #e9d5ff' }}>{'\u{1F4E5}'} Reply</span>
+                        ? <span className="badge" style={{ background: '#ede9fe', color: '#6b21a8', border: '1px solid #e9d5ff', whiteSpace: 'nowrap' }}>{'\u{1F4E5}'} Reply</span>
                         : <Badge type={e.email_type === 'recommendation' ? 'interviewed' : 'shortlisted'}>{emailTypeLabel(e.email_type)}</Badge>}
                     </td>
-                    <td style={{ fontSize: '13px' }}>
+                    <td style={{ fontSize: '13px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
+                        title={(inbound ? 'from ' : '') + (e.recipient_email || '')}>
                       {inbound && <span style={{ color: 'var(--gray-400)', marginRight: '4px' }}>from</span>}
                       {e.recipient_email}
                     </td>
-                    <td style={{ fontSize: '13px', color: 'var(--gray-700)', maxWidth: '280px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    <td style={{ fontSize: '13px', color: 'var(--gray-700)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
+                        title={e.subject || ''}>
                       {e.subject}
                     </td>
-                    <td>
-                      {inbound
-                        ? <span className="badge" style={{ background: '#ede9fe', color: '#6b21a8', border: '1px solid #e9d5ff' }}>inbound</span>
-                        : <Badge type={e.status === 'sent' ? 'hired' : e.status === 'failed' ? 'rejected' : 'draft'}>{e.status}</Badge>}
+                    <td style={{ whiteSpace: 'nowrap' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8 }}>
+                        {inbound
+                          ? <span className="badge" style={{ background: '#ede9fe', color: '#6b21a8', border: '1px solid #e9d5ff' }}>inbound</span>
+                          : <Badge type={e.status === 'sent' ? 'hired' : e.status === 'failed' ? 'rejected' : 'draft'}>{e.status}</Badge>}
+                        <span className={`email-row-toggle${expandedRow === e.id ? ' open' : ''}`}>{'\u25BE'}</span>
+                      </div>
                     </td>
-                    <td style={{ textAlign: 'center' }}><span className="email-row-toggle">{expandedRow === e.id ? '\u25B2' : '\u25BC'}</span></td>
                   </tr>
-                  {expandedRow === e.id && (
-                    <tr className="email-detail-row">
-                      <td colSpan={7}>
+                  <tr className="email-detail-row">
+                    <td colSpan={6}>
+                      <div style={{ display: 'grid', gridTemplateRows: expandedRow === e.id ? '1fr' : '0fr', transition: 'grid-template-rows 0.28s ease' }}>
+                      <div style={{ overflow: 'hidden' }}>
                         <div className="email-detail-panel">
-                          <div className="email-detail-grid">
+                          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16 }}>
+                          <div className="email-detail-grid" style={{ flex: 1 }}>
                             <div className="email-detail-field"><span className="email-detail-label">{inbound ? 'From:' : 'To:'}</span> {e.recipient_email}</div>
                             <div className="email-detail-field"><span className="email-detail-label">Type:</span> {inbound ? 'Inbound reply' : emailTypeLabel(e.email_type)}</div>
                             <div className="email-detail-field"><span className="email-detail-label">Date:</span> {new Date(e.sent_at).toLocaleString()}</div>
@@ -293,6 +341,15 @@ export default function Emails() {
                                 {inbound ? '\u{1F4E5} Inbound — pulled by IMAP poller' : e.status === 'sent' ? '\u2713 Delivered to mail server' : e.status === 'failed' ? '\u2717 Failed' : e.status === 'logged' ? '\u26A0 Logged only (SMTP not configured)' : e.status}
                               </span>
                             </div>
+                          </div>
+                            {/* Retry a failed / logged-only outbound send (e.g. after a transient SMTP timeout). Top-right, beside Status. */}
+                            {!inbound && (e.status === 'failed' || e.status === 'logged') && (
+                              <button className="btn btn-sm btn-primary" style={{ flexShrink: 0 }} disabled={retryingId === e.id}
+                                onClick={(ev) => { ev.stopPropagation(); retrySend(e); }}
+                                title="Resend this email using the same recipient, subject and message">
+                                {retryingId === e.id ? 'Resending…' : '↻ Retry send'}
+                              </button>
+                            )}
                           </div>
                           {e.error_message && (
                             <div className="email-detail-error-box">
@@ -313,7 +370,7 @@ export default function Emails() {
                             <div style={{ marginTop: 12, padding: '12px 14px', background: 'var(--tint-info)', border: '1px solid #bfdbfe', borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
                               <div style={{ fontSize: 13, color: 'var(--gray-700)' }}>
                                 {e.candidate_id
-                                  ? <><strong>Reply to {e.candidate_name || 'them'}</strong>, or make the final call in the Decision tab.</>
+                                  ? <><strong>Reply to {e.recipient_email || 'the sender'}</strong>, or make the final call on {(e.candidate_name || '').trim().split(/\s+/)[0] || 'this candidate'} in the Decision tab.</>
                                   : <><strong>Reply to {e.recipient_email || 'the sender'}.</strong></>}
                               </div>
                               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -329,9 +386,10 @@ export default function Emails() {
                             </div>
                           )}
                         </div>
-                      </td>
-                    </tr>
-                  )}
+                      </div>
+                      </div>
+                    </td>
+                  </tr>
                 </React.Fragment>
                 );
               })}

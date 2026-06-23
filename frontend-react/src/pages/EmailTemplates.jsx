@@ -4,8 +4,10 @@ import { TEMPLATE_DEFS, effectiveTemplate, setTemplateOverrides } from '../servi
 import { listEmailTemplates, saveEmailTemplate } from '../services/auth';
 import Loading from '../components/common/Loading';
 
-// Admin-only editor for the candidate-facing email templates. Overrides are
-// stored in the DB (auth sidecar); the built-in defaults live in services/email.js.
+// Admin-only editor for every email template — candidate-facing (rejection,
+// shortlist, interview invite, offer) and hiring-manager-facing (recommendation,
+// interview pack). Overrides are stored in the DB (auth sidecar); the built-in
+// defaults live in services/email.js.
 export default function EmailTemplates() {
   const { showToast } = useUI();
   const [loading, setLoading] = useState(true);
@@ -24,7 +26,7 @@ export default function EmailTemplates() {
       <div style={{ marginBottom: 16 }}>
         <h2 style={{ fontSize: 20, fontWeight: 700, color: 'var(--gray-900)' }}>Email Templates</h2>
         <p style={{ fontSize: 14, color: 'var(--gray-500)', marginTop: 4 }}>
-          Edit the candidate-facing emails. Placeholder tokens like <code>{'{candidate_name}'}</code> are filled in automatically when an email is sent.
+          Edit any email the system sends — to candidates and to hiring managers. Placeholder tokens like <code>{'{candidate_name}'}</code> are filled in automatically when an email is sent. On the hiring-manager templates, tokens like <code>{'{evaluation_summary}'}</code> or <code>{'{questions}'}</code> insert generated content — move them around, but don't edit inside them.
         </p>
       </div>
       {loading ? <Loading /> : (
@@ -44,6 +46,7 @@ function TemplateCard({ tkey, overridden, onSaved, showToast }) {
   const [subject, setSubject] = useState(eff.subject);
   const [body, setBody] = useState(eff.body);
   const [saving, setSaving] = useState(false);
+  const [open, setOpen] = useState(false); // collapsed by default — expand only the one you want to edit
 
   const dirty = subject !== eff.subject || body !== eff.body;
 
@@ -55,12 +58,19 @@ function TemplateCard({ tkey, overridden, onSaved, showToast }) {
 
   return (
     <div style={{ background: 'var(--surface)', border: '1px solid var(--gray-200)', borderRadius: 12, padding: 18 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+      <div
+        onClick={() => setOpen(o => !o)}
+        style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: open ? 10 : 0, cursor: 'pointer', userSelect: 'none' }}
+      >
+        <span style={{ fontSize: 12, color: 'var(--gray-400)', transition: 'transform 150ms ease', transform: open ? 'rotate(90deg)' : 'none' }}>▶</span>
         <h3 style={{ fontSize: 15, fontWeight: 700, color: 'var(--gray-900)' }}>{def.name}</h3>
         {overridden && <span style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', padding: '2px 8px', borderRadius: 10, background: 'var(--tint-info)', color: 'var(--primary)' }}>Edited</span>}
+        {!open && dirty && <span style={{ fontSize: 11, color: 'var(--gray-400)' }}>Unsaved changes</span>}
         <span style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--gray-400)' }}>{tkey}</span>
       </div>
-      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 12 }}>
+      {!open ? null : (
+      <>
+      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 12, marginTop: 12 }}>
         {def.placeholders.map(p => (
           <code key={p} style={{ fontSize: 11.5, padding: '2px 8px', borderRadius: 6, background: 'var(--gray-100)', color: 'var(--gray-600)' }}>{`{${p}}`}</code>
         ))}
@@ -74,6 +84,8 @@ function TemplateCard({ tkey, overridden, onSaved, showToast }) {
         <button className="btn btn-secondary btn-sm" onClick={() => { setSubject(def.subject); setBody(def.body); }}>Reset to default</button>
         {dirty && <span style={{ fontSize: 12, color: 'var(--gray-400)' }}>Unsaved changes</span>}
       </div>
+      </>
+      )}
     </div>
   );
 }

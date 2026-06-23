@@ -683,7 +683,7 @@ export default function CandidateInterview() {
       setCurrentAnswer(''); setLiveText(''); setManualAnswer('');
       setMicOn(true); setPhase('interview'); setChipStatus('live');
       startTimer();
-      await speak(`Hello ${tokenData.candidateName}, welcome to your interview for ${tokenData.jobTitle}. I'll ask you ${total} questions.`);
+      await speak(`Welcome to your interview for ${tokenData.jobTitle}. I'll ask you ${total} questions.`);
       currentQStartRef.current = recSeconds();
       await speak(firstQ.question);
       startRecognition();

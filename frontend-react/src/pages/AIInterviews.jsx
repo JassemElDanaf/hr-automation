@@ -156,7 +156,11 @@ export default function AIInterviews({ embedded = false }) {
     finally { setLoadingSessions(false); }
   }
 
-  function isPending(s) { return !s.scoreOverall && !s.summary; }
+  // Pending = not yet evaluated. A real evaluation always writes a summary, so
+  // "no summary" is the reliable signal. NOTE: scoreOverall comes back as a
+  // STRING from Postgres ("0.0"), and !"0.0" is false — so we must parse it,
+  // otherwise a failed/zero eval looks "done" and auto-eval skips it.
+  function isPending(s) { return !s.summary && (parseFloat(s.scoreOverall) || 0) === 0; }
 
   function startPolling(jId) {
     setPolling(true);

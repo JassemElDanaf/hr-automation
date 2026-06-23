@@ -89,7 +89,7 @@
         "specifyBody": "json",
         "jsonBody": "={{ JSON.stringify({ to: $json.recipient_email, subject: $json.subject, body: $json.body, attachments: $json.attachments || [], recording_file: $json.recording_file || '', html_body: $json.html_body || '' }) }}",
         "options": {
-          "timeout": 25000
+          "timeout": 60000
         }
       },
       "id": "send-smtp",
@@ -539,7 +539,7 @@
         100
       ],
       "parameters": {
-        "jsCode": "const rows = $input.all().map(i => i.json);\nif (rows.length === 0) {\n  return [{ json: { status: 'not_tested', detail: 'No emails sent yet', sent: 0, failed: 0, total: 0 } }];\n}\nconst sent   = rows.filter(r => r.status === 'sent').length;\nconst failed = rows.filter(r => r.status === 'failed').length;\nconst total  = rows.length;\nconst lastOk = rows[0].status === 'sent';\nconst pct    = sent / total;\nlet status, detail;\nif (lastOk && pct >= 0.6) {\n  status = 'healthy';\n  detail = sent + '/' + total + ' recent sends succeeded';\n} else {\n  status = 'failing';\n  const lastErr = rows.find(r => r.status === 'failed')?.error_message || 'unknown error';\n  detail = failed + '/' + total + ' recent sends failed — ' + lastErr;\n}\nreturn [{ json: { status, detail, sent, failed, total } }];"
+        "jsCode": "const rows = $input.all().map(i => i.json);\nif (rows.length === 0) {\n  return [{ json: { status: 'not_tested', detail: 'No emails sent yet', sent: 0, failed: 0, total: 0 } }];\n}\nconst sent   = rows.filter(r => r.status === 'sent').length;\nconst failed = rows.filter(r => r.status === 'failed').length;\nconst total  = rows.length;\nconst pct    = sent / total;\nconst lastTwoFailed = total >= 2 && rows[0].status !== 'sent' && rows[1].status !== 'sent';\nlet status, detail;\nif (pct >= 0.6 && !lastTwoFailed) {\n  status = 'healthy';\n  detail = sent + '/' + total + ' recent sends succeeded';\n} else {\n  status = 'failing';\n  const lastErr = rows.find(r => r.status === 'failed')?.error_message || 'unknown error';\n  detail = failed + '/' + total + ' recent sends failed — ' + lastErr;\n}\nreturn [{ json: { status, detail, sent, failed, total } }];"
       }
     },
     {

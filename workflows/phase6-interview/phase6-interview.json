@@ -91,7 +91,7 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "SELECT COALESCE(e.id, 0) AS \"EvaluationId\", c.candidate_name AS \"FullName\", c.email AS \"Email\", ROUND(COALESCE(e.overall_score, 0)) AS \"OverallScore\", c.id AS \"CandidateId\" FROM shortlist s JOIN candidates c ON c.id = s.candidate_id LEFT JOIN evaluations e ON e.candidate_id = s.candidate_id AND e.job_opening_id = s.job_opening_id WHERE s.job_opening_id = {{ $json.jobId }}::integer AND s.status IN ('shortlisted', 'interviewed') ORDER BY COALESCE(e.overall_score, 0) DESC NULLS LAST",
+        "query": "SELECT COALESCE(e.id, 0) AS \"EvaluationId\", c.candidate_name AS \"FullName\", c.email AS \"Email\", ROUND(COALESCE(e.overall_score, 0)::numeric, 1) AS \"OverallScore\", c.id AS \"CandidateId\" FROM shortlist s JOIN candidates c ON c.id = s.candidate_id LEFT JOIN evaluations e ON e.candidate_id = s.candidate_id AND e.job_opening_id = s.job_opening_id WHERE s.job_opening_id = {{ $json.jobId }}::integer AND s.status IN ('shortlisted', 'interviewed') ORDER BY COALESCE(e.overall_score, 0) DESC NULLS LAST",
         "options": {}
       },
       "id": "fetch-intv-cands",
