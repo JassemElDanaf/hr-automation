@@ -110,7 +110,29 @@ No custom backend — the "backend" is n8n. Each HTTP endpoint is a webhook node
 Full table map is in `docs/database.md`.
 
 ### Docker
-The only container is PostgreSQL (`hr-postgres`). There is **no `docker-compose.yml`** — the container is created with a single `docker run` command documented in `start.sh` line 54 and in `docs/docker.md`.
+Two deployment modes coexist:
+
+**Local Windows dev** (`start.sh` / `launch.bat`): PostgreSQL runs as a single `hr-postgres` Docker container (`docker run -d --name hr-postgres ...`); all other services run as native Windows/WSL2 processes. Use this for day-to-day iteration.
+
+**Full Docker / Ubuntu production** (`docker-compose.yml`, added 2026-06-23):
+All services run as Docker containers — pull the repo on Ubuntu and `docker compose up -d`.
+
+| Service | Image / Dockerfile | Port | Notes |
+|---------|-------------------|------|-------|
+| `postgres` | `postgres:16` | 5432 | Init: `scripts/docker-pg-init.sh` runs schema + all migrations on first start |
+| `n8n` | `n8nio/n8n` | 5678 | Custom entrypoint `scripts/n8n-entrypoint.sh`: sed-patches workflow JSONs for Docker hostnames (localhost:11434→ollama, 127.0.0.1:890x→sidecars), imports workflows via `n8n import:workflow`, builds `N8N_CREDENTIALS_OVERWRITE_DATA` from env vars (zero-UI postgres credential setup), then starts n8n |
+| `ollama` | `ollama/ollama` | 11434 | After first `up`: `docker compose exec ollama ollama pull qwen3:4b` |
+| `sidecars` | `Dockerfile.sidecars` | 8901–8904 | python:3.11-slim + supervisord running all 4 Python sidecars. SMTP/IMAP/Recording/Auth. `SIDECAR_HOST=0.0.0.0` makes them bind on all interfaces |
+| `frontend` | `Dockerfile.frontend` | 3001 | Multi-stage: node:20-alpine builds React app, nginx:alpine serves static + proxy_pass for /webhook /recording /auth |
+
+**GPU support (Ubuntu):** `docker compose --profile gpu up` activates the `ollama-gpu` service variant with NVIDIA device reservation.
+
+**Key env vars for Docker** (from `.env`, which docker-compose reads automatically):
+- `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` — shared between postgres and sidecars
+- `SMTP_*` / `IMAP_*` — passed to sidecars container
+- All other vars in `.env.example` work the same as local dev
+
+**Sidecar portability rule (added 2026-06-23):** `smtp_server.py`, `auth_server.py`, `recording_server.py` read `SIDECAR_HOST` (default `127.0.0.1`) and `RECORDINGS_DIR` from env. Docker compose sets `SIDECAR_HOST=0.0.0.0`; local dev uses the default. Do not hardcode `127.0.0.1` in sidecar listen calls.
 
 ### Report (`report/`)
 - `report.tex` — LaTeX source of the stakeholder progress report (12pt Times New Roman via `mathptmx`, cover page with Diyar logo).
