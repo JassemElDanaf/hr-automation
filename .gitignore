@@ -31,3 +31,10 @@ Thumbs.db
 
 # --- Interview recordings (candidate video - never commit) ---
 recordings/
+
+# Playwright test artifacts (generated — regenerate with: npx playwright test)
+frontend-react/tests/report/
+frontend-react/tests/results/
+frontend-react/tests/screenshots/
+frontend-react/test-results/
+frontend-react/playwright-report/

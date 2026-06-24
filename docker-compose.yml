@@ -2,9 +2,8 @@
 # Usage:
 #   1. cp .env.example .env  &&  edit .env  (fill in SMTP/IMAP creds)
 #   2. docker compose up -d
-#   3. docker compose exec ollama ollama pull qwen3:4b   (one-time, ~3 GB)
 #
-# On Ubuntu with an NVIDIA GPU add --profile gpu to steps 2+3.
+# Ollama runs on the host (port 11434). Containers reach it via host.docker.internal.
 # All data is persisted in named volumes; nothing is lost on restart.
 
 services:
@@ -45,14 +44,22 @@ services:
       N8N_PROTOCOL: "http"
       WEBHOOK_URL: "http://n8n:5678/"
       # HR PostgreSQL credential overwrite (applied to ALL postgres-type credentials)
-      # n8n reads these and injects them at query time — no UI config needed.
       DB_HOST:    postgres
       DB_PORT:    "5432"
       DB_NAME:    ${POSTGRES_DB:-hr_automation}
       DB_USER:    ${POSTGRES_USER:-hr_admin}
       DB_PASS:    ${POSTGRES_PASSWORD:-hr_pass}
-      # Ollama base URL used by workflow HTTP Request nodes (patched at import)
-      OLLAMA_DOCKER_HOST: ollama
+      # Fixed encryption key — must match what the entrypoint script uses to encrypt credentials
+      N8N_ENCRYPTION_KEY: "diyar-hr-n8n-key-2026"
+      # Owner account — auto-created on first boot, skips setup wizard
+      N8N_OWNER_EMAIL: "admin@diyarme.com"
+      N8N_OWNER_PASSWORD: "ChangeMe123!"
+      N8N_OWNER_FIRST_NAME: "Admin"
+      N8N_OWNER_LAST_NAME: "User"
+      # Ollama host. Default = Ollama running on the HOST (reachable via
+      # host.docker.internal). Set OLLAMA_DOCKER_HOST=ollama in .env to use the
+      # bundled Docker Ollama service instead (run with: --profile ollama).
+      OLLAMA_DOCKER_HOST: ${OLLAMA_DOCKER_HOST:-host.docker.internal}
     volumes:
       - n8n_data:/home/node/.n8n
       - ./workflows:/workflows:ro
@@ -68,40 +75,31 @@ services:
       timeout: 5s
       retries: 30
       start_period: 60s
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 
-  # ── Ollama (local AI) ─────────────────────────────────────────────────────
-  # After first `docker compose up`, run:
-  #   docker compose exec ollama ollama pull qwen3:4b
+  # ── Ollama (always-on — runs in Docker regardless of any host install) ────
+  # Started by a plain `docker compose up -d` (no profile/flag needed). n8n
+  # talks to it at ollama:11434 (set OLLAMA_DOCKER_HOST=ollama in .env).
+  # Model files are stored via a bind mount to OLLAMA_DATA_DIR — keep that on
+  # the D: drive (e.g. D:/DiyarDocker/ollama) so nothing lands on C: or E:.
+  # First run (one-time): docker compose exec ollama ollama pull qwen3:4b
+  # NOTE: if a HOST Ollama is also running it will conflict on port 11434 —
+  # stop the host one, or comment out the `ports:` block below (n8n reaches
+  # this container over the internal network without the published port).
   ollama:
     image: ollama/ollama:latest
     restart: unless-stopped
     volumes:
-      - ollama_data:/root/.ollama
+      - "${OLLAMA_DATA_DIR:-./ollama-data}:/root/.ollama"
     ports:
       - "11434:11434"
     healthcheck:
-      test: ["CMD-SHELL", "curl -sf http://localhost:11434/api/tags || exit 1"]
+      test: ["CMD-SHELL", "ollama list || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 20
       start_period: 30s
-
-  # GPU variant — activate with: docker compose --profile gpu up
-  ollama-gpu:
-    image: ollama/ollama:latest
-    restart: unless-stopped
-    profiles: ["gpu"]
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: all
-              capabilities: [gpu]
-    volumes:
-      - ollama_data:/root/.ollama
-    ports:
-      - "11434:11434"
 
   # ── Python sidecars (SMTP / IMAP / Recording / Auth) ─────────────────────
   sidecars:
@@ -157,5 +155,4 @@ services:
 volumes:
   postgres_data:
   n8n_data:
-  ollama_data:
   recordings:

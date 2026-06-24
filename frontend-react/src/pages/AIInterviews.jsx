@@ -134,7 +134,7 @@ export default function AIInterviews({ embedded = false }) {
     setLoadingJobs(true);
     try {
       const res = await apiGet('/job-openings');
-      const list = res.data || res || [];
+      const list = Array.isArray(res) ? res : (res.data || []);
       setJobs(list.map(j => ({ JobId: j.id ?? j.JobId, job_title: j.job_title, department: j.department, is_active: j.is_active })));
     } catch { showToast('Failed to load jobs', 'error'); }
     finally { setLoadingJobs(false); }
@@ -149,7 +149,7 @@ export default function AIInterviews({ embedded = false }) {
     setLoadingSessions(true);
     try {
       const res = await apiGet(`/interview/sessions?jobId=${val}`);
-      const list = res.data || res || [];
+      const list = Array.isArray(res) ? res : (res.data || []);
       setSessions(list);
       if (list.some(s => isPending(s))) startPolling(val);
     } catch { showToast('Failed to load interview sessions', 'error'); }
@@ -171,7 +171,7 @@ export default function AIInterviews({ embedded = false }) {
       if (ticks > 75) { clearInterval(pollingRef.current); setPolling(false); return; } // 10 min max
       try {
         const res = await apiGet(`/interview/sessions?jobId=${jId}`);
-        const list = res.data || res || [];
+        const list = Array.isArray(res) ? res : (res.data || []);
         setSessions(list);
         if (!list.some(s => isPending(s))) { clearInterval(pollingRef.current); setPolling(false); }
       } catch { clearInterval(pollingRef.current); setPolling(false); }
@@ -189,7 +189,7 @@ export default function AIInterviews({ embedded = false }) {
       await apiPost('/interview/save-transcript', { ...base, scores, recordingPath: s.recordingPath || '', requirementsMatch: parseJSON(s.requirementsMatch) });
       showToast('Evaluation complete', 'success');
       const res = await apiGet(`/interview/sessions?jobId=${jobId}`);
-      setSessions(res.data || res || []);
+      setSessions(Array.isArray(res) ? res : (res.data || []));
     } catch { showToast('Re-evaluation failed — is Ollama running?', 'error'); }
     finally { setReEvaluating(p => ({ ...p, [s.id]: false })); }
   }
@@ -619,7 +619,7 @@ HR Department`;
                               showToast('Evaluation updated', 'success');
                               setManualEditing(p => { const n = { ...p }; delete n[s.id]; return n; });
                               const res = await apiGet(`/interview/sessions?jobId=${jobId}`);
-                              setSessions(res.data || res || []);
+                              setSessions(Array.isArray(res) ? res : (res.data || []));
                             }}
                           />
                         )}

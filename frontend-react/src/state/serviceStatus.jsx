@@ -7,7 +7,7 @@ export const SERVICES = [
     key: 'n8n',
     label: 'n8n',
     desc: 'Workflow engine — all API calls route through here',
-    offlineHint: 'Run start.sh to bring n8n online.',
+    offlineHint: 'Run: docker compose up -d (or start.sh for local dev).',
     check: async () => {
       // /healthz has no CORS headers — use a webhook endpoint instead
       await fetch('http://localhost:5678/webhook/interview/jobs', { signal: AbortSignal.timeout(3000) });
@@ -58,7 +58,7 @@ export const SERVICES = [
     key: 'db',
     label: 'DB',
     desc: 'PostgreSQL database (via Docker) — stores all hiring data',
-    offlineHint: 'Run: docker start hr-postgres',
+    offlineHint: 'Run: docker compose up -d postgres',
     check: async () => {
       const r = await fetch('http://localhost:5678/webhook/dashboard-candidates?job_id=all', {
         signal: AbortSignal.timeout(4000),
