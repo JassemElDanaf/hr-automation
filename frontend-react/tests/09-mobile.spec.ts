@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { login } from './helpers';
+import { login, selectJobGlobally } from './helpers';
 
 const SHOTS = 'tests/screenshots';
 
@@ -74,6 +74,55 @@ test.describe('Mobile (iPhone)', () => {
       const overflow = await page.evaluate(() =>
         document.documentElement.scrollWidth - document.documentElement.clientWidth);
       expect(overflow, `${p.tab} overflows horizontally by ${overflow}px`).toBeLessThanOrEqual(3);
+    }
+  });
+
+  // Interactive sub-states (not just the landing view of each tab) must also fit —
+  // these are where overflow bugs hide: the AI-generate / write-my-own question
+  // builders, expanded result cards, and the Emails action toolbar.
+  test('interactive panels + expanded cards fit (no overflow)', async ({ page }) => {
+    await selectJobGlobally(page, { id: 1, job_title: 'DevOps Engineer', department: 'Engineering' });
+    await login(page, 'admin');
+    const ov = () => page.evaluate(() =>
+      document.documentElement.scrollWidth - document.documentElement.clientWidth);
+
+    async function gotoTab(tab: string) {
+      await page.locator('.nav-hamburger').click();
+      await page.getByRole('button', { name: tab, exact: true }).click();
+      await page.waitForTimeout(700);
+    }
+
+    // Interview question builder: AI Generate + Write My Own panels
+    await gotoTab('Interview');
+    await page.getByText(/Omar Haddad/).first().waitFor({ timeout: 30_000 });
+    await page.getByText(/Omar Haddad/).first().click();
+    await page.waitForTimeout(500);
+    await page.locator('.sticky-continue, .wizard-footer button').first().click();
+    await page.waitForTimeout(800);
+    await page.getByRole('button', { name: /AI Generate/i }).first().click();
+    await page.waitForTimeout(400);
+    expect(await ov(), 'AI Generate panel overflows').toBeLessThanOrEqual(3);
+    await page.screenshot({ path: `${SHOTS}/mobile-int-ai-generate.png`, fullPage: true });
+    await page.getByRole('button', { name: /Write My Own/i }).first().click();
+    await page.waitForTimeout(400);
+    expect(await ov(), 'Write My Own panel overflows').toBeLessThanOrEqual(3);
+
+    // Emails compact toolbar (gear menu + blue +)
+    await gotoTab('Emails');
+    expect(await ov(), 'Emails toolbar overflows').toBeLessThanOrEqual(3);
+    await page.locator('button[title="Email settings"]').click().catch(() => {});
+    await page.waitForTimeout(300);
+    expect(await ov(), 'Emails gear menu overflows').toBeLessThanOrEqual(3);
+
+    // Expanded result cards on each list tab
+    for (const [tab, sel] of [['Shortlist', '[id^="sl-cand-"]'], ['Decision', '[id^="decision-cand-"]']] as const) {
+      await gotoTab(tab);
+      const card = page.locator(sel).first();
+      if (await card.count()) {
+        await card.locator('strong').first().click().catch(() => {});
+        await page.waitForTimeout(600);
+        expect(await ov(), `${tab} expanded card overflows`).toBeLessThanOrEqual(3);
+      }
     }
   });
 });

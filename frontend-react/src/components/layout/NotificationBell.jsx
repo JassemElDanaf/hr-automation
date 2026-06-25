@@ -18,6 +18,18 @@ export default function NotificationBell() {
   const [expanded, setExpanded] = useState(false);   // pill slid out of the bell?
   const [displayItem, setDisplayItem] = useState(null); // retained during slide-back
   const [preview, setPreview] = useState(null);       // transient toast beside the bell
+  // The AI-activity pill slides out beside the bell; cap its width on a phone so
+  // it can't overflow the header (a 460px pill on a 390px screen broke the layout).
+  const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' && window.matchMedia('(max-width: 768px)').matches);
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 768px)');
+    const on = () => setIsMobile(mq.matches);
+    mq.addEventListener('change', on);
+    return () => mq.removeEventListener('change', on);
+  }, []);
+  const pillMax = isMobile
+    ? Math.round(Math.min(170, (typeof window !== 'undefined' ? window.innerWidth : 390) * 0.42))
+    : 460;
   const seenTopRef = useRef(undefined);
   const ref = useRef(null);
 
@@ -140,7 +152,7 @@ export default function NotificationBell() {
         style={{ display: 'flex', alignItems: 'center', gap: 9, height: 40, overflow: 'hidden', whiteSpace: 'nowrap',
           borderRadius: 22, border: `1px solid ${expanded ? 'var(--gray-200)' : 'transparent'}`,
           background: open ? 'var(--gray-50)' : 'var(--surface)', cursor: 'pointer', fontFamily: 'inherit',
-          maxWidth: expanded ? 460 : 0, opacity: expanded ? 1 : 0,
+          maxWidth: expanded ? pillMax : 0, opacity: expanded ? 1 : 0,
           paddingLeft: expanded ? 11 : 0, paddingRight: expanded ? 14 : 0,
           marginRight: expanded ? 9 : 0, transform: expanded ? 'translateX(0)' : 'translateX(14px)',
           pointerEvents: expanded ? 'auto' : 'none',

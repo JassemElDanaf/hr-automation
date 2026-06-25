@@ -555,7 +555,7 @@ export default function LiveInterview() {
 
             {/* AI Generate — controls only; results land in the set below */}
             <div style={{ display: qMode === 'ai-generate' ? 'block' : 'none' }}>
-              <div style={{ display: 'grid', gridTemplateColumns: '160px 1fr auto auto', gap: 14, alignItems: 'end', marginBottom: 14 }}>
+              <div className="int-ai-grid" style={{ display: 'grid', gridTemplateColumns: '160px 1fr auto auto', gap: 14, alignItems: 'end', marginBottom: 14 }}>
                 <div className="form-group" style={{ marginBottom: 0 }}>
                   <label>No. of questions</label>
                   <select value={numQ} onChange={e => setNumQ(Number(e.target.value))}>
@@ -586,11 +586,11 @@ export default function LiveInterview() {
                   </button>
                 )}
               </div>
-              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <div className="int-topic-row" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                 <input value={aiTopic} onChange={e => setAiTopic(e.target.value)}
                   onKeyDown={e => { if (e.key === 'Enter') generateFromTopic(); }}
                   placeholder={'Tailor a question — type a topic, e.g. "AWS experience"'}
-                  style={{ flex: 1, padding: '9px 12px', fontSize: 13.5, border: '1px solid var(--gray-300)', borderRadius: 8, outline: 'none', background: 'var(--surface)', color: 'var(--gray-800)', fontFamily: 'inherit' }} />
+                  style={{ flex: 1, minWidth: 0, padding: '9px 12px', fontSize: 13.5, border: '1px solid var(--gray-300)', borderRadius: 8, outline: 'none', background: 'var(--surface)', color: 'var(--gray-800)', fontFamily: 'inherit' }} />
                 <button className="btn btn-secondary btn-sm" onClick={generateFromTopic} disabled={!aiTopic.trim()} style={{ whiteSpace: 'nowrap' }}>✨ Generate from topic</button>
               </div>
               <div style={{ marginTop: 10, fontSize: 12, color: 'var(--gray-400)' }}>
@@ -600,7 +600,7 @@ export default function LiveInterview() {
 
             {/* Write My Own — type-and-add box; questions append to the set below */}
             <div style={{ display: qMode === 'custom' ? 'block' : 'none' }}>
-              <div style={{ display: 'flex', gap: 8, alignItems: 'stretch' }}>
+              <div className="int-custom-row" style={{ display: 'flex', gap: 8, alignItems: 'stretch' }}>
                 <input
                   value={customDraft}
                   onChange={e => setCustomDraft(e.target.value)}

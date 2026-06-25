@@ -14,6 +14,8 @@ import { formatDate, emailTypeLabel as baseEmailTypeLabel } from '../utils/helpe
 // Emails tab uses a shorter label for the recommendation/handoff type.
 const emailTypeLabel = (t) => t === 'recommendation' ? 'Handed to HM' : baseEmailTypeLabel(t);
 
+const emailMenuItem = { display: 'flex', alignItems: 'center', gap: 10, width: '100%', textAlign: 'left', padding: '10px 14px', fontSize: 13.5, fontWeight: 500, color: 'var(--gray-700)', border: 'none', background: 'none', cursor: 'pointer', fontFamily: 'inherit' };
+
 export default function Emails() {
   const navigate = useNavigate();
   const { selectedJob, setSelectedJob } = useSelectedJob();
@@ -27,6 +29,16 @@ export default function Emails() {
   const [revalidating, setRevalidating] = useState(false); // any background fetch → spins the ↺ icon
   const [showSmtpHelp, setShowSmtpHelp] = useState(false);
   const [showTest, setShowTest] = useState(false);
+  const [showActions, setShowActions] = useState(false); // gear menu (Setup Guide / Test email)
+  const actionsRef = useRef(null);
+  useEffect(() => {
+    if (!showActions) return;
+    const onDoc = (e) => { if (actionsRef.current && !actionsRef.current.contains(e.target)) setShowActions(false); };
+    const onKey = (e) => { if (e.key === 'Escape') setShowActions(false); };
+    document.addEventListener('mousedown', onDoc);
+    document.addEventListener('keydown', onKey);
+    return () => { document.removeEventListener('mousedown', onDoc); document.removeEventListener('keydown', onKey); };
+  }, [showActions]);
   const [testTo, setTestTo] = useState('');
   const [testSending, setTestSending] = useState(false);
   const [expandedRow, setExpandedRow] = useState(null); // email id of expanded row
@@ -255,11 +267,33 @@ export default function Emails() {
             </button>
           ))}
         </div>
-        {/* Actions on the right of the job row */}
+        {/* Compact actions on the right of the job row: a ⚙ menu tucks away the
+            occasional Setup Guide / Test Email, a blue + composes a new email. */}
         <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginLeft: 'auto' }}>
-          <button className="btn btn-secondary btn-sm" onClick={() => setShowSmtpHelp(true)}>Setup Guide</button>
-          <button className="btn btn-secondary btn-sm" onClick={() => setShowTest(true)}>Send Test Email</button>
-          <button className="btn btn-primary btn-sm" onClick={openCompose}>✉ New Email</button>
+          <div ref={actionsRef} style={{ position: 'relative' }}>
+            <button
+              onClick={() => setShowActions(o => !o)}
+              title="Email settings"
+              style={{ width: 32, height: 32, borderRadius: '50%', flexShrink: 0, border: '1px solid var(--gray-200)', background: showActions ? 'var(--gray-50)' : 'var(--surface)', cursor: 'pointer', fontSize: 15, color: 'var(--gray-500)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'inherit' }}
+            >⚙</button>
+            {showActions && (
+              <div style={{ position: 'absolute', right: 0, top: 'calc(100% + 6px)', zIndex: 200, minWidth: 190, background: 'var(--surface)', border: '1px solid var(--gray-200)', borderRadius: 10, boxShadow: '0 10px 30px rgba(0,0,0,0.16)', overflow: 'hidden' }}>
+                <button style={emailMenuItem} onClick={() => { setShowActions(false); setShowSmtpHelp(true); }}
+                  onMouseEnter={e => e.currentTarget.style.background = 'var(--gray-50)'} onMouseLeave={e => e.currentTarget.style.background = 'none'}>
+                  <span style={{ width: 18, textAlign: 'center' }}>📘</span> Setup Guide
+                </button>
+                <button style={emailMenuItem} onClick={() => { setShowActions(false); setShowTest(true); }}
+                  onMouseEnter={e => e.currentTarget.style.background = 'var(--gray-50)'} onMouseLeave={e => e.currentTarget.style.background = 'none'}>
+                  <span style={{ width: 18, textAlign: 'center' }}>✉</span> Send Test Email
+                </button>
+              </div>
+            )}
+          </div>
+          <button
+            onClick={openCompose}
+            title="New email"
+            style={{ width: 32, height: 32, borderRadius: '50%', flexShrink: 0, border: 'none', background: '#2563eb', color: '#fff', fontSize: 22, fontWeight: 500, lineHeight: 1, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'inherit' }}
+          >+</button>
           <button
             onClick={loadEmails}
             disabled={revalidating}

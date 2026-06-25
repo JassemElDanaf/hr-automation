@@ -1306,6 +1306,18 @@ textarea { resize: vertical; min-height: 120px; }
   .qbank-cats { flex-wrap: nowrap !important; overflow-x: auto; -webkit-overflow-scrolling: touch; width: 100%; padding-bottom: 4px; }
   .qbank-cats > button { flex-shrink: 0; white-space: nowrap; }
 
+  /* Interview question builder: the AI-Generate controls + Write-My-Own row use
+     fixed widths that overflow a phone. Stack/wrap them so nothing spills out. */
+  .int-ai-grid { grid-template-columns: 1fr !important; }
+  .int-ai-grid .form-group > div { flex-wrap: wrap; }   /* "Include types" checkboxes wrap */
+  .int-custom-row { flex-wrap: wrap; }
+  .int-custom-row > input { flex: 1 1 100% !important; }
+  .int-custom-row > select { width: auto !important; flex: 1 1 auto; min-width: 0; }
+  /* "Generate from topic": let the input shrink + the button drop below it. */
+  .int-topic-row { flex-wrap: wrap; }
+  .int-topic-row > input { flex: 1 1 100% !important; min-width: 0 !important; }
+  .int-topic-row > button { flex: 0 0 auto; }
+
   /* Bank question rows: stack the category label ABOVE the question text (instead
      of a narrow 110px column on the right) so the question gets the full width. */
   .qbank-row { grid-template-columns: 40px 1fr !important; grid-template-areas: "chk cat" "chk q" !important; align-items: start; }
