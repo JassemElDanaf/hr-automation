@@ -148,6 +148,9 @@ services:
     restart: unless-stopped
     ports:
       - "3001:80"
+    # Lets nginx proxy /ollama/ → the host Ollama (GPU) for the in-app health check.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       - n8n
       - sidecars

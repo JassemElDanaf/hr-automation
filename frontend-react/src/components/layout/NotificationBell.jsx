@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useNotifications } from '../../state/notifications';
 import { useEvalStatus } from '../../state/evalStatus';
-import { useServiceStatuses, SERVICES } from '../../state/serviceStatus';
+import { useServiceStatuses, SERVICES, setServiceChecksPaused } from '../../state/serviceStatus';
 
 // Header notification centre. Combines:
 //  • a live "AI is running" row driven by evalStatus (Ollama activity),
@@ -34,26 +34,18 @@ export default function NotificationBell() {
     }
   }, [items]);
 
-  // Notify when a service drops or recovers (skip the initial 'checking' baseline).
-  const prevStates = useRef({});
+  // NOTE: we deliberately do NOT fire "X went offline" / "X is back online"
+  // notifications. Local health checks time out transiently whenever the machine
+  // is under load (esp. while Ollama runs a ~90s CV evaluation), which produced
+  // bursts of false down/up alerts. The live status pills + the bell's offline
+  // count already surface real outages — no toast spam needed.
+
+  // Pause "offline" detection entirely while an AI task runs (Ollama pins the
+  // machine, so the health checks slow down — that's expected, not an outage).
   useEffect(() => {
-    SERVICES.forEach(svc => {
-      const cur = statuses[svc.key]?.state;
-      const prev = prevStates.current[svc.key];
-      if (cur && cur !== 'checking') {
-        if (prev && prev !== 'checking' && prev !== cur) {
-          if (cur === 'offline') {
-            addNotification({ type: 'service', dedupeKey: `svc-down-${svc.key}-${Date.now()}`, icon: '⚠️',
-              title: `${svc.label} went offline`, body: svc.offlineHint, nav: null });
-          } else if (cur === 'online') {
-            addNotification({ type: 'service', dedupeKey: `svc-up-${svc.key}-${Date.now()}`, icon: '✅',
-              title: `${svc.label} is back online`, body: 'Service recovered', nav: null });
-          }
-        }
-        prevStates.current[svc.key] = cur;
-      }
-    });
-  }, [statuses, addNotification]);
+    const busy = (evalState && evalState.phase === 'running') || (aiTask && aiTask.phase === 'running');
+    setServiceChecksPaused(busy);
+  }, [evalState, aiTask]);
 
   // Log AI tasks into the notification history when they finish, so there's a
   // record after the live row disappears. Keyed so each run logs once.
@@ -178,7 +170,7 @@ export default function NotificationBell() {
       </button>
 
       {open && (
-        <div style={{ position: 'absolute', right: 0, top: 'calc(100% + 6px)', zIndex: 320, width: 320,
+        <div className="notif-panel" style={{ position: 'absolute', right: 0, top: 'calc(100% + 6px)', zIndex: 320, width: 320,
           background: 'var(--surface)', border: '1px solid var(--gray-200)', borderRadius: 12,
           boxShadow: '0 10px 34px rgba(0,0,0,0.16)', overflow: 'hidden' }}>
           <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--gray-100)', display: 'flex', alignItems: 'center' }}>

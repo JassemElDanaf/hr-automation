@@ -344,17 +344,19 @@ HR Department`;
               AI evaluation in progress — refreshing automatically…
             </div>
           )}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
-            <span style={{ fontSize: 12.5, color: 'var(--gray-500)', whiteSpace: 'nowrap' }}>Search by</span>
+          <div className="int-results-controls" style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
+            <span className="int-ctrl-label" style={{ fontSize: 12.5, color: 'var(--gray-500)', whiteSpace: 'nowrap' }}>Search by</span>
             <input
+              className="int-search-input"
               type="text"
               placeholder="Name or email…"
               value={search}
               onChange={e => setSearch(e.target.value)}
               style={{ width: 240, padding: '9px 14px', border: '1px solid var(--gray-200)', borderRadius: 'var(--radius)', fontSize: 13, fontFamily: 'inherit', outline: 'none' }}
             />
-            <span style={{ marginLeft: 'auto', fontSize: 12.5, color: 'var(--gray-500)', whiteSpace: 'nowrap' }}>Sort by</span>
+            <span className="int-ctrl-label int-sort-label" style={{ marginLeft: 'auto', fontSize: 12.5, color: 'var(--gray-500)', whiteSpace: 'nowrap' }}>Sort by</span>
             <select
+              className="int-sort-select"
               value={sortBy}
               onChange={e => setSortBy(e.target.value)}
               style={{ width: 160, flexShrink: 0, padding: '9px 12px', border: '1px solid var(--gray-200)', borderRadius: 'var(--radius)', fontSize: 13, fontFamily: 'inherit', outline: 'none', background: 'var(--surface)', cursor: 'pointer' }}
@@ -433,9 +435,10 @@ HR Department`;
                           title="Open this candidate in the Decision tab to hire / reject / send to HM"
                           style={{ flexShrink: 0, whiteSpace: 'nowrap' }}
                         >⚖ Decide</button>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 18, flexShrink: 0 }}>
+                        <div className="int-card-scorewrap" style={{ display: 'contents' }}>
+                        <div className="int-card-scores" style={{ display: 'flex', alignItems: 'center', gap: 18, flexShrink: 0 }}>
                           {[
-                            { lbl: 'Communication', score: s.scoreComm },
+                            { lbl: 'Comm', score: s.scoreComm },
                             { lbl: 'Technical', score: s.scoreTech },
                             { lbl: 'Confidence', score: s.scoreConf },
                           ].map(({ lbl, score }) => {
@@ -452,7 +455,8 @@ HR Department`;
                             <div style={{ fontSize: 10, fontWeight: 700, color: '#2563eb', textTransform: 'uppercase', letterSpacing: '0.05em', marginTop: 3 }}>Overall</div>
                           </div>
                         </div>
-                        <span style={{ color: 'var(--gray-400)', fontSize: 13, flexShrink: 0, transition: 'transform 0.25s ease', transform: isOpen ? 'rotate(180deg)' : 'none' }}>▾</span>
+                        <span className="int-card-caret" style={{ color: 'var(--gray-400)', fontSize: 13, flexShrink: 0, transition: 'transform 0.25s ease', transform: isOpen ? 'rotate(180deg)' : 'none' }}>▾</span>
+                        </div>
                       </>
                     )}
                   </div>
@@ -685,7 +689,7 @@ function ManualEvalForm({ data, onChange, onCancel, onSave }) {
   return (
     <div style={{ background: 'var(--surface)', border: '1.5px solid #2563eb', borderRadius: 8, padding: '16px 20px', marginBottom: 16 }}>
       <div style={{ fontSize: 12, fontWeight: 700, color: '#2563eb', marginBottom: 12, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Manual Evaluation</div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 12, marginBottom: 14 }}>
+      <div className="int-score-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 12, marginBottom: 14 }}>
         {field('Communication', 'comm', '#2563eb')}
         {field('Technical', 'tech', '#16a34a')}
         {field('Confidence', 'conf', '#d97706')}

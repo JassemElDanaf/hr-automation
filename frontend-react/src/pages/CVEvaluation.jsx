@@ -8,6 +8,8 @@ import ScoreBadge from '../components/common/ScoreBadge';
 import Loading from '../components/common/Loading';
 import EmptyState from '../components/common/EmptyState';
 import EvalDetailModal from '../components/modals/EvalDetailModal';
+import ScoreStrip from '../components/common/ScoreStrip';
+import StickyContinue from '../components/common/StickyContinue';
 import { formatDate, nameFromFilename, extractNameFromCV, extractEmail, scoreColor, shortDept } from '../utils/helpers';
 import { extractTextFromFile, base64ToBlobUrl } from '../utils/pdf';
 
@@ -76,6 +78,15 @@ export default function CVEvaluation() {
   const [criteriaItems, setCriteriaItems] = useState([]); // [{id, text, required}]
   const [criteriaNameError, setCriteriaNameError] = useState(false);
   const criteriaNameRef = useRef(null);
+  // Anchor for the floating Continue — when the real inline Continue scrolls into
+  // view, the floating one hides (only one step is mounted at a time, so one ref).
+  const continueAnchorRef = useRef(null);
+  // "Update criteria" nice-to-have: track the currently-loaded set + whether the
+  // user has edited weights / draft / items since it was loaded.
+  const [appliedSet, setAppliedSet] = useState(null); // { id, name } of loaded set
+  const [criteriaDirty, setCriteriaDirty] = useState(false);
+  const [updatingCriteria, setUpdatingCriteria] = useState(false);
+  const autoAppliedJobRef = useRef(null); // only auto-load last criteria once per job
 
   // Step 3 state
   const [uploadedFiles, setUploadedFiles] = useState([]);
@@ -189,6 +200,9 @@ export default function CVEvaluation() {
     setEvalJobId(job.id);
     setSelectedJob(job);
     setJobState(null);
+    // New job → forget the previous job's loaded-criteria tracking.
+    setAppliedSet(null);
+    setCriteriaDirty(false);
     const [full, state] = await Promise.all([
       apiGet(`/job-opening?id=${job.id}`).catch(() => null),
       fetchJobState(job.id),
@@ -222,30 +236,75 @@ export default function CVEvaluation() {
         }).catch(() => showToast('Failed to save criteria set', 'error'));
       }
     }
-    if (target === 2 && !criteriaText && evalSelectedJob) {
-      setCriteriaText(evalSelectedJob.job_description || '');
-      loadCriteriaSets();
+    if (target === 2 && evalSelectedJob) {
+      // Show the last criteria set for this job (if any); otherwise fall back to
+      // pre-filling the job description into an empty draft.
+      loadCriteriaSets({ autoApplyLast: true }).then(sets => {
+        if ((!sets || !sets.length) && !criteriaText) setCriteriaText(evalSelectedJob.job_description || '');
+      });
     }
     if (target === 4) loadEvalResults();
     setStep(target);
   }
 
-  async function loadCriteriaSets() {
-    if (!evalJobId) return;
+  async function loadCriteriaSets({ autoApplyLast = false } = {}) {
+    if (!evalJobId) return [];
     try {
       const res = await apiGet(`/criteria-sets?job_id=${evalJobId}`);
-      setCriteriaSets(res.data || []);
-    } catch {}
+      const sets = res.data || [];
+      setCriteriaSets(sets);
+      // Show the criteria last set for this job when entering the tab — apply the
+      // most recently saved set once (don't clobber an in-progress edit).
+      if (autoApplyLast && sets.length && autoAppliedJobRef.current !== evalJobId
+          && !criteriaText.trim() && !selectedSetId) {
+        autoAppliedJobRef.current = evalJobId;
+        const latest = [...sets].sort((a, b) => (b.id || 0) - (a.id || 0))[0];
+        if (latest) applyCriteriaSetObj(latest);
+      }
+      return sets;
+    } catch { return []; }
   }
 
-  function applyCriteriaSet(setId) {
-    const cs = criteriaSets.find(s => s.id === parseInt(setId));
+  function applyCriteriaSetObj(cs) {
     if (!cs) return;
     setCriteriaText(cs.criteria_text || '');
     setWeights({ skills: cs.skills_weight || 40, experience: cs.experience_weight || 35, education: cs.education_weight || 25 });
     const items = Array.isArray(cs.criteria_items) ? cs.criteria_items : [];
     setCriteriaItems(items.map((it, idx) => ({ id: Date.now() + idx, text: it.text || '', required: !!it.required, importance: clampImportance(it.importance) })));
-    setSelectedSetId(setId);
+    setSelectedSetId(String(cs.id));
+    setAppliedSet({ id: cs.id, name: cs.name });
+    setCriteriaDirty(false);
+  }
+
+  function applyCriteriaSet(setId) {
+    const cs = criteriaSets.find(s => s.id === parseInt(setId));
+    if (cs) applyCriteriaSetObj(cs);
+  }
+
+  // Mark the criteria as edited so the "Update criteria" button surfaces.
+  function markCriteriaDirty() { if (appliedSet) setCriteriaDirty(true); }
+
+  // Persist the current criteria back onto the loaded set's name (re-save), so the
+  // edits are remembered and shown next time the tab is opened.
+  async function updateCriteria() {
+    if (!appliedSet) return;
+    const total = weights.skills + weights.experience + weights.education;
+    if (total !== 100) { showToast(`Weights must sum to 100% (currently ${total}%)`, 'error'); return; }
+    setUpdatingCriteria(true);
+    try {
+      await apiPost('/criteria-sets', {
+        name: appliedSet.name, job_opening_id: evalJobId, criteria_text: criteriaText,
+        skills_weight: weights.skills, experience_weight: weights.experience, education_weight: weights.education,
+        criteria_items: criteriaItems.filter(it => it.text.trim()).map(({ text, required, importance }) => ({ text: text.trim(), required, importance: clampImportance(importance) })),
+      });
+      const sets = await loadCriteriaSets();
+      // Re-select the freshly-saved row (newest with this name).
+      const saved = [...sets].filter(s => s.name === appliedSet.name).sort((a, b) => (b.id || 0) - (a.id || 0))[0];
+      if (saved) { setSelectedSetId(String(saved.id)); setAppliedSet({ id: saved.id, name: saved.name }); }
+      setCriteriaDirty(false);
+      showToast(`Criteria "${appliedSet.name}" updated`, 'success');
+    } catch { showToast('Failed to update criteria', 'error'); }
+    finally { setUpdatingCriteria(false); }
   }
 
   function clampImportance(v) {
@@ -256,12 +315,15 @@ export default function CVEvaluation() {
 
   function addCriteriaItem() {
     setCriteriaItems(prev => [...prev, { id: Date.now() + Math.random(), text: '', required: false, importance: 5 }]);
+    markCriteriaDirty();
   }
   function updateCriteriaItem(id, patch) {
     setCriteriaItems(prev => prev.map(it => it.id === id ? { ...it, ...patch } : it));
+    markCriteriaDirty();
   }
   function removeCriteriaItem(id) {
     setCriteriaItems(prev => prev.filter(it => it.id !== id));
+    markCriteriaDirty();
   }
 
   async function generateAICriteria() {
@@ -657,7 +719,7 @@ export default function CVEvaluation() {
           )}
           <div className="wizard-footer">
             <div className="step-info">Step 1 of 4</div>
-            <button className="btn btn-primary" disabled={!evalSelectedJob} onClick={() => {
+            <button ref={continueAnchorRef} className="btn btn-primary" disabled={!evalSelectedJob} onClick={() => {
               if (jobState?.has_evaluations || jobState?.has_cvs) goStep(4);
               else if (jobState?.has_criteria) goStep(3);
               else goStep(2);
@@ -665,6 +727,16 @@ export default function CVEvaluation() {
               {jobState?.has_evaluations ? 'View Results \u2192' : jobState?.has_cvs ? 'Go to Results \u2192' : jobState?.has_criteria ? 'Upload CVs \u2192' : 'Set Criteria \u2192'}
             </button>
           </div>
+          <StickyContinue
+            show={!!evalSelectedJob}
+            anchorRef={continueAnchorRef}
+            label={jobState?.has_evaluations ? 'View Results' : jobState?.has_cvs ? 'Go to Results' : jobState?.has_criteria ? 'Upload CVs' : 'Set Criteria'}
+            onClick={() => {
+              if (jobState?.has_evaluations || jobState?.has_cvs) goStep(4);
+              else if (jobState?.has_criteria) goStep(3);
+              else goStep(2);
+            }}
+          />
         </div>
       )}
 
@@ -687,9 +759,13 @@ export default function CVEvaluation() {
                   </div>
                 ) : (
                   <div style={{ display: 'flex', gap: '8px' }}>
-                    <select value={selectedSetId} onChange={e => { if (e.target.value) applyCriteriaSet(e.target.value); else setSelectedSetId(''); }} style={{ flex: 1 }}>
+                    <select value={selectedSetId} onChange={e => { if (e.target.value) applyCriteriaSet(e.target.value); else { setSelectedSetId(''); setAppliedSet(null); } }} style={{ flex: 1 }}>
                       <option value="">&mdash; Create new criteria (from scratch) &mdash;</option>
-                      {criteriaSets.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                      {/* De-dupe by name (keep the newest id) so re-saving via "Update" doesn't pile up entries. */}
+                      {Object.values(criteriaSets.reduce((acc, s) => {
+                        if (!acc[s.name] || (s.id || 0) > (acc[s.name].id || 0)) acc[s.name] = s;
+                        return acc;
+                      }, {})).map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                     </select>
                     <button className="btn btn-secondary btn-sm" onClick={loadCriteriaSets}>&#8635;</button>
                   </div>
@@ -705,7 +781,7 @@ export default function CVEvaluation() {
                 {[{ key: 'skills', label: 'Skills' }, { key: 'experience', label: 'Experience' }, { key: 'education', label: 'Education' }].map(w => (
                   <div key={w.key} className="weight-row compact">
                     <label>{w.label}</label>
-                    <input type="range" min="0" max="100" value={weights[w.key]} onChange={e => setWeights(prev => ({ ...prev, [w.key]: parseInt(e.target.value) }))} />
+                    <input type="range" min="0" max="100" value={weights[w.key]} onChange={e => { setWeights(prev => ({ ...prev, [w.key]: parseInt(e.target.value) })); markCriteriaDirty(); }} />
                     <span className="weight-val">{weights[w.key]}%</span>
                   </div>
                 ))}
@@ -778,7 +854,7 @@ export default function CVEvaluation() {
               <h4>Criteria Draft</h4>
               <span className="criteria-section-hint">Edit criteria before continuing. All sources populate this editor.</span>
             </div>
-            <textarea className="criteria-draft" value={criteriaText} onChange={e => { setCriteriaText(e.target.value); if (selectedSetId) setSelectedSetId(''); }} placeholder="Your criteria will appear here. You can always edit before continuing." />
+            <textarea className="criteria-draft" value={criteriaText} onChange={e => { setCriteriaText(e.target.value); markCriteriaDirty(); if (selectedSetId) setSelectedSetId(''); }} placeholder="Your criteria will appear here. You can always edit before continuing." />
 
             {/* Structured criteria items — required/optional + per-item weight */}
             <div style={{ marginTop: '16px', paddingTop: '16px', borderTop: '1px solid var(--gray-200)' }}>
@@ -850,11 +926,20 @@ export default function CVEvaluation() {
           </div>
           <div className="wizard-footer">
             <button className="btn btn-secondary" onClick={() => goStep(1)}>&larr; Back</button>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+              {/* Nice-to-have: when the loaded criteria has been edited (weights /
+                  draft / items), offer to persist it before moving on. */}
+              {appliedSet && criteriaDirty && (
+                <button className="btn btn-success" onClick={updateCriteria} disabled={updatingCriteria}
+                  title={`Save your changes back to "${appliedSet.name}"`}>
+                  {updatingCriteria ? 'Updating…' : `💾 Update "${appliedSet.name}"`}
+                </button>
+              )}
               <span className="step-info">Step 2 of 4</span>
-              <button className="btn btn-primary" onClick={() => goStep(3)}>Continue &rarr;</button>
+              <button ref={continueAnchorRef} className="btn btn-primary" onClick={() => goStep(3)}>Continue &rarr;</button>
             </div>
           </div>
+          <StickyContinue show anchorRef={continueAnchorRef} label="Continue to Upload CVs" onClick={() => goStep(3)} />
         </div>
       )}
 
@@ -974,8 +1059,10 @@ export default function CVEvaluation() {
                   const dup = isDuplicate(c.id);
                   const isOpen = expandedRow === c.id;
                   const overall = e?.overall_score != null ? parseFloat(e.overall_score) : null;
+                  // Match the other tabs: white card for shortlisted/interviewed;
+                  // only a hired card is green and a rejected card is red.
                   const tint = status === 'rejected' ? 'var(--tint-danger)'
-                    : (status === 'shortlisted' || status === 'interviewed' || status === 'hired') ? 'var(--tint-success)'
+                    : status === 'hired' ? 'var(--tint-success)'
                     : 'var(--surface)';
                   return (
                     <div key={c.id} style={{
@@ -996,7 +1083,7 @@ export default function CVEvaluation() {
                           <div style={{ fontSize: 12, color: 'var(--gray-400)', marginTop: 2 }}>{c.email || '—'} {'·'} {formatDate(c.submitted_at)}</div>
                         </div>
 
-                        <div onClick={ev => ev.stopPropagation()} style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 6, flexShrink: 0, flexWrap: 'wrap' }}>
+                        <div className="sl-action-row" onClick={ev => ev.stopPropagation()} style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 6, flexShrink: 0, flexWrap: 'wrap' }}>
                           {archived ? (
                             <button className="btn btn-sm btn-ghost" onClick={() => restoreCandidate(c.id)}>Restore</button>
                           ) : status === 'rejected' ? (
@@ -1031,13 +1118,17 @@ export default function CVEvaluation() {
                           )}
                         </div>
 
-                        <div style={{ textAlign: 'center', minWidth: 50, borderLeft: '1px solid var(--gray-200)', paddingLeft: 14 }}>
-                          {overall != null
-                            ? <div style={{ fontSize: 22, fontWeight: 800, color: scoreColor(overall), lineHeight: 1 }}>{overall.toFixed(1)}</div>
-                            : <div style={{ fontSize: 11, color: 'var(--gray-400)', fontStyle: 'italic', lineHeight: 1.15 }}>Not<br />evaluated</div>}
-                          <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--gray-400)', marginTop: 3 }}>Overall</div>
-                        </div>
-                        <span style={{ color: 'var(--gray-400)', fontSize: 13, flexShrink: 0, transition: 'transform 0.25s ease', transform: isOpen ? 'rotate(180deg)' : 'none' }}>{'▾'}</span>
+                        <ScoreStrip
+                          className="cv-score-cell"
+                          dims={[
+                            { label: 'Skills', value: e?.skills_score },
+                            { label: 'Experience', value: e?.experience_score },
+                            { label: 'Education', value: e?.education_score },
+                          ]}
+                          overall={{ label: 'Overall', value: e?.overall_score }}
+                          emptyText={<>Not<br />evaluated</>}
+                        />
+                        <span className="cv-score-caret" style={{ color: 'var(--gray-400)', fontSize: 13, flexShrink: 0, transition: 'transform 0.25s ease', transform: isOpen ? 'rotate(180deg)' : 'none' }}>{'▾'}</span>
                       </div>
 
                       <div style={{ display: 'grid', gridTemplateRows: isOpen ? '1fr' : '0fr', transition: 'grid-template-rows 0.28s ease' }}>

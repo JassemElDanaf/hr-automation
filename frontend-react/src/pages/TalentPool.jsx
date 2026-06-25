@@ -3,7 +3,20 @@ import { apiGet, apiPost } from '../services/api';
 import { useUI } from '../state/uiState';
 import Loading from '../components/common/Loading';
 import EmptyState from '../components/common/EmptyState';
+import PdfPreview from '../components/common/PdfPreview';
 import { formatDate } from '../utils/helpers';
+
+// Phones can't render a PDF inside an <iframe> — use the canvas preview there.
+function useIsMobile() {
+  const [m, setM] = useState(() => typeof window !== 'undefined' && window.matchMedia('(max-width: 768px)').matches);
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 768px)');
+    const on = () => setM(mq.matches);
+    mq.addEventListener('change', on);
+    return () => mq.removeEventListener('change', on);
+  }, []);
+  return m;
+}
 
 function escapeRegex(s) { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
 
@@ -55,6 +68,7 @@ function avatarColor(name) {
 
 export default function TalentPool() {
   const { showToast } = useUI();
+  const isMobile = useIsMobile();
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState('');
@@ -132,7 +146,6 @@ export default function TalentPool() {
           <span style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', fontSize: 16, color: 'var(--gray-400)', pointerEvents: 'none' }}>🔍</span>
           <input
             type="text"
-            autoFocus
             placeholder='Search a skill or keyword — e.g. power bi, excel, kubernetes…'
             value={query}
             onChange={e => setQuery(e.target.value)}
@@ -261,15 +274,22 @@ export default function TalentPool() {
                         📄 {r.candidate_name} — CV{panel.isText ? ' (extracted text — no PDF on file)' : ''}
                       </span>
                       {panel.url && (
-                        <a href={panel.url} target="_blank" rel="noreferrer" style={{ fontSize: 12, fontWeight: 600, color: '#2563eb', textDecoration: 'none' }}>
-                          Open in new tab ↗
-                        </a>
+                        <span style={{ display: 'flex', gap: 14, alignItems: 'center' }}>
+                          <a href={panel.url} target="_blank" rel="noreferrer" style={{ fontSize: 12, fontWeight: 600, color: '#2563eb', textDecoration: 'none' }}>
+                            Open ↗
+                          </a>
+                          <a href={panel.url} download={`${r.candidate_name || 'candidate'}-CV.pdf`} style={{ fontSize: 12, fontWeight: 600, color: '#2563eb', textDecoration: 'none' }}>
+                            ⤓ Download
+                          </a>
+                        </span>
                       )}
                     </div>
                     {panel.loading ? (
                       <div style={{ padding: 40, textAlign: 'center', color: 'var(--gray-400)', fontSize: 13 }}>Loading PDF…</div>
                     ) : panel.url ? (
-                      <iframe src={panel.url} style={{ width: '100%', height: 520, border: 'none', display: 'block' }} title={`CV — ${r.candidate_name}`} />
+                      isMobile
+                        ? <PdfPreview url={panel.url} />
+                        : <iframe src={panel.url} style={{ width: '100%', height: 520, border: 'none', display: 'block' }} title={`CV — ${r.candidate_name}`} />
                     ) : (
                       <div style={{ padding: '16px 20px', background: 'var(--surface)', maxHeight: 420, overflowY: 'auto', fontSize: 13, lineHeight: 1.7, whiteSpace: 'pre-wrap', color: 'var(--gray-700)' }}>
                         <Highlighted text={r.cv_text} terms={terms} />

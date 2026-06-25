@@ -107,7 +107,7 @@ export default function Dashboard() {
   if (loading) return <div className="container"><Loading /></div>;
 
   return (
-    <div className="container">
+    <div className="container dash-page">
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '16px', marginBottom: '20px', flexWrap: 'wrap' }}>
         <div>
           <h2 style={{ fontSize: '22px', fontWeight: 700 }}>Hiring Dashboard</h2>
@@ -115,22 +115,22 @@ export default function Dashboard() {
         </div>
         <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
           <label style={{ fontWeight: 600, fontSize: '13px', whiteSpace: 'nowrap', color: 'var(--gray-600)' }}>View:</label>
-          <select value={filterJobId} onChange={handleFilterChange} style={{ minWidth: '240px' }}>
+          <select className="dash-filter-select" value={filterJobId} onChange={handleFilterChange} style={{ minWidth: '240px' }}>
             <option value="">All Jobs</option>
             {allJobs.map(j => <option key={j.id} value={j.id}>{j.job_title}</option>)}
           </select>
         </div>
       </div>
 
-      <div className="stats" style={{ marginBottom: '16px' }}>
+      <div className="stats dash-stats" style={{ marginBottom: '16px' }}>
         <StatCard label="Active Jobs" value={activeJobs} />
         <StatCard label="Total Candidates" value={filteredCandidates.length} />
         <StatCard label="Avg Score" value={avgScore} />
         <StatCard label="Hired" value={hiredCount} />
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
-        <div className="table-wrap" style={{ padding: '20px' }}>
+      <div className="dash-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
+        <div className="table-wrap dash-funnel" style={{ padding: '20px' }}>
           <h3 style={{ fontSize: '14px', fontWeight: 700, marginBottom: '12px' }}>Hiring Funnel</h3>
           {funnelStages.map(s => (
             <div key={s.label} style={{ marginBottom: '10px' }}>
@@ -144,7 +144,7 @@ export default function Dashboard() {
             </div>
           ))}
         </div>
-        <div className="table-wrap" style={{ padding: '20px' }}>
+        <div className="table-wrap dash-chart" style={{ padding: '20px' }}>
           <h3 style={{ fontSize: '14px', fontWeight: 700, marginBottom: '12px' }}>Candidates by Status</h3>
           {chartTotal > 0
             ? <div style={{ position: 'relative', height: '240px' }}><Doughnut data={chartData} options={chartOptions} /></div>
@@ -153,8 +153,8 @@ export default function Dashboard() {
         </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '16px' }}>
-        <div className="table-wrap">
+      <div className="dash-grid" style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '16px' }}>
+        <div className="table-wrap dash-topjobs">
           <div className="table-header">
             <h2 style={{ fontSize: '15px' }}>Top Jobs by Candidate Count</h2>
             <button className="btn btn-secondary btn-sm" onClick={loadDashboard}>Refresh</button>
@@ -175,7 +175,7 @@ export default function Dashboard() {
             </table>
           )}
         </div>
-        <div className="table-wrap">
+        <div className="table-wrap dash-activity">
           <div className="table-header"><h2 style={{ fontSize: '15px' }}>Recent Activity</h2></div>
           <div style={{ padding: '12px 16px' }}>
             {activity.length === 0 ? <p style={{ color: 'var(--gray-400)', padding: '20px', textAlign: 'center' }}>No activity yet.</p> : (

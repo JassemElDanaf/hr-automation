@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { useSelectedJob } from '../../state/selectedJob';
 import { useAuth } from '../../state/auth';
@@ -24,10 +25,25 @@ export default function Header() {
   const [pwOpen, setPwOpen] = useState(false);
   const ref = useRef(null);
   const menuRef = useRef(null);
+  // On a phone (≤768px) the job picker is portaled into the nav row (next to the
+  // hamburger). On desktop it renders inline in the header — desktop unchanged.
+  const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' && window.matchMedia('(max-width: 768px)').matches);
+  const [slotEl, setSlotEl] = useState(null);
 
   useEffect(() => {
     apiGet('/job-openings').then(r => setJobs(r.data || [])).catch(() => {});
   }, [jobsNonce]);
+
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 768px)');
+    const onChange = () => setIsMobile(mq.matches);
+    onChange();
+    mq.addEventListener('change', onChange);
+    return () => mq.removeEventListener('change', onChange);
+  }, []);
+
+  // Resolve the nav-row portal target once it's mounted (NavTabs renders after Header).
+  useEffect(() => { setSlotEl(document.getElementById('nav-job-slot')); }, [isMobile]);
 
   // Close the dropdown on outside click / Escape.
   useEffect(() => {
@@ -56,14 +72,8 @@ export default function Header() {
     setOpen(false);
   }
 
-  return (
-    <div className="header">
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-        <img src="/logo.jpg" alt="Diyar" style={{ height: 30, width: 'auto', borderRadius: 6, display: 'block' }} />
-        <h1><span>Diyar</span> HR</h1>
-      </div>
-
-      <div className="global-job-picker" ref={ref}>
+  const jobPicker = (
+    <div className="global-job-picker" ref={ref}>
         <button
           type="button"
           className={`global-job-badge${selectedJob ? '' : ' empty'}`}
@@ -130,7 +140,21 @@ export default function Header() {
             </div>
           );
         })()}
+    </div>
+  );
+
+  return (
+    <div className="header">
+      <div
+        onClick={() => navigate('/')}
+        title="Go to dashboard"
+        style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', userSelect: 'none', WebkitUserSelect: 'none', WebkitTapHighlightColor: 'transparent' }}
+      >
+        <img src="/logo.jpg" alt="Diyar" style={{ height: 30, width: 'auto', borderRadius: 6, display: 'block' }} />
+        <h1><span>Diyar</span> HR</h1>
       </div>
+
+      {isMobile && slotEl ? createPortal(jobPicker, slotEl) : jobPicker}
 
       {user && <div style={{ marginLeft: 'auto' }}><NotificationBell /></div>}
 
@@ -145,11 +169,11 @@ export default function Header() {
               style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '5px 10px 5px 6px', borderRadius: 22, border: '1px solid var(--gray-200)', background: menuOpen ? 'var(--gray-50)' : 'var(--surface)', cursor: 'pointer', fontFamily: 'inherit' }}
             >
               <span style={{ width: 30, height: 30, borderRadius: '50%', background: '#1e40af', color: '#fff', fontSize: 12, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{initials}</span>
-              <span style={{ textAlign: 'left', lineHeight: 1.2 }}>
+              <span className="header-acct-name" style={{ textAlign: 'left', lineHeight: 1.2 }}>
                 <span style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--gray-800)' }}>{user.full_name || user.email}</span>
                 <span style={{ display: 'block', fontSize: 10.5, fontWeight: 600, color: rcolor }}>{rlabel}</span>
               </span>
-              <span style={{ fontSize: 16, color: 'var(--gray-400)', lineHeight: 1 }}>⚙</span>
+              <span className="header-acct-cog" style={{ fontSize: 16, color: 'var(--gray-400)', lineHeight: 1 }}>⚙</span>
             </button>
 
             {menuOpen && (

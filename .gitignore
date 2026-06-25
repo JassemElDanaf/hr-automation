@@ -38,3 +38,6 @@ frontend-react/tests/results/
 frontend-react/tests/screenshots/
 frontend-react/test-results/
 frontend-react/playwright-report/
+
+# Playwright last-run marker (repo root)
+/test-results/
