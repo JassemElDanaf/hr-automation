@@ -85,7 +85,13 @@ html {
      the cursor doesn't jump) when a tall page that scrolls is followed by a
      short one that doesn't. Applies app-wide — there's no sidebar to anchor to. */
   scrollbar-gutter: stable;
+  /* Kill the grey/blue flash mobile browsers paint on every tap (the hamburger,
+     pills, cards, etc.) before the action fires — feels janky on a phone. */
+  -webkit-tap-highlight-color: transparent;
 }
+/* Belt-and-suspenders: some elements reset their own tap highlight, so clear it
+   on everything interactive too. */
+* { -webkit-tap-highlight-color: transparent; }
 
 body {
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
@@ -156,6 +162,21 @@ body {
   animation: gjmIn 0.12s ease both;
 }
 @keyframes gjmIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }
+
+/* Smooth menu reveal (inspired by the job-picker) — applied to the hamburger
+   drop-down, the notification panel and the account/settings menu so they all
+   expand with the same polished fade + slide + subtle scale instead of popping
+   in. transform-origin:top makes them grow downward from their anchor. */
+@keyframes menuReveal {
+  from { opacity: 0; transform: translateY(-8px) scale(0.97); }
+  to   { opacity: 1; transform: translateY(0)    scale(1); }
+}
+.menu-reveal,
+.notif-panel,
+.nav-tab-list.open {
+  animation: menuReveal 0.2s cubic-bezier(0.2, 0.85, 0.3, 1) both;
+  transform-origin: top center;
+}
 .global-job-menu-head { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--gray-400); padding: 8px 10px 6px; }
 .global-job-menu-subhead { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--gray-400); padding: 8px 10px 4px; margin-top: 4px; border-top: 1px solid var(--gray-100); }
 .global-job-menu-empty { padding: 12px 10px; font-size: 13px; color: var(--gray-400); }
@@ -364,6 +385,16 @@ tr.row-duplicate:hover td { background: #fef3c7; }
 }
 /* The "Show:" dropdown replaces the pills on mobile only (see @media block). */
 .results-show-select { display: none; }
+/* Sort dropdown — styled via CSS (not inline) so the mobile @media block can fully
+   control it (custom arrow, width). Desktop look matches the old inline style. */
+.results-sort-select {
+  width: 150px; flex-shrink: 0; padding: 7px 12px; font-size: 13px;
+  border: 1px solid var(--gray-200); border-radius: var(--radius);
+  font-family: inherit; outline: none; background-color: var(--surface); cursor: pointer;
+}
+/* Run-Evaluation button shows icon + text on desktop; collapses to icon-only on
+   mobile (see @media) so it fits on the Show/Sort line. */
+.results-runeval .re-icon { margin-right: 5px; }
 .results-filter-btn {
   display: inline-flex; align-items: center; gap: 6px;
   padding: 6px 16px; border-radius: 999px; border: 1px solid var(--gray-200);
@@ -1278,24 +1309,38 @@ textarea { resize: vertical; min-height: 120px; }
   /* Filter bars (Decision / CV-eval / Shortlist): on a phone the row of pills is
      replaced by a single "Show ▾" dropdown on the left, with "Sort by ▾" on the
      right — one tidy line instead of sliding pills. */
-  .results-filter-bar { flex-wrap: wrap; padding: 8px; gap: 5px; row-gap: 8px; }
+  /* NEVER wrap — Show (left) + Sort by (right) stay on ONE line on every phone
+     width (incl. small S24/360px); the two dropdowns shrink to fit. */
+  .results-filter-bar { flex-wrap: nowrap; padding: 8px; gap: 5px; align-items: center; }
   .results-filter-btn { display: none !important; }       /* pills → dropdown on mobile */
   .results-filter-label { margin-right: 0; flex-shrink: 0; white-space: nowrap; font-size: 10.5px; }
-  /* Strip the bloated native select chrome (esp. on mobile) so the box sizes to
-     its content + a small custom arrow — lets "Show ▾" and "Sort by ▾" share one line. */
+  /* Strip the bloated native select chrome so both selects size predictably and
+     BOTH get the same custom arrow (the old inline `background` shorthand on the
+     sort select used to wipe it — now styled purely via CSS). */
   .results-show-select, .results-sort-select {
     -webkit-appearance: none; appearance: none;
     font-size: 12px; padding: 6px 22px 6px 9px;
     border: 1px solid var(--gray-200); border-radius: var(--radius);
-    font-family: inherit; background: var(--surface); color: var(--gray-800); cursor: pointer;
+    font-family: inherit; background-color: var(--surface); color: var(--gray-800); cursor: pointer;
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath fill='%23888' d='M0 0l5 6 5-6z'/%3E%3C/svg%3E");
     background-repeat: no-repeat; background-position: right 8px center;
   }
-  .results-show-select { display: inline-block; width: 128px; max-width: 46vw; }
-  .results-sort { margin-left: auto; gap: 4px !important; }
-  .results-sort-select { width: 106px !important; min-width: 0; }
-  .results-sort-label { font-size: 11px; }
+  .results-show-select { display: inline-block; flex: 1 1 auto; min-width: 56px; max-width: 150px; width: auto; }
+  .results-sort { margin-left: auto; gap: 4px !important; flex: 0 1 auto; min-width: 0; }
+  .results-sort-label { font-size: 11px; flex-shrink: 0; }
+  .results-sort-select { flex: 0 1 auto; width: 108px !important; min-width: 56px; }
   .results-refresh { display: none !important; }   /* drop manual refresh on mobile to keep one line */
+  /* Run-Evaluation collapses to just its icon (✨ / ✓ / ⏳) so Show + Sort stay on
+     one line; the blue ✓ means "all evaluated". */
+  .results-runeval { padding: 6px 9px !important; flex-shrink: 0; }
+  .results-runeval .re-text { display: none; }
+  .results-runeval .re-icon { margin-right: 0; font-size: 13px; }
+
+  /* Emails: All-jobs + status dropdown + ⚙/+/↺ all on ONE line; the desktop pill
+     tabs (All/Sent/Failed/Inbound) are replaced by the dropdown on a phone. */
+  .emails-toolbar-top { flex-wrap: nowrap !important; gap: 6px !important; }
+  .emails-toolbar-top .results-show-select { flex: 0 1 auto; width: auto; min-width: 72px; max-width: 116px; }
+  .emails-status-tabs { display: none !important; }
 
   /* Card action buttons a touch smaller so groups (Send to HM / Hire / Reject) fit
      narrow cards without clipping. */
@@ -1316,6 +1361,12 @@ textarea { resize: vertical; min-height: 120px; }
   /* Notification panel: pin to the viewport so it's never clipped at the edge
      (the inline right:0 / top set it off-screen on a phone — override both). */
   .notif-panel { position: fixed !important; left: 10px !important; right: 10px !important; top: 56px !important; width: auto !important; }
+  /* The sliding AI-activity pill overflows the header on a phone — hide it; the
+     spinner ring on the bell + the panel's live row convey the activity instead. */
+  .notif-pill { display: none !important; }
+  /* Pin the transient preview toast to the viewport top instead of floating it to
+     the left of the bell (where it ran off-screen on a phone). */
+  .notif-preview { position: fixed !important; left: 10px !important; right: 10px !important; top: 56px !important; width: auto !important; transform: none !important; }
 
   /* Question Bank picker (Interview Setup): search goes full-width; the category
      pills (All · Behavioural · Technical · Salary · …) slide horizontally like the

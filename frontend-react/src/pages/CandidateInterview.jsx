@@ -17,7 +17,7 @@ function decodeToken(token) {
 const MAX_QUESTIONS = 5;
 const CAT_BG    = { hr: '#eff6ff', technical: '#f0fdf4', salary: '#fffbeb', iqama: '#f5f3ff', notice: '#fef2f2', location: '#ecfeff' };
 const CAT_COLOR = { hr: '#2563eb', technical: '#16a34a', salary: '#d97706', iqama: '#7c3aed', notice: '#dc2626', location: '#0891b2' };
-const CAT_LABEL = { hr: 'Behavioural', technical: 'Technical', salary: 'Salary', iqama: 'Iqama / Visa', notice: 'Notice Period', location: 'Location' };
+const CAT_LABEL = { hr: 'Behavioural', technical: 'Technical', salary: 'Salary', iqama: 'Visa', notice: 'Notice Period', location: 'Location' };
 
 const CI_STYLES = `
   @keyframes ci-dot {

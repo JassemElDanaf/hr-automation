@@ -459,8 +459,7 @@ export default function Shortlist() {
           })()}
           <div className="results-sort" style={{ marginLeft: 'auto', display: 'flex', gap: 8, alignItems: 'center' }}>
             <span className="results-sort-label" style={{ fontSize: 12.5, color: 'var(--gray-500)', whiteSpace: 'nowrap' }}>Sort by</span>
-            <select className="results-sort-select" value={slSort} onChange={e => setSlSort(e.target.value)}
-              style={{ width: 150, flexShrink: 0, padding: '7px 12px', border: '1px solid var(--gray-200)', borderRadius: 'var(--radius)', fontSize: 13, fontFamily: 'inherit', outline: 'none', background: 'var(--surface)', cursor: 'pointer' }}>
+            <select className="results-sort-select" value={slSort} onChange={e => setSlSort(e.target.value)}>
               <option value="recent">Most recent</option>
               <option value="score">Highest score</option>
               <option value="name">Name (A–Z)</option>

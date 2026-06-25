@@ -326,10 +326,13 @@ HR Department`;
     { key: 'hired', label: 'Hired' },
     { key: 'rejected', label: 'Rejected' },
   ];
-  // A row matches the active filter. 'sent-hm' is special: it keys off whether a
-  // recommendation email was sent to the hiring manager, not the pipeline status.
+  // "Sent to HM" is a derived, ACTIVE-processing stage: a recommendation email was
+  // sent AND the candidate hasn't reached a terminal verdict. Once hired/rejected
+  // they leave this stage and live only in Hired/Rejected (no double-listing).
+  const isSentToHM = r => sentToHM.has(r.candidate_id) && r.status !== 'rejected' && r.status !== 'hired';
+  // A row matches the active filter. 'sent-hm' is special (see above).
   const matchesFilter = r => statusFilter === 'all'
-    || (statusFilter === 'sent-hm' ? sentToHM.has(r.candidate_id) : r.status === statusFilter);
+    || (statusFilter === 'sent-hm' ? isSentToHM(r) : r.status === statusFilter);
 
   return (
     <div className="container tab-fade-in">
@@ -372,7 +375,7 @@ HR Department`;
               const decFilters = STATUS_FILTERS.map(f => ({
                 key: f.key, label: f.label,
                 count: f.key === 'all' ? ranked.length
-                  : f.key === 'sent-hm' ? ranked.filter(r => sentToHM.has(r.candidate_id)).length
+                  : f.key === 'sent-hm' ? ranked.filter(isSentToHM).length
                   : ranked.filter(r => r.status === f.key).length,
               }));
               return (<>
@@ -391,7 +394,6 @@ HR Department`;
                 className="results-sort-select"
                 value={sortBy}
                 onChange={e => setSortBy(e.target.value)}
-                style={{ width: 150, flexShrink: 0, padding: '7px 12px', border: '1px solid var(--gray-200)', borderRadius: 'var(--radius)', fontSize: 13, fontFamily: 'inherit', outline: 'none', background: 'var(--surface)', cursor: 'pointer' }}
               >
                 <option value="recent">Most recent</option>
                 <option value="combined">Combined score</option>

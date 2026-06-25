@@ -177,7 +177,7 @@ export default function Header() {
             </button>
 
             {menuOpen && (
-              <div style={{ position: 'absolute', right: 0, top: 'calc(100% + 6px)', zIndex: 300, width: 244, background: 'var(--surface)', border: '1px solid var(--gray-200)', borderRadius: 12, boxShadow: '0 10px 34px rgba(0,0,0,0.14)', overflow: 'hidden' }}>
+              <div className="menu-reveal" style={{ position: 'absolute', right: 0, top: 'calc(100% + 6px)', zIndex: 300, width: 244, background: 'var(--surface)', border: '1px solid var(--gray-200)', borderRadius: 12, boxShadow: '0 10px 34px rgba(0,0,0,0.14)', overflow: 'hidden' }}>
                 {/* Account header */}
                 <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--gray-100)', display: 'flex', gap: 11, alignItems: 'center' }}>
                   <span style={{ width: 36, height: 36, borderRadius: '50%', background: '#1e40af', color: '#fff', fontSize: 13, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{initials}</span>

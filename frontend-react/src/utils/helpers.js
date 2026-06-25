@@ -10,7 +10,14 @@ export function nameFromFilename(filename) {
   name = name.replace(/\s+(cv|resume|résumé|\d+)$/gi, '');
   name = name.replace(/\s+/g, ' ').trim();
   if (!name) return '';
-  return name.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ');
+  // Drop a trailing ALL-CAPS acronym glued onto the name in the filename — e.g.
+  // "JassemElDanafNBK" → drop "NBK". A person's surname isn't normally all-caps,
+  // and it sits at the END (mid-name caps like "EL" are kept).
+  let parts = name.split(' ');
+  if (parts.length >= 3 && /^[A-Z]{2,4}$/.test(parts[parts.length - 1])) {
+    parts = parts.slice(0, -1);
+  }
+  return parts.map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ');
 }
 
 // Extract candidate's real name from CV text — looks at the first few lines for a

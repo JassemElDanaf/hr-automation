@@ -197,11 +197,25 @@ export default function CVEvaluation() {
     // card can't resolve late and clobber the current selection (the glitch
     // where clicking one job sometimes lands on another).
     const reqId = ++selectJobReqRef.current;
+    const changingJob = job.id !== evalJobId;
     setEvalSelectedJob(job);
     setEvalJobId(job.id);
     setSelectedJob(job);
     setJobState(null);
-    // New job → forget the previous job's loaded-criteria tracking.
+    // Switching to a DIFFERENT job must start from a clean slate — criteria are
+    // per-job, so the previous job's draft/weights/items/saved-set must NOT carry
+    // over (that's how "HRBP criteria" was bleeding into a new "Marketing Intern").
+    if (changingJob) {
+      setCriteriaText('');
+      setWeights({ skills: 40, experience: 35, education: 25 });
+      setCriteriaItems([]);
+      setSelectedSetId('');
+      setSaveCriteria(false);
+      setSaveCriteriaName('');
+      setCriteriaNameError(false);
+      setCriteriaSource('manual');
+      autoAppliedJobRef.current = null;   // let the NEW job auto-load its own last set
+    }
     setAppliedSet(null);
     setCriteriaDirty(false);
     const [full, state] = await Promise.all([
@@ -797,7 +811,18 @@ export default function CVEvaluation() {
             <h4 className="criteria-actions-title">Choose How to Create Criteria</h4>
             <div className="criteria-actions-btns">
               {[{ key: 'job_desc', icon: '\uD83D\uDCCB', label: 'From Job Description' }, { key: 'manual', icon: '\u270F', label: 'Write / Paste' }, { key: 'ai', icon: '\u2728', label: 'AI Generate' }, { key: 'upload', icon: '\uD83D\uDCC4', label: 'Upload File' }].map(s => (
-                <button key={s.key} className={`criteria-action-btn ${criteriaSource === s.key ? 'active' : ''}`} onClick={() => setCriteriaSource(s.key)}>
+                <button key={s.key} className={`criteria-action-btn ${criteriaSource === s.key ? 'active' : ''}`}
+                  onClick={() => {
+                    setCriteriaSource(s.key);
+                    // "From Job Description" loads the JD straight into the draft on
+                    // click — no extra button press needed.
+                    if (s.key === 'job_desc' && evalSelectedJob?.job_description) {
+                      setCriteriaText(evalSelectedJob.job_description);
+                      setSelectedSetId('');
+                      markCriteriaDirty();
+                      showToast('Job description loaded as criteria', 'success');
+                    }
+                  }}>
                   <span className="criteria-action-icon">{s.icon}</span>
                   <span>{s.label}</span>
                 </button>
@@ -808,14 +833,15 @@ export default function CVEvaluation() {
                 {evalSelectedJob?.job_description ? (
                   <>
                     <p style={{ fontSize: '13px', color: 'var(--gray-600)', margin: '0 0 10px' }}>
-                      Use the job description from <strong>{evalSelectedJob.job_title}</strong> as your evaluation criteria.
+                      <strong>{evalSelectedJob.job_title}</strong>'s job description was loaded into the draft below — edit it as needed.
                     </p>
-                    <button className="btn btn-primary" style={{ width: '100%' }} onClick={() => {
+                    <button className="btn btn-secondary btn-sm" onClick={() => {
                       setCriteriaText(evalSelectedJob.job_description);
                       setSelectedSetId('');
-                      showToast('Job description loaded as criteria', 'success');
+                      markCriteriaDirty();
+                      showToast('Job description re-loaded', 'success');
                     }}>
-                      Load Job Description
+                      ↻ Reload job description
                     </button>
                   </>
                 ) : (
@@ -1042,15 +1068,15 @@ export default function CVEvaluation() {
                   const allDone = candidates.length > 0 && unevalCount === 0;
                   const busy = evaluating || evaluatingOneId != null;
                   return (
-                    <button className="btn btn-primary btn-sm" onClick={runEvaluation} disabled={busy || allDone}
-                      title={allDone ? 'All candidates are already evaluated' : ''} style={{ whiteSpace: 'nowrap' }}>
-                      {evaluating ? `AI evaluating… ${ev.done}/${ev.total}` : allDone ? '✓ All Evaluated' : `✨ Run Evaluation${unevalCount ? ` (${unevalCount})` : ''}`}
+                    <button className={`btn btn-primary btn-sm results-runeval${allDone ? ' is-done' : ''}`} onClick={runEvaluation} disabled={busy || allDone}
+                      title={allDone ? 'All candidates are already evaluated' : (evaluating ? `AI evaluating… ${ev.done}/${ev.total}` : 'Run the AI evaluation')} style={{ whiteSpace: 'nowrap' }}>
+                      <span className="re-icon">{evaluating ? '⏳' : allDone ? '✓' : '✨'}</span>
+                      <span className="re-text">{evaluating ? `AI evaluating… ${ev.done}/${ev.total}` : allDone ? 'All Evaluated' : `Run Evaluation${unevalCount ? ` (${unevalCount})` : ''}`}</span>
                     </button>
                   );
                 })()}
                 <span className="results-sort-label" style={{ fontSize: 12.5, color: 'var(--gray-500)', whiteSpace: 'nowrap' }}>Sort by</span>
-                <select className="results-sort-select" value={resultsSort} onChange={e => setResultsSort(e.target.value)}
-                  style={{ width: 150, flexShrink: 0, padding: '7px 12px', border: '1px solid var(--gray-200)', borderRadius: 'var(--radius)', fontSize: 13, fontFamily: 'inherit', outline: 'none', background: 'var(--surface)', cursor: 'pointer' }}>
+                <select className="results-sort-select" value={resultsSort} onChange={e => setResultsSort(e.target.value)}>
                   <option value="recent">Most recent</option>
                   <option value="score">Highest score</option>
                   <option value="name">Name (A–Z)</option>

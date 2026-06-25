@@ -7,6 +7,7 @@ import Badge from '../components/common/Badge';
 import EmptyState from '../components/common/EmptyState';
 import Loading from '../components/common/Loading';
 import Select from '../components/common/Select';
+import ShowSelect from '../components/common/ShowSelect';
 import Modal from '../components/modals/Modal';
 import { sendEmailRequest, getEmailStatus, buildEmailHtml } from '../services/email';
 import { formatDate, emailTypeLabel as baseEmailTypeLabel } from '../utils/helpers';
@@ -254,7 +255,7 @@ export default function Emails() {
       {/* Row 1: the "All jobs" toggle + the compact action icons share one line.
           Job otherwise comes from the global "Current Job" picker; "All jobs" is
           the Emails-only cross-job merged view. */}
-      <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '10px', flexWrap: 'wrap' }}>
+      <div className="emails-toolbar-top" style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '10px', flexWrap: 'wrap' }}>
         <button
           className={`filter-tab ${allJobs ? 'active' : ''}`}
           onClick={() => {
@@ -264,6 +265,22 @@ export default function Emails() {
           }}
           title="Show email history merged across every job"
         >🌐 All jobs</button>
+        {/* Mobile-only status dropdown (All/Sent/Failed/Inbound) — shares this row
+            with All jobs + the action icons. The pill tabs below show on desktop. */}
+        <ShowSelect
+          filters={[{ key: 'all', label: 'All' }, { key: 'sent', label: 'Sent' }, { key: 'failed', label: 'Failed' }, { key: 'inbound', label: 'Inbound' }]}
+          value={statusFilter}
+          onChange={setStatusFilter}
+        />
+        {/* Status filter pills (desktop) — share this one line with All jobs +
+            actions; on mobile the dropdown above replaces them. */}
+        <div className="filter-tabs emails-status-tabs">
+          {['all', 'sent', 'failed', 'inbound'].map(f => (
+            <button key={f} className={`filter-tab ${statusFilter === f ? 'active' : ''}`} onClick={() => setStatusFilter(f)}>
+              {f.charAt(0).toUpperCase() + f.slice(1)}
+            </button>
+          ))}
+        </div>
         {/* Compact actions: ⚙ tucks away Setup Guide / Test Email, blue + composes. */}
         <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginLeft: 'auto' }}>
           <div ref={actionsRef} style={{ position: 'relative' }}>
@@ -273,7 +290,7 @@ export default function Emails() {
               style={{ width: 32, height: 32, borderRadius: '50%', flexShrink: 0, border: '1px solid var(--gray-200)', background: showActions ? 'var(--gray-50)' : 'var(--surface)', cursor: 'pointer', fontSize: 15, color: 'var(--gray-500)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'inherit' }}
             >⚙</button>
             {showActions && (
-              <div style={{ position: 'absolute', right: 0, top: 'calc(100% + 6px)', zIndex: 200, minWidth: 190, background: 'var(--surface)', border: '1px solid var(--gray-200)', borderRadius: 10, boxShadow: '0 10px 30px rgba(0,0,0,0.16)', overflow: 'hidden' }}>
+              <div className="menu-reveal" style={{ position: 'absolute', right: 0, top: 'calc(100% + 6px)', zIndex: 200, minWidth: 190, background: 'var(--surface)', border: '1px solid var(--gray-200)', borderRadius: 10, boxShadow: '0 10px 30px rgba(0,0,0,0.16)', overflow: 'hidden' }}>
                 <button style={emailMenuItem} onClick={() => { setShowActions(false); setShowSmtpHelp(true); }}
                   onMouseEnter={e => e.currentTarget.style.background = 'var(--gray-50)'} onMouseLeave={e => e.currentTarget.style.background = 'none'}>
                   <span style={{ width: 18, textAlign: 'center' }}>📘</span> Setup Guide
@@ -303,15 +320,6 @@ export default function Emails() {
             }}
           >↺</button>
         </div>
-      </div>
-
-      {/* Row 2: status filter tabs */}
-      <div className="filter-tabs" style={{ marginBottom: '16px', flexWrap: 'wrap' }}>
-        {['all', 'sent', 'failed', 'inbound'].map(f => (
-          <button key={f} className={`filter-tab ${statusFilter === f ? 'active' : ''}`} onClick={() => setStatusFilter(f)}>
-            {f.charAt(0).toUpperCase() + f.slice(1)}
-          </button>
-        ))}
       </div>
 
       <div className="table-wrap">

@@ -54,7 +54,7 @@ const RECORDING_SERVER = '';
 
 const REQ_META = {
   salary:   { label: 'Salary',        color: '#d97706', bg: '#fffbeb', icon: '💰' },
-  iqama:    { label: 'Iqama / Visa',  color: '#7c3aed', bg: '#f5f3ff', icon: '📋' },
+  iqama:    { label: 'Visa',  color: '#7c3aed', bg: '#f5f3ff', icon: '📋' },
   notice:   { label: 'Notice Period', color: '#dc2626', bg: '#fef2f2', icon: '📅' },
   location: { label: 'Location',      color: '#0891b2', bg: '#ecfeff', icon: '📍' },
 };

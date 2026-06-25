@@ -2,7 +2,22 @@
 # n8n startup entrypoint — patch + import + publish workflows, seed credential, then run.
 set -e
 
-OLLAMA_HOST="${OLLAMA_DOCKER_HOST:-ollama}"
+# Ollama host selection. OLLAMA_DOCKER_HOST may be:
+#   host.docker.internal  → always use a host-installed Ollama (e.g. GPU on Windows)
+#   ollama                → always use the bundled Docker container (CPU)
+#   auto (default)        → detect: use a host Ollama if one is reachable, else the
+#                           bundled container. This makes a fresh `git pull` + Docker
+#                           run work anywhere (Ubuntu with no host Ollama → CPU container).
+OLLAMA_HOST="${OLLAMA_DOCKER_HOST:-auto}"
+if [ "$OLLAMA_HOST" = "auto" ] || [ -z "$OLLAMA_HOST" ]; then
+  if wget -q -T 3 -O /dev/null "http://host.docker.internal:11434/api/tags" 2>/dev/null; then
+    OLLAMA_HOST="host.docker.internal"
+    echo "[entrypoint] Ollama: host install detected (host.docker.internal:11434) — using it."
+  else
+    OLLAMA_HOST="ollama"
+    echo "[entrypoint] Ollama: no host install — using the bundled Docker container (CPU)."
+  fi
+fi
 SIDECAR="${SIDECAR_DOCKER_HOST:-sidecars}"
 export DB_FILE="/home/node/.n8n/database.sqlite"
 NODE="/opt/nodejs/node-v24.14.1/bin/node"

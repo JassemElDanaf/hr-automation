@@ -78,28 +78,30 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
 
-  # ── Ollama (always-on — runs in Docker regardless of any host install) ────
-  # Started by a plain `docker compose up -d` (no profile/flag needed). n8n
-  # talks to it at ollama:11434 (set OLLAMA_DOCKER_HOST=ollama in .env).
-  # Model files are stored via a bind mount to OLLAMA_DATA_DIR — keep that on
-  # the D: drive (e.g. D:/DiyarDocker/ollama) so nothing lands on C: or E:.
-  # First run (one-time): docker compose exec ollama ollama pull qwen3:4b
-  # NOTE: if a HOST Ollama is also running it will conflict on port 11434 —
-  # stop the host one, or comment out the `ports:` block below (n8n reaches
-  # this container over the internal network without the published port).
+  # ── Ollama (always-on — the portable CPU fallback) ───────────────────────
+  # Always started by `docker compose up -d`. It AUTO-PULLS qwen3:4b on first
+  # boot (skipped if already present in the bind-mounted store), so a fresh
+  # clone on any machine "just works" with no manual pull.
+  #   • On a box WITH a host Ollama (e.g. GPU on Windows), n8n auto-detects and
+  #     uses that for speed; this container just idles as a ready fallback.
+  #   • On a box WITHOUT one (e.g. a fresh Ubuntu pull), n8n auto-detects nothing
+  #     and uses THIS container (CPU). See scripts/n8n-entrypoint.sh.
+  # No published port (11434) so it never conflicts with a host Ollama — n8n and
+  # nginx reach it over the internal Docker network at ollama:11434.
+  # Model files persist via the bind mount to OLLAMA_DATA_DIR (keep on D:).
   ollama:
     image: ollama/ollama:latest
     restart: unless-stopped
+    entrypoint: ["/bin/sh", "-c"]
+    command: ["ollama serve & until ollama list >/dev/null 2>&1; do sleep 1; done; ollama list | grep -qi qwen3 || ollama pull qwen3:4b; wait"]
     volumes:
       - "${OLLAMA_DATA_DIR:-./ollama-data}:/root/.ollama"
-    ports:
-      - "11434:11434"
     healthcheck:
       test: ["CMD-SHELL", "ollama list || exit 1"]
       interval: 10s
       timeout: 5s
-      retries: 20
-      start_period: 30s
+      retries: 30
+      start_period: 180s
 
   # ── Python sidecars (SMTP / IMAP / Recording / Auth) ─────────────────────
   sidecars:

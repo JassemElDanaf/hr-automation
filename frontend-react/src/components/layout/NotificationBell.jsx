@@ -131,6 +131,7 @@ export default function NotificationBell() {
           arrives, then disappears (settling into the panel). Click to act on it. */}
       {preview && (
         <div
+          className="notif-preview"
           onClick={() => { go(preview.nav); setPreview(null); }}
           style={{ position: 'absolute', right: 'calc(100% + 10px)', top: '50%', transform: 'translateY(-50%)',
             width: 270, display: 'flex', gap: 10, alignItems: 'flex-start', padding: '10px 13px',
@@ -146,8 +147,11 @@ export default function NotificationBell() {
             style={{ background: 'none', border: 'none', color: 'var(--gray-300)', cursor: 'pointer', fontSize: 15, lineHeight: 1, flexShrink: 0, padding: 0 }}>×</button>
         </div>
       )}
-      {/* Sliding status pill — emerges from the bell while a task runs. */}
+      {/* Sliding status pill — emerges from the bell while a task runs. Hidden on
+          mobile (CSS .notif-pill) where it would overflow the header; there the
+          spinner ring on the bell + the panel's live row convey AI activity. */}
       <button type="button" onClick={toggle} title="Open notifications"
+        className="notif-pill"
         aria-hidden={!expanded} tabIndex={expanded ? 0 : -1}
         style={{ display: 'flex', alignItems: 'center', gap: 9, height: 40, overflow: 'hidden', whiteSpace: 'nowrap',
           borderRadius: 22, border: `1px solid ${expanded ? 'var(--gray-200)' : 'transparent'}`,
@@ -172,6 +176,13 @@ export default function NotificationBell() {
           background: open ? 'var(--gray-50)' : 'var(--surface)', cursor: 'pointer', fontSize: 18, lineHeight: 1,
           display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
         🔔
+        {/* AI-activity spinner ring around the bell (replaces the pill on mobile;
+            harmless on desktop where the pill also shows). */}
+        {live.length > 0 && (
+          <span aria-hidden style={{ position: 'absolute', inset: -3, borderRadius: '50%',
+            border: '2px solid transparent', borderTopColor: '#7c3aed', borderRightColor: '#7c3aed',
+            animation: 'spin 0.8s linear infinite', pointerEvents: 'none' }} />
+        )}
         {totalBadge > 0 && (
           <span style={{ position: 'absolute', top: -3, right: -3, minWidth: 18, height: 18, padding: '0 5px',
             borderRadius: 9, background: '#dc2626', color: '#fff', fontSize: 11, fontWeight: 800,
