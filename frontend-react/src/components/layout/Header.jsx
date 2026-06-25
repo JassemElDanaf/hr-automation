@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
+import { BRAND_NAME, BRAND_TAGLINE } from '../../config/brand';
 import { useSelectedJob } from '../../state/selectedJob';
 import { useAuth } from '../../state/auth';
 import { useTheme } from '../../state/theme';
@@ -150,8 +151,8 @@ export default function Header() {
         title="Go to dashboard"
         style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', userSelect: 'none', WebkitUserSelect: 'none', WebkitTapHighlightColor: 'transparent' }}
       >
-        <img src="/logo.jpg" alt="Diyar" style={{ height: 30, width: 'auto', borderRadius: 6, display: 'block' }} />
-        <h1><span>Diyar</span> HR</h1>
+        <img src="/logo.jpg" alt={BRAND_NAME} style={{ height: 30, width: 'auto', borderRadius: 6, display: 'block' }} />
+        <h1><span>{BRAND_NAME.split(' ')[0]}</span>{BRAND_NAME.includes(' ') ? ' ' + BRAND_NAME.split(' ').slice(1).join(' ') : ''}</h1>
       </div>
 
       {isMobile && slotEl ? createPortal(jobPicker, slotEl) : jobPicker}
@@ -210,20 +211,7 @@ export default function Header() {
                       <span style={menuIcon}>👥</span> Users &amp; Access
                     </button>
                   )}
-                  {isAdmin && (
-                    <button onClick={() => { setMenuOpen(false); navigate('/email-templates'); }} style={menuItem}
-                      onMouseEnter={e => e.currentTarget.style.background = 'var(--gray-50)'}
-                      onMouseLeave={e => e.currentTarget.style.background = 'none'}>
-                      <span style={menuIcon}>✉</span> Email templates
-                    </button>
-                  )}
-                  {isAdmin && (
-                    <button onClick={() => { setMenuOpen(false); navigate('/audit-log'); }} style={menuItem}
-                      onMouseEnter={e => e.currentTarget.style.background = 'var(--gray-50)'}
-                      onMouseLeave={e => e.currentTarget.style.background = 'none'}>
-                      <span style={menuIcon}>🧾</span> Audit log
-                    </button>
-                  )}
+                  {/* Email templates + Audit log moved to the Emails tab's ⚙ menu. */}
                   <button onClick={() => { setMenuOpen(false); logout(); }} style={{ ...menuItem, color: '#b91c1c' }}
                     onMouseEnter={e => e.currentTarget.style.background = '#fef2f2'}
                     onMouseLeave={e => e.currentTarget.style.background = 'none'}>
@@ -233,8 +221,8 @@ export default function Header() {
 
                 {/* Info footer */}
                 <div style={{ padding: '9px 16px', borderTop: '1px solid var(--gray-100)', background: 'var(--gray-50)' }}>
-                  <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--gray-500)' }}>Diyar HR</div>
-                  <div style={{ fontSize: 10.5, color: 'var(--gray-400)', marginTop: 1 }}>Local-first hiring workspace</div>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--gray-500)' }}>{BRAND_NAME}</div>
+                  <div style={{ fontSize: 10.5, color: 'var(--gray-400)', marginTop: 1 }}>{BRAND_TAGLINE}</div>
                 </div>
               </div>
             )}

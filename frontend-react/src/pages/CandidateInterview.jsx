@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import { apiPost } from '../services/api';
+import { COMPANY_NAME, BRAND_NAME } from '../config/brand';
 
 function formatTime(s) {
   return `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
@@ -350,11 +351,11 @@ export default function CandidateInterview() {
     const prevOv = document.body.style.overflow;
     document.body.style.background = '#f3f4f6';
     document.body.style.overflow = 'hidden';
-    document.title = 'AI Interview — Diyar United Company';
+    document.title = `AI Interview — ${COMPANY_NAME}`;
     return () => {
       document.body.style.background = prevBg;
       document.body.style.overflow = prevOv;
-      document.title = 'Diyar HR';
+      document.title = BRAND_NAME;
       document.getElementById('ci-css')?.remove();
     };
   }, []);
@@ -788,7 +789,7 @@ export default function CandidateInterview() {
 
   if (phase === 'intro') return (
     <div className="ci-screen"><div className="ci-card">
-      <div className="ci-eyebrow">Diyar United Company</div>
+      <div className="ci-eyebrow">{COMPANY_NAME}</div>
       <div className="ci-h1">AI Interview</div>
       <div className="ci-sub">
         {tokenData?.jobTitle && <>Role: <strong>{tokenData.jobTitle}</strong><br /></>}
@@ -843,7 +844,7 @@ export default function CandidateInterview() {
     <div className="ci-page">
       {/* Same topbar */}
       <div className="ci-top">
-        <div className="ci-brand">Diyar <em>United</em> Company</div>
+        <div className="ci-brand">{COMPANY_NAME}</div>
         <div className="ci-top-right">
           <div className="ci-chip ended"><span className="ci-chip-dot" />Interview done</div>
         </div>
@@ -946,7 +947,7 @@ export default function CandidateInterview() {
 
       {/* Top bar */}
       <div className="ci-top">
-        <div className="ci-brand">Diyar <em>United</em> Company</div>
+        <div className="ci-brand">{COMPANY_NAME}</div>
         <div className="ci-top-right">
           <div className={`ci-chip ${chipStatus}`}>
             <span className="ci-chip-dot" />

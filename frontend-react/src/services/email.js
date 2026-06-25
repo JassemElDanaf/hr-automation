@@ -1,4 +1,5 @@
 import { apiPost } from './api';
+import { COMPANY_NAME } from '../config/brand';
 
 function escapeHtml(s) {
   return String(s || '').replace(/[&<>"']/g, c =>
@@ -39,7 +40,7 @@ export function buildEmailHtml(body) {
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="x-apple-disable-message-reformatting">
 <meta http-equiv="x-ua-compatible" content="ie=edge">
-<title>Diyar United Company</title>
+<title>${COMPANY_NAME}</title>
 <style>
   /* Mobile: card goes edge-to-edge, padding tightens, body text bumps up, and
      the CTA becomes a full-width tap target. Clients that strip <style> simply
@@ -60,7 +61,7 @@ export function buildEmailHtml(body) {
         <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="email-card" style="width:100%;max-width:600px;background:#ffffff;border-radius:12px;overflow:hidden;border:1px solid #e5e7eb;font-family:-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
           <tr>
             <td class="email-header" style="background:#1e40af;padding:18px 24px;">
-              <div style="color:#ffffff;font-size:16px;font-weight:700;">Diyar United Company</div>
+              <div style="color:#ffffff;font-size:16px;font-weight:700;">${COMPANY_NAME}</div>
               <div style="color:#bfdbfe;font-size:12px;margin-top:2px;">Human Resources</div>
             </td>
           </tr>
@@ -119,25 +120,25 @@ export const TEMPLATE_DEFS = {
     name: 'Interview invitation',
     placeholders: ['candidate_name', 'job_title', 'interview_link'],
     subject: 'Interview Invitation — {job_title}',
-    body: `Dear {candidate_name},\n\nCongratulations! After reviewing your application for the {job_title} role, we'd like to invite you to the next step: a short online interview you can complete in your own time.\n\nHow it works\nThe interview runs in your web browser and guides you through each question, one at a time. There's nothing to install and nothing to schedule — just open your personal link below whenever you're ready.\n\nYour interview link\n{interview_link}\n\nPlease try to complete it within the next few days. If the link doesn't open or you run into any trouble, simply reply to this email and we'll be glad to help.\n\nWe're looking forward to learning more about you.\n\nWarm regards,\nHR Department\nDiyar United Company`,
+    body: `Dear {candidate_name},\n\nCongratulations! After reviewing your application for the {job_title} role, we'd like to invite you to the next step: a short online interview you can complete in your own time.\n\nHow it works\nThe interview runs in your web browser and guides you through each question, one at a time. There's nothing to install and nothing to schedule — just open your personal link below whenever you're ready.\n\nYour interview link\n{interview_link}\n\nPlease try to complete it within the next few days. If the link doesn't open or you run into any trouble, simply reply to this email and we'll be glad to help.\n\nWe're looking forward to learning more about you.\n\nWarm regards,\nHR Department\n${COMPANY_NAME}`,
   },
   shortlist: {
     name: 'Shortlisted',
     placeholders: ['candidate_name', 'job_title'],
     subject: 'You have been shortlisted — {job_title}',
-    body: `Dear {candidate_name},\n\nGreat news — you've been shortlisted for the {job_title} role.\n\nAfter reviewing your application, we were impressed by your background and would like to move you forward to the next stage of our hiring process.\n\nA member of our team will be in touch shortly with the next steps. In the meantime, thank you for your interest in joining us.\n\nWarm regards,\nHR Department\nDiyar United Company`,
+    body: `Dear {candidate_name},\n\nGreat news — you've been shortlisted for the {job_title} role.\n\nAfter reviewing your application, we were impressed by your background and would like to move you forward to the next stage of our hiring process.\n\nA member of our team will be in touch shortly with the next steps. In the meantime, thank you for your interest in joining us.\n\nWarm regards,\nHR Department\n${COMPANY_NAME}`,
   },
   rejection: {
     name: 'Rejection',
     placeholders: ['candidate_name', 'job_title'],
     subject: 'Application Update — {job_title}',
-    body: `Dear {candidate_name},\n\nThank you for applying for the {job_title} role and for the time you put into your application.\n\nAfter careful consideration, we've decided to move forward with other candidates whose experience more closely matches what this position needs right now. This was not an easy decision, and it isn't a reflection of your abilities.\n\nWe'd genuinely welcome your application for future roles that fit your skills, and we wish you every success in your search.\n\nWarm regards,\nHR Department\nDiyar United Company`,
+    body: `Dear {candidate_name},\n\nThank you for applying for the {job_title} role and for the time you put into your application.\n\nAfter careful consideration, we've decided to move forward with other candidates whose experience more closely matches what this position needs right now. This was not an easy decision, and it isn't a reflection of your abilities.\n\nWe'd genuinely welcome your application for future roles that fit your skills, and we wish you every success in your search.\n\nWarm regards,\nHR Department\n${COMPANY_NAME}`,
   },
   offer: {
     name: 'Job offer',
     placeholders: ['candidate_name', 'job_title'],
     subject: 'Job Offer — {job_title}',
-    body: `Dear {candidate_name},\n\nWe're delighted to offer you the {job_title} position — congratulations!\n\nThe full details of your offer are attached. Please take the time to review them and let us know your decision within 5 business days. If you have any questions at all, just reply to this email and we'll be happy to help.\n\nWe're excited at the prospect of you joining the team and look forward to hearing from you.\n\nWarm regards,\nHR Department\nDiyar United Company`,
+    body: `Dear {candidate_name},\n\nWe're delighted to offer you the {job_title} position — congratulations!\n\nThe full details of your offer are attached. Please take the time to review them and let us know your decision within 5 business days. If you have any questions at all, just reply to this email and we'll be happy to help.\n\nWe're excited at the prospect of you joining the team and look forward to hearing from you.\n\nWarm regards,\nHR Department\n${COMPANY_NAME}`,
   },
   // ── Hiring-manager-facing templates ──────────────────────────────────────
   // These carry computed data blocks (scores, strengths, question lists,

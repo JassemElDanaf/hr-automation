@@ -3,11 +3,13 @@ import { useNavigate } from 'react-router-dom';
 import { apiGet } from '../services/api';
 import { useSelectedJob } from '../state/selectedJob';
 import { useUI } from '../state/uiState';
+import { useAuth } from '../state/auth';
 import Badge from '../components/common/Badge';
 import EmptyState from '../components/common/EmptyState';
 import Loading from '../components/common/Loading';
 import Select from '../components/common/Select';
 import ShowSelect from '../components/common/ShowSelect';
+import { BRAND_NAME } from '../config/brand';
 import Modal from '../components/modals/Modal';
 import { sendEmailRequest, getEmailStatus, buildEmailHtml } from '../services/email';
 import { formatDate, emailTypeLabel as baseEmailTypeLabel } from '../utils/helpers';
@@ -21,6 +23,7 @@ export default function Emails() {
   const navigate = useNavigate();
   const { selectedJob, setSelectedJob } = useSelectedJob();
   const { showToast } = useUI();
+  const { isAdmin } = useAuth();
   const [jobs, setJobs] = useState([]);
   const [jobId, setJobId] = useState('');
   const [allJobs, setAllJobs] = useState(false); // "All jobs" cross-view (Emails-only)
@@ -212,8 +215,8 @@ export default function Emails() {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           to,
-          subject: 'Diyar HR — SMTP test email',
-          body: 'This is a test email from the Diyar HR app. If you received it, your SMTP credential is delivering correctly.',
+          subject: `${BRAND_NAME} — SMTP test email`,
+          body: `This is a test email from the ${BRAND_NAME} app. If you received it, your SMTP credential is delivering correctly.`,
         }),
       });
       const j = await res.json().catch(() => ({}));
@@ -299,6 +302,18 @@ export default function Emails() {
                   onMouseEnter={e => e.currentTarget.style.background = 'var(--gray-50)'} onMouseLeave={e => e.currentTarget.style.background = 'none'}>
                   <span style={{ width: 18, textAlign: 'center' }}>✉</span> Send Test Email
                 </button>
+                {isAdmin && (
+                  <button style={{ ...emailMenuItem, borderTop: '1px solid var(--gray-100)' }} onClick={() => { setShowActions(false); navigate('/email-templates'); }}
+                    onMouseEnter={e => e.currentTarget.style.background = 'var(--gray-50)'} onMouseLeave={e => e.currentTarget.style.background = 'none'}>
+                    <span style={{ width: 18, textAlign: 'center' }}>📝</span> Email templates
+                  </button>
+                )}
+                {isAdmin && (
+                  <button style={emailMenuItem} onClick={() => { setShowActions(false); navigate('/audit-log'); }}
+                    onMouseEnter={e => e.currentTarget.style.background = 'var(--gray-50)'} onMouseLeave={e => e.currentTarget.style.background = 'none'}>
+                    <span style={{ width: 18, textAlign: 'center' }}>🧾</span> Audit log
+                  </button>
+                )}
               </div>
             )}
           </div>

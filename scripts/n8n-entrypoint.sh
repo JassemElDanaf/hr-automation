@@ -39,9 +39,16 @@ if (key) {
 # ── Build N8N_CREDENTIALS_OVERWRITE_DATA ─────────────────────────────────────
 export N8N_CREDENTIALS_OVERWRITE_DATA="{\"postgres\":{\"host\":\"${DB_HOST:-postgres}\",\"port\":${DB_PORT:-5432},\"database\":\"${DB_NAME:-hr_automation}\",\"user\":\"${DB_USER:-hr_admin}\",\"password\":\"${DB_PASS:-hr_pass}\",\"ssl\":\"disable\"}}"
 
-# ── Patch workflow JSONs for Docker networking ────────────────────────────────
+# ── Patch workflow JSONs for Docker networking + tenant company name ──────────
 PATCH_DIR="/tmp/workflows-patched"
 mkdir -p "$PATCH_DIR"
+
+# Global tenant company name — baked into the AI prompts (JD/criteria generation)
+# at import time so generated content references the right company. Single source
+# of truth: the COMPANY_NAME env (docker-compose ← .env). Escape sed specials so a
+# name with & or | doesn't break the substitution.
+COMPANY_NAME="${COMPANY_NAME:-Diyar United Company}"
+COMPANY_NAME_SED=$(printf '%s' "$COMPANY_NAME" | sed -e 's/[&|\\]/\\&/g')
 
 find /workflows -name '*.json' -type f | while IFS= read -r f; do
   dir_name=$(basename "$(dirname "$f")")
@@ -54,6 +61,7 @@ find /workflows -name '*.json' -type f | while IFS= read -r f; do
     -e "s|http://127.0.0.1:8902|http://${SIDECAR}:8902|g" \
     -e "s|http://127.0.0.1:8903|http://${SIDECAR}:8903|g" \
     -e "s|http://127.0.0.1:8904|http://${SIDECAR}:8904|g" \
+    -e "s|Diyar United Company|${COMPANY_NAME_SED}|g" \
     "$f" > "$out"
 done
 

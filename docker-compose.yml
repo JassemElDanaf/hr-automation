@@ -49,6 +49,9 @@ services:
       DB_NAME:    ${POSTGRES_DB:-hr_automation}
       DB_USER:    ${POSTGRES_USER:-hr_admin}
       DB_PASS:    ${POSTGRES_PASSWORD:-hr_pass}
+      # Tenant company name baked into AI-generated content (JD/criteria) at import.
+      # Single source of truth for the company — change in .env to rebrand.
+      COMPANY_NAME: ${COMPANY_NAME:-Diyar United Company}
       # Fixed encryption key — must match what the entrypoint script uses to encrypt credentials
       N8N_ENCRYPTION_KEY: "diyar-hr-n8n-key-2026"
       # Owner account — auto-created on first boot, skips setup wizard
