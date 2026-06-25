@@ -173,10 +173,34 @@ export default function CVEvaluation() {
   useEffect(() => {
     if (!selectedJob || jobsCache.length === 0) return;
     if (evalSelectedJob && evalSelectedJob.id === selectedJob.id) return;
-    if (evalSelectedJob && step !== 1) return;
+    // Always follow the global "Current Job" picker — even mid-wizard — so the
+    // header and the evaluation never desync (the old `step !== 1` guard left the
+    // wizard stuck on the previous job, showing ITS criteria).
     const match = jobsCache.find(j => j.id === selectedJob.id);
     if (match) selectJob(match);
-  }, [selectedJob, jobsCache, step]);
+  }, [selectedJob, jobsCache]);
+
+  // Bulletproof per-job reset: whenever the active job changes (card click, header
+  // picker, deep link — ANY path), wipe ALL per-job criteria state so nothing
+  // bleeds across jobs. Criteria are strictly per-job.
+  const prevEvalJobIdRef = useRef(null);
+  useEffect(() => {
+    if (prevEvalJobIdRef.current !== null && prevEvalJobIdRef.current !== evalJobId) {
+      setCriteriaText('');
+      setWeights({ skills: 40, experience: 35, education: 25 });
+      setCriteriaItems([]);
+      setSelectedSetId('');
+      setCriteriaSets([]);
+      setSaveCriteria(false);
+      setSaveCriteriaName('');
+      setCriteriaNameError(false);
+      setCriteriaSource('manual');
+      setAppliedSet(null);
+      setCriteriaDirty(false);
+      autoAppliedJobRef.current = null;
+    }
+    prevEvalJobIdRef.current = evalJobId;
+  }, [evalJobId]);
 
   async function fetchJobState(jobId) {
     try {
@@ -197,27 +221,10 @@ export default function CVEvaluation() {
     // card can't resolve late and clobber the current selection (the glitch
     // where clicking one job sometimes lands on another).
     const reqId = ++selectJobReqRef.current;
-    const changingJob = job.id !== evalJobId;
     setEvalSelectedJob(job);
-    setEvalJobId(job.id);
+    setEvalJobId(job.id);   // the effect below wipes per-job criteria when this changes
     setSelectedJob(job);
     setJobState(null);
-    // Switching to a DIFFERENT job must start from a clean slate — criteria are
-    // per-job, so the previous job's draft/weights/items/saved-set must NOT carry
-    // over (that's how "HRBP criteria" was bleeding into a new "Marketing Intern").
-    if (changingJob) {
-      setCriteriaText('');
-      setWeights({ skills: 40, experience: 35, education: 25 });
-      setCriteriaItems([]);
-      setSelectedSetId('');
-      setSaveCriteria(false);
-      setSaveCriteriaName('');
-      setCriteriaNameError(false);
-      setCriteriaSource('manual');
-      autoAppliedJobRef.current = null;   // let the NEW job auto-load its own last set
-    }
-    setAppliedSet(null);
-    setCriteriaDirty(false);
     const [full, state] = await Promise.all([
       apiGet(`/job-opening?id=${job.id}`).catch(() => null),
       fetchJobState(job.id),
