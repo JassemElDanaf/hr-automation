@@ -6,6 +6,7 @@ import { useUI } from '../state/uiState';
 import Loading from '../components/common/Loading';
 import EmptyState from '../components/common/EmptyState';
 import Select from '../components/common/Select';
+import ShowSelect from '../components/common/ShowSelect';
 import { sendEmailRequest, getOfferTemplate, getRejectionTemplate, getEmailStatus } from '../services/email';
 import { buildInterviewReportPdf } from '../utils/pdfReport';
 import { scoreColor } from '../utils/helpers';
@@ -367,20 +368,27 @@ HR Department`;
           {/* Top bar like Shortlist: filter pills + sort + refresh */}
           <div className="results-filter-bar" style={{ marginBottom: 14 }}>
             <span className="results-filter-label">Show:</span>
-            {STATUS_FILTERS.map(f => {
-              const n = f.key === 'all' ? ranked.length
-                : f.key === 'sent-hm' ? ranked.filter(r => sentToHM.has(r.candidate_id)).length
-                : ranked.filter(r => r.status === f.key).length;
-              return (
-                <button key={f.key} className={`results-filter-btn${statusFilter === f.key ? ' active' : ''}`} onClick={() => setStatusFilter(f.key)}>
-                  {f.label}
-                  <span className="results-filter-count">{n}</span>
-                </button>
-              );
-            })}
-            <div style={{ marginLeft: 'auto', display: 'flex', gap: 10, alignItems: 'center' }}>
-              <span style={{ fontSize: 12.5, color: 'var(--gray-500)', whiteSpace: 'nowrap' }}>Sort by</span>
+            {(() => {
+              const decFilters = STATUS_FILTERS.map(f => ({
+                key: f.key, label: f.label,
+                count: f.key === 'all' ? ranked.length
+                  : f.key === 'sent-hm' ? ranked.filter(r => sentToHM.has(r.candidate_id)).length
+                  : ranked.filter(r => r.status === f.key).length,
+              }));
+              return (<>
+                <ShowSelect filters={decFilters} value={statusFilter} onChange={setStatusFilter} />
+                {decFilters.map(f => (
+                  <button key={f.key} className={`results-filter-btn${statusFilter === f.key ? ' active' : ''}`} onClick={() => setStatusFilter(f.key)}>
+                    {f.label}
+                    <span className="results-filter-count">{f.count}</span>
+                  </button>
+                ))}
+              </>);
+            })()}
+            <div className="results-sort" style={{ marginLeft: 'auto', display: 'flex', gap: 10, alignItems: 'center' }}>
+              <span className="results-sort-label" style={{ fontSize: 12.5, color: 'var(--gray-500)', whiteSpace: 'nowrap' }}>Sort by</span>
               <select
+                className="results-sort-select"
                 value={sortBy}
                 onChange={e => setSortBy(e.target.value)}
                 style={{ width: 150, flexShrink: 0, padding: '7px 12px', border: '1px solid var(--gray-200)', borderRadius: 'var(--radius)', fontSize: 13, fontFamily: 'inherit', outline: 'none', background: 'var(--surface)', cursor: 'pointer' }}
@@ -391,7 +399,7 @@ HR Department`;
                 <option value="interview">Interview score</option>
                 <option value="name">Name (A–Z)</option>
               </select>
-              <button onClick={loadData} title="Refresh" className="btn btn-sm btn-secondary" style={{ flexShrink: 0 }}>↻</button>
+              <button onClick={loadData} title="Refresh" className="btn btn-sm btn-secondary results-refresh" style={{ flexShrink: 0 }}>↻</button>
             </div>
           </div>
         </>

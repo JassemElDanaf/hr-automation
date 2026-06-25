@@ -10,6 +10,7 @@ import EmptyState from '../components/common/EmptyState';
 import Loading from '../components/common/Loading';
 import Select from '../components/common/Select';
 import ScoreStrip from '../components/common/ScoreStrip';
+import ShowSelect from '../components/common/ShowSelect';
 import { sendEmailRequest, getInterviewTemplate, getOfferTemplate, getRejectionTemplate, getEmailStatus } from '../services/email';
 import { emailTypeLabel, scoreColor } from '../utils/helpers';
 import EvalDetailModal from '../components/modals/EvalDetailModal';
@@ -437,28 +438,34 @@ export default function Shortlist() {
       {!loading && jobId && data.length > 0 && (
         <div className="results-filter-bar">
           <span className="results-filter-label">Show:</span>
-          {[
-            { key: 'all', label: 'All', count: data.length },
-            { key: 'shortlisted', label: 'Shortlisted', count: data.filter(d => !isSlArchived(d.id) && d.status === 'shortlisted' && !isInvited(d)).length },
-            { key: 'invited', label: 'Invited', count: data.filter(d => !isSlArchived(d.id) && isInvited(d)).length },
-            { key: 'interviewed', label: 'Interviewed', count: data.filter(d => !isSlArchived(d.id) && d.status === 'interviewed').length },
-            { key: 'rejected', label: 'Rejected', count: data.filter(d => !isSlArchived(d.id) && d.status === 'rejected').length },
-            { key: 'archived', label: 'Archived', count: data.filter(d => isSlArchived(d.id)).length },
-          ].map(f => (
-            <button key={f.key} className={`results-filter-btn${slFilter === f.key ? ' active' : ''}`} onClick={() => switchSlFilter(f.key)}>
-              {f.label}
-              <span className="results-filter-count">{f.count}</span>
-            </button>
-          ))}
-          <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, alignItems: 'center' }}>
-            <span style={{ fontSize: 12.5, color: 'var(--gray-500)', whiteSpace: 'nowrap' }}>Sort by</span>
-            <select value={slSort} onChange={e => setSlSort(e.target.value)}
+          {(() => {
+            const slFilters = [
+              { key: 'all', label: 'All', count: data.length },
+              { key: 'shortlisted', label: 'Shortlisted', count: data.filter(d => !isSlArchived(d.id) && d.status === 'shortlisted' && !isInvited(d)).length },
+              { key: 'invited', label: 'Invited', count: data.filter(d => !isSlArchived(d.id) && isInvited(d)).length },
+              { key: 'interviewed', label: 'Interviewed', count: data.filter(d => !isSlArchived(d.id) && d.status === 'interviewed').length },
+              { key: 'rejected', label: 'Rejected', count: data.filter(d => !isSlArchived(d.id) && d.status === 'rejected').length },
+              { key: 'archived', label: 'Archived', count: data.filter(d => isSlArchived(d.id)).length },
+            ];
+            return (<>
+              <ShowSelect filters={slFilters} value={slFilter} onChange={switchSlFilter} />
+              {slFilters.map(f => (
+                <button key={f.key} className={`results-filter-btn${slFilter === f.key ? ' active' : ''}`} onClick={() => switchSlFilter(f.key)}>
+                  {f.label}
+                  <span className="results-filter-count">{f.count}</span>
+                </button>
+              ))}
+            </>);
+          })()}
+          <div className="results-sort" style={{ marginLeft: 'auto', display: 'flex', gap: 8, alignItems: 'center' }}>
+            <span className="results-sort-label" style={{ fontSize: 12.5, color: 'var(--gray-500)', whiteSpace: 'nowrap' }}>Sort by</span>
+            <select className="results-sort-select" value={slSort} onChange={e => setSlSort(e.target.value)}
               style={{ width: 150, flexShrink: 0, padding: '7px 12px', border: '1px solid var(--gray-200)', borderRadius: 'var(--radius)', fontSize: 13, fontFamily: 'inherit', outline: 'none', background: 'var(--surface)', cursor: 'pointer' }}>
               <option value="recent">Most recent</option>
               <option value="score">Highest score</option>
               <option value="name">Name (A–Z)</option>
             </select>
-            <button onClick={loadShortlist} title="Refresh" className="btn btn-sm btn-secondary" style={{ flexShrink: 0 }}>↻</button>
+            <button onClick={loadShortlist} title="Refresh" className="btn btn-sm btn-secondary results-refresh" style={{ flexShrink: 0 }}>↻</button>
           </div>
         </div>
       )}

@@ -362,6 +362,8 @@ tr.row-duplicate:hover td { background: #fef3c7; }
   font-size: 12px; font-weight: 700; color: var(--gray-400);
   text-transform: uppercase; letter-spacing: 0.5px; margin-right: 6px;
 }
+/* The "Show:" dropdown replaces the pills on mobile only (see @media block). */
+.results-show-select { display: none; }
 .results-filter-btn {
   display: inline-flex; align-items: center; gap: 6px;
   padding: 6px 16px; border-radius: 999px; border: 1px solid var(--gray-200);
@@ -1273,11 +1275,27 @@ textarea { resize: vertical; min-height: 120px; }
   .dash-topjobs { order: 4; }
   .dash-stats   { order: 5; }
 
-  /* Filter pill bars (Decision / CV-eval / Shortlist) slide horizontally like
-     the CV-eval wizard steps (1·2·3·4) — nowrap + scroll instead of wrapping. */
-  .results-filter-bar { flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch; padding: 10px 12px; gap: 6px; }
-  .results-filter-btn { padding: 5px 12px; font-size: 12.5px; flex-shrink: 0; white-space: nowrap; }
-  .results-filter-label { margin-right: 2px; flex-shrink: 0; white-space: nowrap; }
+  /* Filter bars (Decision / CV-eval / Shortlist): on a phone the row of pills is
+     replaced by a single "Show ▾" dropdown on the left, with "Sort by ▾" on the
+     right — one tidy line instead of sliding pills. */
+  .results-filter-bar { flex-wrap: wrap; padding: 8px; gap: 5px; row-gap: 8px; }
+  .results-filter-btn { display: none !important; }       /* pills → dropdown on mobile */
+  .results-filter-label { margin-right: 0; flex-shrink: 0; white-space: nowrap; font-size: 10.5px; }
+  /* Strip the bloated native select chrome (esp. on mobile) so the box sizes to
+     its content + a small custom arrow — lets "Show ▾" and "Sort by ▾" share one line. */
+  .results-show-select, .results-sort-select {
+    -webkit-appearance: none; appearance: none;
+    font-size: 12px; padding: 6px 22px 6px 9px;
+    border: 1px solid var(--gray-200); border-radius: var(--radius);
+    font-family: inherit; background: var(--surface); color: var(--gray-800); cursor: pointer;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath fill='%23888' d='M0 0l5 6 5-6z'/%3E%3C/svg%3E");
+    background-repeat: no-repeat; background-position: right 8px center;
+  }
+  .results-show-select { display: inline-block; width: 128px; max-width: 46vw; }
+  .results-sort { margin-left: auto; gap: 4px !important; }
+  .results-sort-select { width: 106px !important; min-width: 0; }
+  .results-sort-label { font-size: 11px; }
+  .results-refresh { display: none !important; }   /* drop manual refresh on mobile to keep one line */
 
   /* Card action buttons a touch smaller so groups (Send to HM / Hire / Reject) fit
      narrow cards without clipping. */

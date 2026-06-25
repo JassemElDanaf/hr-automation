@@ -10,6 +10,7 @@ import EmptyState from '../components/common/EmptyState';
 import EvalDetailModal from '../components/modals/EvalDetailModal';
 import ScoreStrip from '../components/common/ScoreStrip';
 import StickyContinue from '../components/common/StickyContinue';
+import ShowSelect from '../components/common/ShowSelect';
 import { formatDate, nameFromFilename, extractNameFromCV, extractEmail, scoreColor, shortDept } from '../utils/helpers';
 import { extractTextFromFile, base64ToBlobUrl } from '../utils/pdf';
 
@@ -1016,20 +1017,26 @@ export default function CVEvaluation() {
             {/* Filter bar */}
             <div className="results-filter-bar">
               <span className="results-filter-label">Show:</span>
-              {[
-                { key: 'all', label: 'All', count: candidates.length },
-                { key: 'active', label: 'Active', count: candidates.filter(c => !shortlistMap[c.id] && !isArchived(c.id) && !isDuplicate(c.id)).length },
-                { key: 'shortlisted', label: 'Shortlisted', count: candidates.filter(c => { const s = shortlistMap[c.id]; return !isArchived(c.id) && (s === 'shortlisted' || s === 'interviewed' || s === 'hired'); }).length },
-                { key: 'rejected', label: 'Rejected', count: candidates.filter(c => !isArchived(c.id) && shortlistMap[c.id] === 'rejected').length },
-                { key: 'duplicates', label: 'Duplicates', count: candidates.filter(c => isDuplicate(c.id) && !isArchived(c.id)).length },
-                { key: 'archived', label: 'Archived', count: candidates.filter(c => isArchived(c.id)).length },
-              ].map(f => (
-                <button key={f.key} className={`results-filter-btn${resultsFilter === f.key ? ' active' : ''}${f.key === 'duplicates' && f.count > 0 ? ' has-duplicates' : ''}`} onClick={() => switchFilter(f.key)}>
-                  {f.label}
-                  <span className="results-filter-count">{f.count}</span>
-                </button>
-              ))}
-              <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, alignItems: 'center' }}>
+              {(() => {
+                const cvFilters = [
+                  { key: 'all', label: 'All', count: candidates.length },
+                  { key: 'active', label: 'Active', count: candidates.filter(c => !shortlistMap[c.id] && !isArchived(c.id) && !isDuplicate(c.id)).length },
+                  { key: 'shortlisted', label: 'Shortlisted', count: candidates.filter(c => { const s = shortlistMap[c.id]; return !isArchived(c.id) && (s === 'shortlisted' || s === 'interviewed' || s === 'hired'); }).length },
+                  { key: 'rejected', label: 'Rejected', count: candidates.filter(c => !isArchived(c.id) && shortlistMap[c.id] === 'rejected').length },
+                  { key: 'duplicates', label: 'Duplicates', count: candidates.filter(c => isDuplicate(c.id) && !isArchived(c.id)).length },
+                  { key: 'archived', label: 'Archived', count: candidates.filter(c => isArchived(c.id)).length },
+                ];
+                return (<>
+                  <ShowSelect filters={cvFilters} value={resultsFilter} onChange={switchFilter} />
+                  {cvFilters.map(f => (
+                    <button key={f.key} className={`results-filter-btn${resultsFilter === f.key ? ' active' : ''}${f.key === 'duplicates' && f.count > 0 ? ' has-duplicates' : ''}`} onClick={() => switchFilter(f.key)}>
+                      {f.label}
+                      <span className="results-filter-count">{f.count}</span>
+                    </button>
+                  ))}
+                </>);
+              })()}
+              <div className="results-sort" style={{ marginLeft: 'auto', display: 'flex', gap: 8, alignItems: 'center' }}>
                 {(() => {
                   const unevalCount = candidates.filter(c => !evalMap[c.id]).length;
                   const allDone = candidates.length > 0 && unevalCount === 0;
@@ -1041,8 +1048,8 @@ export default function CVEvaluation() {
                     </button>
                   );
                 })()}
-                <span style={{ fontSize: 12.5, color: 'var(--gray-500)', whiteSpace: 'nowrap' }}>Sort by</span>
-                <select value={resultsSort} onChange={e => setResultsSort(e.target.value)}
+                <span className="results-sort-label" style={{ fontSize: 12.5, color: 'var(--gray-500)', whiteSpace: 'nowrap' }}>Sort by</span>
+                <select className="results-sort-select" value={resultsSort} onChange={e => setResultsSort(e.target.value)}
                   style={{ width: 150, flexShrink: 0, padding: '7px 12px', border: '1px solid var(--gray-200)', borderRadius: 'var(--radius)', fontSize: 13, fontFamily: 'inherit', outline: 'none', background: 'var(--surface)', cursor: 'pointer' }}>
                   <option value="recent">Most recent</option>
                   <option value="score">Highest score</option>
