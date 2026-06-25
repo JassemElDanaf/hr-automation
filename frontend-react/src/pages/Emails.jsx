@@ -136,9 +136,10 @@ export default function Emails() {
         showToast(st.message, st.type);
         if (res.data?.status === 'sent' || res.data?.status === 'logged') { setShowCompose(false); loadEmails(); }
       } else {
-        // One-off to anyone → send straight through the SMTP sidecar (branded
-        // HTML, not tied to a candidate so it isn't logged to a candidate's history).
-        const r = await fetch('http://localhost:8901/', {
+        // One-off to anyone → send through the SMTP sidecar (branded HTML, not
+        // tied to a candidate so it isn't logged). Same-origin /smtp/ (nginx
+        // proxy) so it works through a tunnel/phone, not just localhost.
+        const r = await fetch('/smtp/', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ to, subject, body, html_body: buildEmailHtml(body) }),
         });
@@ -204,7 +205,9 @@ export default function Emails() {
     if (!/@/.test(to) || !/\./.test(to.split('@').pop() || '')) { showToast('Enter a valid email address', 'error'); return; }
     setTestSending(true);
     try {
-      const res = await fetch('http://localhost:8901/', {
+      // Same-origin /smtp/ (nginx → SMTP sidecar) so it works on a phone/tunnel,
+      // not just on the HR machine's localhost.
+      const res = await fetch('/smtp/', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           to,
@@ -217,7 +220,7 @@ export default function Emails() {
       else if (j.status === 'logged') showToast('SMTP not configured — nothing was sent. See Setup Guide.', 'error');
       else showToast(`Send failed: ${j.error || 'unknown error'}`, 'error');
     } catch {
-      showToast('Could not reach the SMTP sidecar (port 8901). Is start.sh running?', 'error');
+      showToast('Could not reach the SMTP service. Is the stack running?', 'error');
     } finally { setTestSending(false); }
   }
 
