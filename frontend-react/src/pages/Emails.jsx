@@ -342,7 +342,7 @@ export default function Emails() {
           // Keep current rows on screen while refetching (e.g. toggling "All jobs")
           // — just dim them — instead of swapping the whole table for a spinner,
           // which caused a flash + layout jump. The ↺ icon spins to show activity.
-          <table style={{ width: '100%', tableLayout: 'fixed', opacity: loading ? 0.5 : 1, transition: 'opacity 0.18s ease' }}>
+          <table className="emails-main-table" style={{ width: '100%', tableLayout: 'fixed', opacity: loading ? 0.5 : 1, transition: 'opacity 0.18s ease' }}>
             <thead><tr>
               <th style={{ width: '148px' }}>Date</th>
               <th style={{ width: '138px' }}>Candidate</th>
@@ -354,13 +354,12 @@ export default function Emails() {
             <tbody>
               {filtered.map(e => {
                 const inbound = e.direction === 'inbound';
-                const rowBg = inbound ? { background: '#faf5ff' } : (e.status === 'failed' ? { background: '#fef2f2' } : {});
+                const rowClass = `email-row-clickable${inbound ? ' email-row-inbound' : ''}${!inbound && e.status === 'failed' ? ' email-row-failed' : ''}`;
                 return (
                 <React.Fragment key={e.id}>
                   <tr
-                    className="email-row-clickable"
+                    className={rowClass}
                     onClick={() => setExpandedRow(expandedRow === e.id ? null : e.id)}
-                    style={rowBg}
                   >
                     <td style={{ fontSize: '13px', color: 'var(--gray-500)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{new Date(e.sent_at).toLocaleDateString()} {new Date(e.sent_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</td>
                     <td style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}><strong>{e.candidate_name || '\u2014'}</strong></td>

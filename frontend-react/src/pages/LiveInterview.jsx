@@ -306,7 +306,7 @@ export default function LiveInterview() {
         });
         const j = await r.json();
         let out = (j.response || '').replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
-        out = (out.split('\n').map(s => s.trim()).filter(Boolean).pop() || '').replace(/^["'“”]+|["'“”]+$/g, '').trim();
+        out = (out.split('\n').map(s => s.trim()).filter(Boolean).pop() || '').replace(/^["'""]+|["'""]+$/g, '').trim();
         return out;
       }, { to: `/live-interview?setupCandidate=${candidateId}&setupJob=${jobId}`, hint: candidateName ? `Back to ${candidateName}` : 'Back to Interview Setup' });
       if (!text) { showToast('No question returned — is Ollama running?', 'error'); return; }
@@ -401,6 +401,37 @@ export default function LiveInterview() {
   const customCount = combined.filter(q => q.source === 'custom').length;
   const filledCount = combined.length;
 
+  // Shared banner shown below the selected candidate — on mobile it renders
+  // inside the card grid (right after the selected card); on desktop it renders
+  // below ALL cards so it never interrupts the grid flow.
+  const candidateBannerContent = candidateName ? (
+    <>
+      {interviewedIds.has(String(candidateId)) && (
+        <div style={{ marginBottom: 10, padding: '9px 14px', background: '#fef3c7', border: '1px solid #fde68a', borderRadius: 6, fontSize: 12.5, color: '#92400e' }}>
+          ⚠️ <strong>{candidateName}</strong> already completed an interview — see the <strong>Results</strong> step. Generating a new link will let them interview again.
+        </div>
+      )}
+      <div style={{ padding: '9px 14px', background: '#eff6ff', border: '1px solid #dbeafe', borderRadius: 6, fontSize: 13, color: '#1e40af', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
+        <span>Interviewing <strong>{candidateName}</strong>{jobTitle && <> for <strong>{jobTitle}</strong></>}</span>
+        <button onClick={toggleCv}
+          style={{ fontSize: 12, fontWeight: 600, padding: '4px 12px', borderRadius: 6, border: '1px solid #bfdbfe', background: 'var(--surface)', color: '#2563eb', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>
+          📄 {cvPanel.open ? 'Hide CV' : cvPanel.loading ? 'Loading…' : 'View CV'}
+        </button>
+      </div>
+      {cvPanel.open && cvPanel.url && (
+        <div style={{ marginTop: 10, border: '1px solid var(--gray-200)', borderRadius: 8, overflow: 'hidden' }}>
+          <div style={{ display: 'flex', gap: 14, justifyContent: 'flex-end', padding: '6px 10px', background: 'var(--gray-50)', borderBottom: '1px solid var(--gray-200)' }}>
+            <a href={cvPanel.url} target="_blank" rel="noreferrer" style={{ fontSize: 12, fontWeight: 600, color: '#2563eb', textDecoration: 'none' }}>Open ↗</a>
+            <a href={cvPanel.url} download={`${candidateName || 'candidate'}-CV.pdf`} style={{ fontSize: 12, fontWeight: 600, color: '#2563eb', textDecoration: 'none' }}>⤓ Download</a>
+          </div>
+          {IS_MOBILE
+            ? <PdfPreview url={cvPanel.url} />
+            : <iframe title="Candidate CV" src={cvPanel.url} style={{ width: '100%', height: 600, border: 'none', display: 'block' }} />}
+        </div>
+      )}
+    </>
+  ) : null;
+
   return (
     <div className="container tab-fade-in">
       {/* Numbered stepper (CV-Evaluation style) */}
@@ -424,61 +455,44 @@ export default function LiveInterview() {
           {/* Select Candidate — card grid, mirroring CV Evaluation's Select Job */}
           <div style={cardStyle}>
             {!jobId ? (
-              <EmptyState>Pick a job from the “Current Job” selector at the top.</EmptyState>
+              selectedJob
+                ? <EmptyState>No shortlisted candidates for <strong>{selectedJob.job_title}</strong> yet — add some in the <strong>Shortlist</strong> tab first.</EmptyState>
+                : <EmptyState>Pick a job from the "Current Job" selector at the top.</EmptyState>
             ) : loadingCands ? (
               <EmptyState>Loading candidates…</EmptyState>
             ) : candidates.length === 0 ? (
-              <EmptyState>No shortlisted candidates for this job yet.</EmptyState>
+              <EmptyState>No shortlisted candidates for <strong>{jobTitle}</strong> yet — shortlist some candidates first.</EmptyState>
             ) : (
-              <div className="job-card-grid">
-                {[...candidates]
-                  .sort((a, b) => (interviewedIds.has(String(a.CandidateId)) ? 1 : 0) - (interviewedIds.has(String(b.CandidateId)) ? 1 : 0))
-                  .map(c => {
-                    const done = interviewedIds.has(String(c.CandidateId));
-                    const sel = String(candidateId) === String(c.CandidateId);
-                    return (
-                      <Fragment key={c.CandidateId}>
-                        <div className={`job-card ${sel ? 'selected' : ''}`} onClick={() => handleCandidateChange(String(c.CandidateId))}>
-                          <div className="job-card-title">{c.FullName}</div>
-                          <div className="job-card-meta">
-                            {c.OverallScore != null && <span style={{ fontWeight: 700, color: scoreColor(c.OverallScore) }}>CV {parseFloat(c.OverallScore).toFixed(1)}</span>}
-                            {done && <span className="dot" style={{ color: '#166534', fontWeight: 600 }}>✓ Interviewed</span>}
-                          </div>
-                          {(c.Email || c.email) && <div className="job-card-stats"><span>{c.Email || c.email}</span></div>}
-                        </div>
-                        {/* Selected-candidate context appears RIGHT UNDER its card (spans
-                            the full grid width), above the remaining candidates. */}
-                        {sel && candidateName && (
-                          <div style={{ gridColumn: '1 / -1' }}>
-                            {interviewedIds.has(String(candidateId)) && (
-                              <div style={{ marginBottom: 10, padding: '9px 14px', background: '#fef3c7', border: '1px solid #fde68a', borderRadius: 6, fontSize: 12.5, color: '#92400e' }}>
-                                ⚠️ <strong>{candidateName}</strong> already completed an interview — see the <strong>Results</strong> step. Generating a new link will let them interview again.
-                              </div>
-                            )}
-                            <div style={{ padding: '9px 14px', background: '#eff6ff', border: '1px solid #dbeafe', borderRadius: 6, fontSize: 13, color: '#1e40af', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
-                              <span>Interviewing <strong>{candidateName}</strong>{jobTitle && <> for <strong>{jobTitle}</strong></>}</span>
-                              <button onClick={toggleCv}
-                                style={{ fontSize: 12, fontWeight: 600, padding: '4px 12px', borderRadius: 6, border: '1px solid #bfdbfe', background: 'var(--surface)', color: '#2563eb', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>
-                                📄 {cvPanel.open ? 'Hide CV' : cvPanel.loading ? 'Loading…' : 'View CV'}
-                              </button>
+              <>
+                <div className="job-card-grid">
+                  {[...candidates]
+                    .sort((a, b) => (interviewedIds.has(String(a.CandidateId)) ? 1 : 0) - (interviewedIds.has(String(b.CandidateId)) ? 1 : 0))
+                    .map(c => {
+                      const done = interviewedIds.has(String(c.CandidateId));
+                      const sel = String(candidateId) === String(c.CandidateId);
+                      return (
+                        <Fragment key={c.CandidateId}>
+                          <div className={`job-card ${sel ? 'selected' : ''}`} onClick={() => handleCandidateChange(String(c.CandidateId))}>
+                            <div className="job-card-title">{c.FullName}</div>
+                            <div className="job-card-meta">
+                              {c.OverallScore != null && <span style={{ fontWeight: 700, color: scoreColor(c.OverallScore) }}>CV {parseFloat(c.OverallScore).toFixed(1)}</span>}
+                              {done && <span className="dot" style={{ color: '#166534', fontWeight: 600 }}>✓ Interviewed</span>}
                             </div>
-                            {cvPanel.open && cvPanel.url && (
-                              <div style={{ marginTop: 10, border: '1px solid var(--gray-200)', borderRadius: 8, overflow: 'hidden' }}>
-                                <div style={{ display: 'flex', gap: 14, justifyContent: 'flex-end', padding: '6px 10px', background: 'var(--gray-50)', borderBottom: '1px solid var(--gray-200)' }}>
-                                  <a href={cvPanel.url} target="_blank" rel="noreferrer" style={{ fontSize: 12, fontWeight: 600, color: '#2563eb', textDecoration: 'none' }}>Open ↗</a>
-                                  <a href={cvPanel.url} download={`${candidateName || 'candidate'}-CV.pdf`} style={{ fontSize: 12, fontWeight: 600, color: '#2563eb', textDecoration: 'none' }}>⤓ Download</a>
-                                </div>
-                                {IS_MOBILE
-                                  ? <PdfPreview url={cvPanel.url} />
-                                  : <iframe title="Candidate CV" src={cvPanel.url} style={{ width: '100%', height: 600, border: 'none', display: 'block' }} />}
-                              </div>
-                            )}
+                            {(c.Email || c.email) && <div className="job-card-stats"><span>{c.Email || c.email}</span></div>}
                           </div>
-                        )}
-                      </Fragment>
-                    );
-                  })}
-              </div>
+                          {/* Mobile: show context banner right after the selected card */}
+                          {sel && candidateName && IS_MOBILE && (
+                            <div style={{ gridColumn: '1 / -1' }}>{candidateBannerContent}</div>
+                          )}
+                        </Fragment>
+                      );
+                    })}
+                </div>
+                {/* Desktop: show context banner below ALL cards — never interrupts the grid */}
+                {candidateId && candidateName && !IS_MOBILE && (
+                  <div style={{ marginTop: 12 }}>{candidateBannerContent}</div>
+                )}
+              </>
             )}
           </div>
 

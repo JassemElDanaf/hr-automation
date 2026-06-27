@@ -1123,6 +1123,15 @@ textarea { resize: vertical; min-height: 120px; }
 .email-row-clickable:hover td {
   background: var(--gray-50) !important;
 }
+/* Inbound / failed row tints — theme-aware (no hardcoded light colours) */
+.email-row-inbound td { background: #faf5ff; }
+.email-row-failed td  { background: #fef2f2; }
+.email-row-inbound:hover td { background: #f3e8ff !important; }
+.email-row-failed:hover td  { background: #fee2e2 !important; }
+html[data-theme="dark"] .email-row-inbound td { background: rgba(124, 58, 237, 0.12); }
+html[data-theme="dark"] .email-row-failed td  { background: rgba(220, 38, 38, 0.12); }
+html[data-theme="dark"] .email-row-inbound:hover td { background: rgba(124, 58, 237, 0.2) !important; }
+html[data-theme="dark"] .email-row-failed:hover td  { background: rgba(220, 38, 38, 0.2) !important; }
 .email-row-toggle {
   font-size: 13px;
   color: var(--gray-500);
@@ -1452,6 +1461,21 @@ textarea { resize: vertical; min-height: 120px; }
   .int-card-scores { gap: 6px !important; flex: 1 1 100%; justify-content: space-between; margin-top: 4px; }
   .int-card-scores > div { min-width: 0 !important; }
   .int-card-scores > div:last-child { padding-left: 8px !important; }
+
+  /* Emails table: hide Date/Candidate/Type on mobile — show only Recipient,
+     Subject, Status (3 columns that fit 390px without horizontal scroll). */
+  .emails-main-table { min-width: 0 !important; }
+  .emails-main-table th:nth-child(1),
+  .emails-main-table td:nth-child(1),
+  .emails-main-table th:nth-child(2),
+  .emails-main-table td:nth-child(2),
+  .emails-main-table th:nth-child(3),
+  .emails-main-table td:nth-child(3) { display: none !important; }
+
+  /* Users table: hide "Last login" column on mobile — User/Role/Status/Actions fit. */
+  .users-table { min-width: 0 !important; }
+  .users-table th:nth-child(4),
+  .users-table td:nth-child(4) { display: none !important; }
 }
 
 /* ── Live Interview ──────────────────────────────────────────── */
