@@ -499,7 +499,12 @@ export default function LiveInterview() {
           {candidateName && (
             <div className="wizard-footer">
               <span className="step-info">Step 1 of 3</span>
-              <button ref={continueAnchorRef} className="btn btn-primary" onClick={() => setMainTab('questions')}>Continue to Interview Questions →</button>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                <button className="btn btn-secondary" onClick={toggleCv} style={{ whiteSpace: 'nowrap' }}>
+                  📄 {cvPanel.open ? 'Hide CV' : cvPanel.loading ? 'Loading…' : 'View CV'}
+                </button>
+                <button ref={continueAnchorRef} className="btn btn-primary" onClick={() => setMainTab('questions')}>Continue to Interview Questions →</button>
+              </div>
             </div>
           )}
           <StickyContinue
