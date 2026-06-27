@@ -62,6 +62,7 @@ export default function LiveInterview() {
   const [loadingJobs, setLoadingJobs]     = useState(true);
   const [loadingCands, setLoadingCands]   = useState(false);
   const continueAnchorRef                 = useRef(null); // floating Continue hides when this inline one is in view
+  const [footerVisible, setFooterVisible] = useState(false);
 
   const [qMode, setQMode]                 = useState('from-bank');
   const [customQs, setCustomQs]           = useState([]);
@@ -147,6 +148,19 @@ export default function LiveInterview() {
     const match = jobs.find(j => String(j.JobId) === String(selectedJob.id));
     if (match) handleJobChange(String(match.JobId));
   }, [selectedJob, jobs]);
+
+  // Track whether the inline footer (with the Continue button) is visible, so
+  // both sticky floating buttons hide when the user has scrolled to the bottom.
+  useEffect(() => {
+    const el = continueAnchorRef?.current;
+    if (!el) { setFooterVisible(false); return; }
+    const obs = new IntersectionObserver(
+      ([entry]) => setFooterVisible(entry.isIntersecting),
+      { threshold: 0 },
+    );
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, [continueAnchorRef, candidateName]);
 
   // Restore the last-worked candidate when returning to this tab (navigating
   // away and back). Skips if a candidate is already selected or a deep-link
@@ -499,12 +513,7 @@ export default function LiveInterview() {
           {candidateName && (
             <div className="wizard-footer">
               <span className="step-info">Step 1 of 3</span>
-              <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-                <button className="btn btn-secondary" onClick={toggleCv} style={{ whiteSpace: 'nowrap' }}>
-                  📄 {cvPanel.open ? 'Hide CV' : cvPanel.loading ? 'Loading…' : 'View CV'}
-                </button>
-                <button ref={continueAnchorRef} className="btn btn-primary" onClick={() => setMainTab('questions')}>Continue to Interview Questions →</button>
-              </div>
+              <button ref={continueAnchorRef} className="btn btn-primary" onClick={() => setMainTab('questions')}>Continue to Interview Questions →</button>
             </div>
           )}
           <StickyContinue
@@ -513,6 +522,16 @@ export default function LiveInterview() {
             label="Continue to Interview Questions"
             onClick={() => setMainTab('questions')}
           />
+          {/* Sticky View CV button — floats above Continue, hides when footer scrolls into view */}
+          {candidateName && !footerVisible && (
+            <button
+              type="button"
+              className="sticky-view-cv"
+              onClick={toggleCv}
+            >
+              📄 {cvPanel.open ? 'Hide CV' : cvPanel.loading ? 'Loading…' : 'View CV'}
+            </button>
+          )}
         </div>
       )}
 

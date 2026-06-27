@@ -1216,6 +1216,17 @@ html[data-theme="dark"] .email-row-failed:hover td  { background: rgba(220, 38, 
 .sticky-continue:hover { transform: translateY(-1px); box-shadow: 0 10px 28px rgba(37,99,235,0.55); }
 .sticky-continue:disabled { opacity: 0.5; cursor: default; box-shadow: none; }
 
+.sticky-view-cv {
+  position: fixed; right: 22px; bottom: 80px; z-index: 250;
+  padding: 10px 18px; border-radius: 26px;
+  background: var(--surface, #fff); color: #2563eb;
+  border: 2px solid #bfdbfe; font-family: inherit; font-size: 13.5px; font-weight: 700;
+  cursor: pointer; box-shadow: 0 4px 16px rgba(37,99,235,0.18);
+  display: inline-flex; align-items: center; gap: 4px;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+.sticky-view-cv:hover { transform: translateY(-1px); box-shadow: 0 8px 22px rgba(37,99,235,0.28); }
+
 @media (max-width: 768px) {
   /* Always leave the page a hair taller than the viewport so iOS gives the
      elastic rubber-band bounce at the top/bottom even on short pages — a tactile
@@ -1224,6 +1235,7 @@ html[data-theme="dark"] .email-row-failed:hover td  { background: rgba(220, 38, 
   body { min-height: calc(100dvh + 2px); }
 
   .sticky-continue { right: 14px; bottom: 14px; padding: 11px 18px; font-size: 13.5px; }
+  .sticky-view-cv { right: 14px; bottom: 72px; padding: 9px 16px; font-size: 13px; }
   .header { padding: 10px 14px; gap: 8px; }
   .container { padding: 16px; }
   .stats { flex-direction: column; }
