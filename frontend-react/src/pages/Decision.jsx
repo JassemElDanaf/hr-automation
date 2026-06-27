@@ -6,6 +6,7 @@ import { useUI } from '../state/uiState';
 import Loading from '../components/common/Loading';
 import EmptyState from '../components/common/EmptyState';
 import Select from '../components/common/Select';
+import ShowSelect from '../components/common/ShowSelect';
 import { sendEmailRequest, getOfferTemplate, getRejectionTemplate, getEmailStatus } from '../services/email';
 import { buildInterviewReportPdf } from '../utils/pdfReport';
 import { scoreColor } from '../utils/helpers';
@@ -64,6 +65,15 @@ export default function Decision() {
   const [sortBy, setSortBy] = useState('recent'); // recent | combined | cv | interview | name
   const [navbarSlot, setNavbarSlot] = useState(null); // nav-row portal target for the score blend
   useEffect(() => { setNavbarSlot(document.getElementById('navbar-slot')); }, []);
+  // On a phone the nav-row slot is hidden, so the score blend renders inline at
+  // the top of the Decision content instead of being portaled into the nav row.
+  const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' && window.matchMedia('(max-width: 768px)').matches);
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 768px)');
+    const on = () => setIsMobile(mq.matches);
+    mq.addEventListener('change', on);
+    return () => mq.removeEventListener('change', on);
+  }, []);
   const [statusFilter, setStatusFilter] = useState('all');  // Decision list status filter pills
   const [pendingFocus, setPendingFocus] = useState(null);   // candidate_id to expand+scroll once rows load
   const focusAppliedRef = useRef(false);
@@ -316,58 +326,74 @@ HR Department`;
     { key: 'hired', label: 'Hired' },
     { key: 'rejected', label: 'Rejected' },
   ];
-  // A row matches the active filter. 'sent-hm' is special: it keys off whether a
-  // recommendation email was sent to the hiring manager, not the pipeline status.
+  // "Sent to HM" is a derived, ACTIVE-processing stage: a recommendation email was
+  // sent AND the candidate hasn't reached a terminal verdict. Once hired/rejected
+  // they leave this stage and live only in Hired/Rejected (no double-listing).
+  const isSentToHM = r => sentToHM.has(r.candidate_id) && r.status !== 'rejected' && r.status !== 'hired';
+  // A row matches the active filter. 'sent-hm' is special (see above).
   const matchesFilter = r => statusFilter === 'all'
-    || (statusFilter === 'sent-hm' ? sentToHM.has(r.candidate_id) : r.status === statusFilter);
+    || (statusFilter === 'sent-hm' ? isSentToHM(r) : r.status === statusFilter);
 
   return (
     <div className="container tab-fade-in">
-      {/* Score blend — portalled into the nav-row's empty right space (Decision-only). */}
-      {jobId && rows.length > 0 && navbarSlot && createPortal(
-        <div style={{ display: 'flex', alignItems: 'center', gap: 9 }} title="Drag toward CV or Interview; snaps to a clean 50/50">
-          <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--gray-500)', textTransform: 'uppercase', letterSpacing: '0.04em', whiteSpace: 'nowrap' }}>Score</span>
-          <input
-            type="range" min="0" max="100" step="5" value={sliderVal}
-            className="weight-slider"
-            style={{ width: 130, background: `linear-gradient(to right, #2563eb 0%, #2563eb ${sliderVal}%, var(--gray-200) ${sliderVal}%, var(--gray-200) 100%)` }}
-            onChange={e => {
-              let v = Number(e.target.value);
-              if (Math.abs(v - 50) <= 5) v = 50;
-              setSliderVal(v);
-              clearTimeout(weightCommitRef.current);
-              weightCommitRef.current = setTimeout(() => setWeight(v), 120);
-            }}
-            onPointerUp={e => { let v = Number(e.currentTarget.value); if (Math.abs(v - 50) <= 5) v = 50; setSliderVal(v); clearTimeout(weightCommitRef.current); setWeight(v); }}
-            onKeyUp={e => { clearTimeout(weightCommitRef.current); setWeight(Number(e.currentTarget.value)); }}
-          />
-          <span style={{ fontSize: 12, whiteSpace: 'nowrap' }}>CV <strong style={{ color: '#2563eb' }}>{100 - sliderVal}</strong> : <strong style={{ color: '#16a34a' }}>{sliderVal}</strong> Interview</span>
-        </div>,
-        navbarSlot
-      )}
+      {/* Score blend — drag toward CV or Interview (snaps to a clean 50/50). On
+          desktop it's portaled into the nav-row's empty right space; on a phone
+          (where that slot is hidden) it renders inline at the top of the page. */}
+      {jobId && rows.length > 0 && (() => {
+        const blend = (
+          <div className="dec-blend" style={{ display: 'flex', alignItems: 'center', gap: 9 }} title="Drag toward CV or Interview; snaps to a clean 50/50">
+            <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--gray-500)', textTransform: 'uppercase', letterSpacing: '0.04em', whiteSpace: 'nowrap' }}>Score</span>
+            <input
+              type="range" min="0" max="100" step="5" value={sliderVal}
+              className="weight-slider"
+              style={{ width: 130, background: `linear-gradient(to right, #2563eb 0%, #2563eb ${sliderVal}%, var(--gray-200) ${sliderVal}%, var(--gray-200) 100%)` }}
+              onChange={e => {
+                let v = Number(e.target.value);
+                if (Math.abs(v - 50) <= 5) v = 50;
+                setSliderVal(v);
+                clearTimeout(weightCommitRef.current);
+                weightCommitRef.current = setTimeout(() => setWeight(v), 120);
+              }}
+              onPointerUp={e => { let v = Number(e.currentTarget.value); if (Math.abs(v - 50) <= 5) v = 50; setSliderVal(v); clearTimeout(weightCommitRef.current); setWeight(v); }}
+              onKeyUp={e => { clearTimeout(weightCommitRef.current); setWeight(Number(e.currentTarget.value)); }}
+            />
+            <span style={{ fontSize: 12, whiteSpace: 'nowrap' }}>CV <strong style={{ color: '#2563eb' }}>{100 - sliderVal}</strong> : <strong style={{ color: '#16a34a' }}>{sliderVal}</strong> Interview</span>
+          </div>
+        );
+        if (isMobile) {
+          return <div className="dec-blend-mobile" style={{ display: 'flex', justifyContent: 'center', padding: '10px 12px', marginBottom: 12, background: 'var(--surface)', border: '1px solid var(--gray-200)', borderRadius: 10 }}>{blend}</div>;
+        }
+        return navbarSlot ? createPortal(blend, navbarSlot) : null;
+      })()}
 
       {jobId && rows.length > 0 && (
         <>
           {/* Top bar like Shortlist: filter pills + sort + refresh */}
           <div className="results-filter-bar" style={{ marginBottom: 14 }}>
             <span className="results-filter-label">Show:</span>
-            {STATUS_FILTERS.map(f => {
-              const n = f.key === 'all' ? ranked.length
-                : f.key === 'sent-hm' ? ranked.filter(r => sentToHM.has(r.candidate_id)).length
-                : ranked.filter(r => r.status === f.key).length;
-              return (
-                <button key={f.key} className={`results-filter-btn${statusFilter === f.key ? ' active' : ''}`} onClick={() => setStatusFilter(f.key)}>
-                  {f.label}
-                  <span className="results-filter-count">{n}</span>
-                </button>
-              );
-            })}
-            <div style={{ marginLeft: 'auto', display: 'flex', gap: 10, alignItems: 'center' }}>
-              <span style={{ fontSize: 12.5, color: 'var(--gray-500)', whiteSpace: 'nowrap' }}>Sort by</span>
+            {(() => {
+              const decFilters = STATUS_FILTERS.map(f => ({
+                key: f.key, label: f.label,
+                count: f.key === 'all' ? ranked.length
+                  : f.key === 'sent-hm' ? ranked.filter(isSentToHM).length
+                  : ranked.filter(r => r.status === f.key).length,
+              }));
+              return (<>
+                <ShowSelect filters={decFilters} value={statusFilter} onChange={setStatusFilter} />
+                {decFilters.map(f => (
+                  <button key={f.key} className={`results-filter-btn${statusFilter === f.key ? ' active' : ''}`} onClick={() => setStatusFilter(f.key)}>
+                    {f.label}
+                    <span className="results-filter-count">{f.count}</span>
+                  </button>
+                ))}
+              </>);
+            })()}
+            <div className="results-sort" style={{ marginLeft: 'auto', display: 'flex', gap: 10, alignItems: 'center' }}>
+              <span className="results-sort-label" style={{ fontSize: 12.5, color: 'var(--gray-500)', whiteSpace: 'nowrap' }}>Sort by</span>
               <select
+                className="results-sort-select"
                 value={sortBy}
                 onChange={e => setSortBy(e.target.value)}
-                style={{ width: 150, flexShrink: 0, padding: '7px 12px', border: '1px solid var(--gray-200)', borderRadius: 'var(--radius)', fontSize: 13, fontFamily: 'inherit', outline: 'none', background: 'var(--surface)', cursor: 'pointer' }}
               >
                 <option value="recent">Most recent</option>
                 <option value="combined">Combined score</option>
@@ -375,7 +401,7 @@ HR Department`;
                 <option value="interview">Interview score</option>
                 <option value="name">Name (A–Z)</option>
               </select>
-              <button onClick={loadData} title="Refresh" className="btn btn-sm btn-secondary" style={{ flexShrink: 0 }}>↻</button>
+              <button onClick={loadData} title="Refresh" className="btn btn-sm btn-secondary results-refresh" style={{ flexShrink: 0 }}>↻</button>
             </div>
           </div>
         </>
@@ -408,14 +434,14 @@ HR Department`;
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                       <strong style={{ fontSize: 15, color: 'var(--gray-900)' }}>{r.candidate_name}</strong>
                       <StatusBadge status={r.status} />
+                      {!decided && isSent && (
+                        <span style={{ fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', padding: '3px 9px', borderRadius: 10, background: '#ede9fe', color: '#5b21b6' }}>✉ Sent to HM</span>
+                      )}
                     </div>
                     <div style={{ fontSize: 12, color: 'var(--gray-400)', marginTop: 2 }}>{r.email || '—'}</div>
                   </div>
                   {/* Buttons sit just left of the scores; name fills the left. */}
                   <div onClick={e => e.stopPropagation()} style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 6, flexShrink: 0, flexWrap: 'wrap' }}>
-                    {!decided && isSent && (
-                      <span style={{ fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', padding: '3px 9px', borderRadius: 10, background: '#ede9fe', color: '#5b21b6' }}>✉ Sent to HM</span>
-                    )}
                     {decided ? (
                       <>
                         <span style={{ fontSize: 13, fontWeight: 700, color: r.status === 'hired' ? '#166534' : '#991b1b' }}>
@@ -438,7 +464,7 @@ HR Department`;
                       </>
                     )}
                   </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 20, flexShrink: 0 }}>
+                  <div className="dec-score-row" style={{ display: 'flex', alignItems: 'center', gap: 20, flexShrink: 0 }}>
                     <div style={{ textAlign: 'center', minWidth: 42 }}>
                       <ScoreCell value={r._cv} /><div style={COL_LABEL}>CV</div>
                     </div>
@@ -455,14 +481,14 @@ HR Department`;
                       <div style={{ ...COL_LABEL, color: '#2563eb' }}>Combined</div>
                     </div>
                   </div>
-                  <span style={{ color: 'var(--gray-400)', fontSize: 13, flexShrink: 0, transition: 'transform 0.25s ease', transform: isOpen ? 'rotate(180deg)' : 'none' }}>▾</span>
+                  <span className="dec-score-caret" style={{ color: 'var(--gray-400)', fontSize: 13, flexShrink: 0, transition: 'transform 0.25s ease', transform: isOpen ? 'rotate(180deg)' : 'none' }}>▾</span>
                 </div>
 
                 {/* Smooth-expanding detail (grid-rows 0fr→1fr animates height) */}
                 <div style={{ display: 'grid', gridTemplateRows: isOpen ? '1fr' : '0fr', transition: 'grid-template-rows 0.28s ease' }}>
                   <div style={{ overflow: 'hidden' }}>
                     <div style={{ borderTop: '1px solid var(--gray-100)', background: 'var(--surface-2)', padding: '18px' }}>
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+                      <div className="expand-2col" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
                       {/* CV side */}
                       <div style={{ background: 'var(--surface)', border: '1px solid var(--gray-200)', borderRadius: 10, padding: 16 }}>
                         <div style={{ fontSize: 11, fontWeight: 700, color: '#2563eb', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 12 }}>CV Evaluation</div>

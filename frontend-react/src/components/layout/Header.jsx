@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
+import { BRAND_NAME, BRAND_TAGLINE } from '../../config/brand';
 import { useSelectedJob } from '../../state/selectedJob';
 import { useAuth } from '../../state/auth';
 import { useTheme } from '../../state/theme';
@@ -24,10 +26,25 @@ export default function Header() {
   const [pwOpen, setPwOpen] = useState(false);
   const ref = useRef(null);
   const menuRef = useRef(null);
+  // On a phone (≤768px) the job picker is portaled into the nav row (next to the
+  // hamburger). On desktop it renders inline in the header — desktop unchanged.
+  const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' && window.matchMedia('(max-width: 768px)').matches);
+  const [slotEl, setSlotEl] = useState(null);
 
   useEffect(() => {
     apiGet('/job-openings').then(r => setJobs(r.data || [])).catch(() => {});
   }, [jobsNonce]);
+
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 768px)');
+    const onChange = () => setIsMobile(mq.matches);
+    onChange();
+    mq.addEventListener('change', onChange);
+    return () => mq.removeEventListener('change', onChange);
+  }, []);
+
+  // Resolve the nav-row portal target once it's mounted (NavTabs renders after Header).
+  useEffect(() => { setSlotEl(document.getElementById('nav-job-slot')); }, [isMobile]);
 
   // Close the dropdown on outside click / Escape.
   useEffect(() => {
@@ -56,14 +73,8 @@ export default function Header() {
     setOpen(false);
   }
 
-  return (
-    <div className="header">
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-        <img src="/logo.jpg" alt="Diyar" style={{ height: 30, width: 'auto', borderRadius: 6, display: 'block' }} />
-        <h1><span>Diyar</span> HR</h1>
-      </div>
-
-      <div className="global-job-picker" ref={ref}>
+  const jobPicker = (
+    <div className="global-job-picker" ref={ref}>
         <button
           type="button"
           className={`global-job-badge${selectedJob ? '' : ' empty'}`}
@@ -130,7 +141,21 @@ export default function Header() {
             </div>
           );
         })()}
+    </div>
+  );
+
+  return (
+    <div className="header">
+      <div
+        onClick={() => navigate('/')}
+        title="Go to dashboard"
+        style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', userSelect: 'none', WebkitUserSelect: 'none', WebkitTapHighlightColor: 'transparent' }}
+      >
+        <img src="/logo.jpg" alt={BRAND_NAME} style={{ height: 30, width: 'auto', borderRadius: 6, display: 'block' }} />
+        <h1><span>{BRAND_NAME.split(' ')[0]}</span>{BRAND_NAME.includes(' ') ? ' ' + BRAND_NAME.split(' ').slice(1).join(' ') : ''}</h1>
       </div>
+
+      {isMobile && slotEl ? createPortal(jobPicker, slotEl) : jobPicker}
 
       {user && <div style={{ marginLeft: 'auto' }}><NotificationBell /></div>}
 
@@ -145,15 +170,15 @@ export default function Header() {
               style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '5px 10px 5px 6px', borderRadius: 22, border: '1px solid var(--gray-200)', background: menuOpen ? 'var(--gray-50)' : 'var(--surface)', cursor: 'pointer', fontFamily: 'inherit' }}
             >
               <span style={{ width: 30, height: 30, borderRadius: '50%', background: '#1e40af', color: '#fff', fontSize: 12, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{initials}</span>
-              <span style={{ textAlign: 'left', lineHeight: 1.2 }}>
+              <span className="header-acct-name" style={{ textAlign: 'left', lineHeight: 1.2 }}>
                 <span style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--gray-800)' }}>{user.full_name || user.email}</span>
                 <span style={{ display: 'block', fontSize: 10.5, fontWeight: 600, color: rcolor }}>{rlabel}</span>
               </span>
-              <span style={{ fontSize: 16, color: 'var(--gray-400)', lineHeight: 1 }}>⚙</span>
+              <span className="header-acct-cog" style={{ fontSize: 16, color: 'var(--gray-400)', lineHeight: 1 }}>⚙</span>
             </button>
 
             {menuOpen && (
-              <div style={{ position: 'absolute', right: 0, top: 'calc(100% + 6px)', zIndex: 300, width: 244, background: 'var(--surface)', border: '1px solid var(--gray-200)', borderRadius: 12, boxShadow: '0 10px 34px rgba(0,0,0,0.14)', overflow: 'hidden' }}>
+              <div className="menu-reveal" style={{ position: 'absolute', right: 0, top: 'calc(100% + 6px)', zIndex: 300, width: 244, background: 'var(--surface)', border: '1px solid var(--gray-200)', borderRadius: 12, boxShadow: '0 10px 34px rgba(0,0,0,0.14)', overflow: 'hidden' }}>
                 {/* Account header */}
                 <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--gray-100)', display: 'flex', gap: 11, alignItems: 'center' }}>
                   <span style={{ width: 36, height: 36, borderRadius: '50%', background: '#1e40af', color: '#fff', fontSize: 13, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{initials}</span>
@@ -186,20 +211,7 @@ export default function Header() {
                       <span style={menuIcon}>👥</span> Users &amp; Access
                     </button>
                   )}
-                  {isAdmin && (
-                    <button onClick={() => { setMenuOpen(false); navigate('/email-templates'); }} style={menuItem}
-                      onMouseEnter={e => e.currentTarget.style.background = 'var(--gray-50)'}
-                      onMouseLeave={e => e.currentTarget.style.background = 'none'}>
-                      <span style={menuIcon}>✉</span> Email templates
-                    </button>
-                  )}
-                  {isAdmin && (
-                    <button onClick={() => { setMenuOpen(false); navigate('/audit-log'); }} style={menuItem}
-                      onMouseEnter={e => e.currentTarget.style.background = 'var(--gray-50)'}
-                      onMouseLeave={e => e.currentTarget.style.background = 'none'}>
-                      <span style={menuIcon}>🧾</span> Audit log
-                    </button>
-                  )}
+                  {/* Email templates + Audit log moved to the Emails tab's ⚙ menu. */}
                   <button onClick={() => { setMenuOpen(false); logout(); }} style={{ ...menuItem, color: '#b91c1c' }}
                     onMouseEnter={e => e.currentTarget.style.background = '#fef2f2'}
                     onMouseLeave={e => e.currentTarget.style.background = 'none'}>
@@ -209,8 +221,8 @@ export default function Header() {
 
                 {/* Info footer */}
                 <div style={{ padding: '9px 16px', borderTop: '1px solid var(--gray-100)', background: 'var(--gray-50)' }}>
-                  <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--gray-500)' }}>Diyar HR</div>
-                  <div style={{ fontSize: 10.5, color: 'var(--gray-400)', marginTop: 1 }}>Local-first hiring workspace</div>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--gray-500)' }}>{BRAND_NAME}</div>
+                  <div style={{ fontSize: 10.5, color: 'var(--gray-400)', marginTop: 1 }}>{BRAND_TAGLINE}</div>
                 </div>
               </div>
             )}

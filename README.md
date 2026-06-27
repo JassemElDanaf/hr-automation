@@ -63,15 +63,109 @@ Full runbook: [`docs/runbook.md`](docs/runbook.md).
 
 ---
 
+## Docker Deployment (full stack in containers)
+
+This runs the **entire** app — Postgres, n8n, the four Python sidecars, the React
+frontend, and (optionally) Ollama — as Docker containers. Use this for a clean
+machine or a server. `start.sh` above is only for native Windows dev.
+
+### Prerequisites
+
+1. **Docker Desktop** (WSL2 backend on Windows).
+2. **WSL2 memory ≥ 6 GB.** Ollama's `qwen3:4b` needs ~4 GB to run; the default
+   WSL2 cap will OOM-kill it (`llama-server … signal: killed`, evaluations come
+   back 0/0/0). Create/edit `C:\Users\<you>\.wslconfig`:
+   ```ini
+   [wsl2]
+   memory=6GB
+   swap=4GB
+   ```
+   then `wsl --shutdown` and reopen Docker Desktop. (Skip this if you use **host**
+   Ollama instead of the Docker one — see Ollama options below.)
+3. **`cp .env.example .env`** and edit it (see below).
+
+### Configure `.env`
+
+- **Postgres** — defaults work as-is for local use.
+- **Gmail (SMTP + IMAP)** — required for real email send/receive. **There is no way
+  around providing a credential**: Gmail mandates either an *App Password* (what we
+  use) or full OAuth2. App Passwords are free but you must generate one yourself —
+  enable 2-Step Verification, then create one at
+  <https://myaccount.google.com/apppasswords>, and put the 16-char value in
+  `SMTP_PASS` + `IMAP_PASS`. Without it the app still runs, but emails are
+  **logged only** (rows land in `email_log` with `status='logged'`, nothing is sent).
+  App Passwords can be revoked/expire — if sends start failing with `535
+  BadCredentials`, generate a new one and recreate the sidecars.
+- **Ollama** — runs **in Docker by default** (`OLLAMA_DOCKER_HOST=ollama`), fully
+  self-contained. Model files are stored on the drive you set in `OLLAMA_DATA_DIR`
+  (keep it off the system drive, e.g. `D:/DiyarDocker/ollama`). If you'd rather use
+  an Ollama already installed on the **host**, set `OLLAMA_DOCKER_HOST=host.docker.internal`
+  and stop the Docker one (it would otherwise conflict on port 11434).
+
+### Start
+
+```bash
+docker compose up -d                                # brings up everything, incl. Ollama
+docker compose exec ollama ollama pull qwen3:4b     # one-time: ~2.5 GB → OLLAMA_DATA_DIR
+```
+
+> If the model pull stalls on `registry.ollama.ai` and you already have qwen3:4b
+> from a host Ollama install, copy `<host-store>/manifests` + the referenced
+> `blobs/*` into `OLLAMA_DATA_DIR/models/` and `docker compose restart ollama`.
+
+First boot: Postgres runs `scripts/docker-pg-init.sh` (schema + all migrations);
+n8n's entrypoint imports/publishes the 6 workflows and seeds the Postgres
+credential. App is at <http://localhost:3001>. Default login (seeded on first run,
+printed to `logs/auth_server.log`): **admin@diyarme.com / ChangeMe123!** — change it
+after first login.
+
+### Stopping & lifecycle
+
+| Action | Command |
+|--------|---------|
+| **Shut down (daily)** | `docker compose stop` — resume with `docker compose start` |
+| Stop + remove containers (data kept) | `docker compose down` — restart with `docker compose up -d` |
+| Free the WSL2 RAM too | quit Docker Desktop from the tray, or `wsl --shutdown` |
+| View a service's logs | `docker logs hr-automation-<service>-1` |
+| Rebuild after editing frontend/sidecar code | `docker compose up -d --build <service>` |
+| Apply a changed `.env` value | `docker compose up -d --force-recreate <service>` |
+
+### n8n editor (optional)
+
+The HR app never needs it, but to view the workflows visually go to
+<http://localhost:5678> and log in (n8n 2.x always requires an account — the
+"no-login" mode was removed). Owner login: **admin@diyarme.com / ChangeMe123!**.
+Editor edits are overwritten on the next restart (workflows re-import from
+`workflows/*.json`) — edit the JSON for durable changes.
+
+### Data & volumes (avoid accidental loss)
+
+| Data | Volume | Survives `stop`/`down`/`--build`? |
+|------|--------|-----------------------------------|
+| Postgres (all hiring data) | `postgres_data` | ✅ |
+| n8n workflows/creds | `n8n_data` | ✅ |
+| Interview recordings | `recordings` | ✅ |
+| Ollama models | bind mount `OLLAMA_DATA_DIR` (your D: path) | ✅ |
+
+⚠️ **`docker compose down -v` deletes the named volumes** — all candidates, PDFs,
+and interview sessions gone. Plain `stop`, `down`, `up --build`, and
+`--force-recreate` are all safe.
+
+---
+
 ## Project Structure
 
 ```
 hr-automation/
   claude.md                      Project memory (read before making changes)
   README.md                      This file
-  .env.example                   Copy to .env, fill in SMTP/IMAP credentials
-  launch.bat                     Windows double-click launcher (calls start.sh via Git Bash)
-  start.sh                       One-command startup for all services
+  .env.example                   Copy to .env, fill in SMTP/IMAP creds + Ollama mode
+  docker-compose.yml             Full-stack Docker (postgres, n8n, ollama, sidecars, frontend)
+  Dockerfile.frontend            Multi-stage React build → nginx
+  Dockerfile.sidecars            python:3.11-slim + supervisord (4 sidecars)
+  nginx.conf                     SPA fallback + proxies (/webhook /recording /auth)
+  launch.bat                     Windows double-click launcher for LOCAL dev (calls start.sh)
+  start.sh                       LOCAL dev startup (native processes + hr-postgres container)
   frontend-react/                React + Vite app (the only frontend)
   workflows/
     phase1-job-opening/          n8n workflow: Phase 2 - Job Openings
@@ -82,18 +176,23 @@ hr-automation/
     phase6-live-interview/       n8n workflow: Phase 6 - Live Interview
   db/
     schema.sql                   Initial schema (job_openings)
-    migrations/                  001 → 013 (candidates, evaluations, criteria_sets,
-                                 shortlist, email_log, smtp columns, criteria_items JSONB,
-                                 cv file storage, recommendation email type,
-                                 email direction/threading, interview_questions,
-                                 interview_sessions, question_bank)
+    migrations/                  001 → 017 (candidates, evaluations, criteria_sets,
+                                 shortlist, email_log, smtp, criteria_items, cv file storage,
+                                 recommendation email type, email direction/threading,
+                                 interview_questions, interview_sessions, interview_recording,
+                                 question_bank, candidate_prepared_questions, hm-review,
+                                 users-auth, templates-audit)
     seed.sql                     Sample data
   scripts/
     smtp_server.py               SMTP relay sidecar (port 8901)
     imap_server.py               IMAP polling sidecar (port 8902)
     recording_server.py          Interview recording server (port 8903)
-    setup-db.sh                  Creates hr-postgres container + applies schema
-    seed-db.sh                   Inserts sample data
+    auth_server.py               App login + RBAC sidecar (port 8904)
+    docker-pg-init.sh            Docker: applies schema + all migrations on first DB init
+    n8n-entrypoint.sh            Docker: patches/imports/publishes workflows, seeds credential
+    supervisord.conf             Docker: runs the 4 sidecars in one container
+    export-live-workflows.py     Dump live n8n workflows back to repo JSON (after live patches)
+    setup-db.sh / seed-db.sh     LOCAL dev: create hr-postgres + seed
     import-workflows.sh          Bulk import n8n JSON
   docs/
     architecture.md              System diagram + component breakdown

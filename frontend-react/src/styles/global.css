@@ -85,7 +85,13 @@ html {
      the cursor doesn't jump) when a tall page that scrolls is followed by a
      short one that doesn't. Applies app-wide — there's no sidebar to anchor to. */
   scrollbar-gutter: stable;
+  /* Kill the grey/blue flash mobile browsers paint on every tap (the hamburger,
+     pills, cards, etc.) before the action fires — feels janky on a phone. */
+  -webkit-tap-highlight-color: transparent;
 }
+/* Belt-and-suspenders: some elements reset their own tap highlight, so clear it
+   on everything interactive too. */
+* { -webkit-tap-highlight-color: transparent; }
 
 body {
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
@@ -156,6 +162,21 @@ body {
   animation: gjmIn 0.12s ease both;
 }
 @keyframes gjmIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }
+
+/* Smooth menu reveal (inspired by the job-picker) — applied to the hamburger
+   drop-down, the notification panel and the account/settings menu so they all
+   expand with the same polished fade + slide + subtle scale instead of popping
+   in. transform-origin:top makes them grow downward from their anchor. */
+@keyframes menuReveal {
+  from { opacity: 0; transform: translateY(-8px) scale(0.97); }
+  to   { opacity: 1; transform: translateY(0)    scale(1); }
+}
+.menu-reveal,
+.notif-panel,
+.nav-tab-list.open {
+  animation: menuReveal 0.2s cubic-bezier(0.2, 0.85, 0.3, 1) both;
+  transform-origin: top center;
+}
 .global-job-menu-head { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--gray-400); padding: 8px 10px 6px; }
 .global-job-menu-subhead { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--gray-400); padding: 8px 10px 4px; margin-top: 4px; border-top: 1px solid var(--gray-100); }
 .global-job-menu-empty { padding: 12px 10px; font-size: 13px; color: var(--gray-400); }
@@ -211,6 +232,13 @@ body {
 }
 .nav-tab:hover { color: var(--gray-700); }
 .nav-tab.active { color: var(--primary); border-bottom-color: var(--primary); }
+
+/* Mobile nav scaffolding — DESKTOP DEFAULTS (unchanged behaviour): the tab list
+   is the normal horizontal row and the hamburger is hidden. The @media (max-width:768px)
+   block further down flips these on phones; desktop never sees these mobile styles. */
+.nav-tab-list { display: flex; }
+.nav-hamburger { display: none; }
+.nav-job-slot { display: none; }   /* mobile-only; the @media block reveals it */
 
 /* Layout */
 .container { max-width: 1200px; margin: 0 auto; padding: 16px 32px; }
@@ -346,7 +374,7 @@ tr.row-duplicate:hover td { background: #fef3c7; }
 
 /* Results filter bar */
 .results-filter-bar {
-  display: flex; align-items: center; gap: 8px;
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
   margin-bottom: 20px; padding: 10px 16px;
   background: var(--gray-50); border: 1px solid var(--gray-200);
   border-radius: var(--radius);
@@ -355,6 +383,18 @@ tr.row-duplicate:hover td { background: #fef3c7; }
   font-size: 12px; font-weight: 700; color: var(--gray-400);
   text-transform: uppercase; letter-spacing: 0.5px; margin-right: 6px;
 }
+/* The "Show:" dropdown replaces the pills on mobile only (see @media block). */
+.results-show-select { display: none; }
+/* Sort dropdown — styled via CSS (not inline) so the mobile @media block can fully
+   control it (custom arrow, width). Desktop look matches the old inline style. */
+.results-sort-select {
+  width: 150px; flex-shrink: 0; padding: 7px 12px; font-size: 13px;
+  border: 1px solid var(--gray-200); border-radius: var(--radius);
+  font-family: inherit; outline: none; background-color: var(--surface); cursor: pointer;
+}
+/* Run-Evaluation button shows icon + text on desktop; collapses to icon-only on
+   mobile (see @media) so it fits on the Show/Sort line. */
+.results-runeval .re-icon { margin-right: 5px; }
 .results-filter-btn {
   display: inline-flex; align-items: center; gap: 6px;
   padding: 6px 16px; border-radius: 999px; border: 1px solid var(--gray-200);
@@ -1083,6 +1123,15 @@ textarea { resize: vertical; min-height: 120px; }
 .email-row-clickable:hover td {
   background: var(--gray-50) !important;
 }
+/* Inbound / failed row tints — theme-aware (no hardcoded light colours) */
+.email-row-inbound td { background: #faf5ff; }
+.email-row-failed td  { background: #fef2f2; }
+.email-row-inbound:hover td { background: #f3e8ff !important; }
+.email-row-failed:hover td  { background: #fee2e2 !important; }
+html[data-theme="dark"] .email-row-inbound td { background: rgba(124, 58, 237, 0.12); }
+html[data-theme="dark"] .email-row-failed td  { background: rgba(220, 38, 38, 0.12); }
+html[data-theme="dark"] .email-row-inbound:hover td { background: rgba(124, 58, 237, 0.2) !important; }
+html[data-theme="dark"] .email-row-failed:hover td  { background: rgba(220, 38, 38, 0.2) !important; }
 .email-row-toggle {
   font-size: 13px;
   color: var(--gray-500);
@@ -1152,17 +1201,293 @@ textarea { resize: vertical; min-height: 120px; }
   border-radius: var(--radius);
 }
 
+/* Floating "Continue" button — pinned to the lower-right of the viewport so the
+   user can advance to the next step from anywhere on a long page (no scrolling
+   to the bottom). Used on the Interview Select-Candidate step + CV-eval steps. */
+.sticky-continue {
+  position: fixed; right: 22px; bottom: 22px; z-index: 250;
+  padding: 12px 22px; border-radius: 26px;
+  background: var(--primary, #2563eb); color: #fff;
+  border: none; font-family: inherit; font-size: 14px; font-weight: 700;
+  cursor: pointer; box-shadow: 0 8px 24px rgba(37,99,235,0.42);
+  display: inline-flex; align-items: center; gap: 4px;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+.sticky-continue:hover { transform: translateY(-1px); box-shadow: 0 10px 28px rgba(37,99,235,0.55); }
+.sticky-continue:disabled { opacity: 0.5; cursor: default; box-shadow: none; }
+
+.sticky-view-cv {
+  position: fixed; right: 22px; bottom: 80px; z-index: 250;
+  padding: 10px 18px; border-radius: 26px;
+  background: var(--surface, #fff); color: #2563eb;
+  border: 2px solid #bfdbfe; font-family: inherit; font-size: 13.5px; font-weight: 700;
+  cursor: pointer; box-shadow: 0 4px 16px rgba(37,99,235,0.18);
+  display: inline-flex; align-items: center; gap: 4px;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+.sticky-view-cv:hover { transform: translateY(-1px); box-shadow: 0 8px 22px rgba(37,99,235,0.28); }
+
 @media (max-width: 768px) {
-  .header { padding: 12px 16px; }
-  .nav-tabs { padding: 0 16px; }
+  /* Always leave the page a hair taller than the viewport so iOS gives the
+     elastic rubber-band bounce at the top/bottom even on short pages — a tactile
+     "you've reached the end" cue, like the horizontal sliders snap at their ends. */
+  html { -webkit-overflow-scrolling: touch; }
+  body { min-height: calc(100dvh + 2px); }
+
+  .sticky-continue { right: 14px; bottom: 14px; padding: 11px 18px; font-size: 13.5px; }
+  .sticky-view-cv { right: 14px; bottom: 72px; padding: 9px 16px; font-size: 13px; }
+  .header { padding: 10px 14px; gap: 8px; }
   .container { padding: 16px; }
   .stats { flex-direction: column; }
   .form-row { flex-direction: column; }
   .detail-grid { grid-template-columns: 1fr; }
   .modal { width: 100%; margin: 0 8px 40px; }
-  .wizard-steps { flex-wrap: wrap; gap: 8px; }
-  .wizard-connector { width: 30px; }
+  /* Wizard steps → one clean horizontally-scrollable row (not a messy 2×2 wrap),
+     starting at step 1 (flex-start) rather than centered. */
+  .wizard-steps { flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch; justify-content: flex-start; gap: 6px; padding-bottom: 6px; }
+  .wizard-step { white-space: nowrap; flex-shrink: 0; }
+  .wizard-connector { width: 20px; flex-shrink: 0; }
   .job-card-grid { grid-template-columns: 1fr; }
+
+  /* ── Mobile nav: hamburger + vertical drop-down ───────────────────── */
+  .nav-tabs { padding: 0; position: relative; display: flex; align-items: center; }
+  .nav-hamburger {
+    display: flex; align-items: center; gap: 10px;
+    flex: 0 0 auto; padding: 12px 16px;
+    background: none; border: none; cursor: pointer;
+    font-family: inherit; font-size: 15px; font-weight: 700; color: var(--gray-900);
+    text-align: left;
+  }
+  /* Job picker lives here on mobile (portaled from the header), pushed to the
+     right edge of the hamburger row. */
+  .nav-job-slot { display: flex; align-items: center; margin-left: auto; padding-right: 12px; min-width: 0; }
+  .nav-job-slot .global-job-picker { min-width: 0; }
+  .nav-job-slot .global-job-badge { max-width: 52vw; padding: 6px 12px; }
+  .nav-hamburger-icon { font-size: 18px; line-height: 1; color: var(--primary); width: 20px; }
+  .nav-hamburger-current { color: var(--gray-900); }
+  .nav-tab-list {
+    display: none;            /* hidden until the hamburger opens it */
+    position: absolute; top: 100%; left: 0; right: 0; z-index: 60;
+    flex-direction: column;
+    background: var(--surface);
+    border-bottom: 1px solid var(--gray-200);
+    box-shadow: 0 10px 24px rgba(0,0,0,0.14);
+  }
+  .nav-tab-list.open { display: flex; }
+  .nav-tab {
+    padding: 14px 18px; width: 100%; text-align: left;
+    border-bottom: 1px solid var(--gray-100);
+    border-left: 3px solid transparent;
+  }
+  .nav-tab.active {
+    border-bottom-color: var(--gray-100);
+    border-left-color: var(--primary);
+    background: var(--tint-primary, rgba(37,99,235,0.06));
+  }
+  /* Page toolbar widgets portaled into the nav row would crowd the hamburger. */
+  #navbar-slot { display: none !important; }
+
+  /* ── Header: shrink the job picker + account chip so it fits a phone ── */
+  .header { padding: 10px 12px; gap: 6px; flex-wrap: nowrap; }
+  .header h1 { font-size: 17px; white-space: nowrap; }
+  .header-acct-name { display: none; }   /* account chip = avatar + gear only */
+  .header-acct-cog { display: none; }    /* drop the gear too — tap avatar opens menu */
+  .global-job-picker { min-width: 0; }   /* allow the badge to shrink */
+  .global-job-badge { max-width: 46vw; padding: 6px 12px; }
+  .global-job-badge:not(.empty) .global-job-label { display: none; } /* hide "Current Job:" when a job is set — show just the title */
+  .global-job-badge .global-job-dept { display: none; }              /* hide department too */
+  .global-job-badge .global-job-label,
+  .global-job-badge .global-job-title { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 38vw; }
+  /* Dropdown menu: default `right:0` pushes it off the LEFT edge on a phone.
+     Pin it to the viewport so it's fully visible. */
+  .global-job-menu { position: fixed; left: 10px; right: 10px; top: 58px; min-width: 0; max-width: none; }
+
+  /* ── Content: stop wide tables/cards from forcing horizontal scroll ── */
+  .table-wrap, .table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  table { min-width: 560px; }                 /* keep tables readable; the wrap scrolls */
+  .li-form-grid { grid-template-columns: 1fr; }
+  .li-feature-grid { grid-template-columns: 1fr; }
+  .li-room { height: auto; }                  /* interview room stacks instead of fixed-height */
+  .li-panels { grid-template-columns: 1fr; }
+
+  /* Dashboard inline 2-col grids → single column (inline styles need !important) */
+  .dash-grid { grid-template-columns: 1fr !important; }
+  .dash-filter-select { min-width: 0 !important; max-width: 100%; }
+
+  /* Dashboard mobile section order (top→bottom): doughnut circle, hiring funnel,
+     recent activity, top jobs, then the stat cards LAST. The two .dash-grid
+     wrappers collapse (display:contents) so their cards become direct flex items
+     of the page and can be freely reordered. Desktop keeps the paired grids. */
+  .dash-page { display: flex; flex-direction: column; gap: 16px; }
+  .dash-page .dash-grid { display: contents !important; }
+  .dash-page .stats { margin-bottom: 0 !important; }
+  .dash-chart   { order: 1; }
+  .dash-funnel  { order: 2; }
+  .dash-activity{ order: 3; }
+  .dash-topjobs { order: 4; }
+  .dash-stats   { order: 5; }
+
+  /* Filter bars (Decision / CV-eval / Shortlist): on a phone the row of pills is
+     replaced by a single "Show ▾" dropdown on the left, with "Sort by ▾" on the
+     right — one tidy line instead of sliding pills. */
+  /* NEVER wrap — Show (left) + Sort by (right) stay on ONE line on every phone
+     width (incl. small S24/360px); the two dropdowns shrink to fit. */
+  .results-filter-bar { flex-wrap: nowrap; padding: 8px; gap: 5px; align-items: center; }
+  .results-filter-btn { display: none !important; }       /* pills → dropdown on mobile */
+  .results-filter-label { margin-right: 0; flex-shrink: 0; white-space: nowrap; font-size: 10.5px; }
+  /* Strip the bloated native select chrome so both selects size predictably and
+     BOTH get the same custom arrow (the old inline `background` shorthand on the
+     sort select used to wipe it — now styled purely via CSS). */
+  .results-show-select, .results-sort-select {
+    -webkit-appearance: none; appearance: none;
+    font-size: 12px; padding: 6px 22px 6px 9px;
+    border: 1px solid var(--gray-200); border-radius: var(--radius);
+    font-family: inherit; background-color: var(--surface); color: var(--gray-800); cursor: pointer;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath fill='%23888' d='M0 0l5 6 5-6z'/%3E%3C/svg%3E");
+    background-repeat: no-repeat; background-position: right 8px center;
+  }
+  .results-show-select { display: inline-block; flex: 1 1 auto; min-width: 56px; max-width: 150px; width: auto; }
+  .results-sort { margin-left: auto; gap: 4px !important; flex: 0 1 auto; min-width: 0; }
+  .results-sort-label { font-size: 11px; flex-shrink: 0; }
+  .results-sort-select { flex: 0 1 auto; width: 108px !important; min-width: 56px; }
+  .results-refresh { display: none !important; }   /* drop manual refresh on mobile to keep one line */
+  /* Run-Evaluation collapses to just its icon (✨ / ✓ / ⏳) so Show + Sort stay on
+     one line; the blue ✓ means "all evaluated". */
+  .results-runeval { padding: 6px 9px !important; flex-shrink: 0; }
+  .results-runeval .re-text { display: none; }
+  .results-runeval .re-icon { margin-right: 0; font-size: 13px; }
+
+  /* Emails: All-jobs + status dropdown + ⚙/+/↺ all on ONE line; the desktop pill
+     tabs (All/Sent/Failed/Inbound) are replaced by the dropdown on a phone. */
+  .emails-toolbar-top { flex-wrap: nowrap !important; gap: 6px !important; }
+  .emails-toolbar-top .results-show-select { flex: 0 1 auto; width: auto; min-width: 72px; max-width: 116px; }
+  .emails-status-tabs { display: none !important; }
+
+  /* Card action buttons a touch smaller so groups (Send to HM / Hire / Reject) fit
+     narrow cards without clipping. */
+  .btn-sm { padding: 5px 10px; font-size: 12px; }
+
+  /* Expanded candidate cards (Decision / Shortlist): the CV | Interview panels
+     sit SIDE BY SIDE in a horizontal slider on a phone (swipe between them) so the
+     interview numbers/letters keep their full width instead of squishing. A peek
+     of the next panel + scroll-snap hint that it slides. */
+  .expand-2col {
+    display: flex !important; gap: 12px;
+    overflow-x: auto; -webkit-overflow-scrolling: touch;
+    scroll-snap-type: x mandatory; padding-bottom: 6px;
+  }
+  .expand-2col > div { flex: 0 0 88%; scroll-snap-align: start; }
+  .int-score-grid { grid-template-columns: repeat(3, 1fr) !important; }
+
+  /* Notification panel: pin to the viewport so it's never clipped at the edge
+     (the inline right:0 / top set it off-screen on a phone — override both). */
+  .notif-panel { position: fixed !important; left: 10px !important; right: 10px !important; top: 56px !important; width: auto !important; }
+  /* The sliding AI-activity pill overflows the header on a phone — hide it; the
+     spinner ring on the bell + the panel's live row convey the activity instead. */
+  .notif-pill { display: none !important; }
+  /* Pin the transient preview toast to the viewport top instead of floating it to
+     the left of the bell (where it ran off-screen on a phone). */
+  .notif-preview { position: fixed !important; left: 10px !important; right: 10px !important; top: 56px !important; width: auto !important; transform: none !important; }
+
+  /* Question Bank picker (Interview Setup): search goes full-width; the category
+     pills (All · Behavioural · Technical · Salary · …) slide horizontally like the
+     other filter rows instead of wrapping onto several lines. */
+  .qbank-filterbar > input { flex: 1 1 100% !important; min-width: 0 !important; }
+  .qbank-cats { flex-wrap: nowrap !important; overflow-x: auto; -webkit-overflow-scrolling: touch; width: 100%; padding-bottom: 4px; }
+  .qbank-cats > button { flex-shrink: 0; white-space: nowrap; }
+
+  /* Interview question builder: the AI-Generate controls + Write-My-Own row use
+     fixed widths that overflow a phone. Stack/wrap them so nothing spills out. */
+  .int-ai-grid { grid-template-columns: 1fr !important; }
+  .int-ai-grid .form-group > div { flex-wrap: wrap; }   /* "Include types" checkboxes wrap */
+  .int-custom-row { flex-wrap: wrap; }
+  .int-custom-row > input { flex: 1 1 100% !important; }
+  .int-custom-row > select { width: auto !important; flex: 1 1 auto; min-width: 0; }
+  /* "Generate from topic": let the input shrink + the button drop below it. */
+  .int-topic-row { flex-wrap: wrap; }
+  .int-topic-row > input { flex: 1 1 100% !important; min-width: 0 !important; }
+  .int-topic-row > button { flex: 0 0 auto; }
+
+  /* Bank question rows: stack the category label ABOVE the question text (instead
+     of a narrow 110px column on the right) so the question gets the full width. */
+  .qbank-row { grid-template-columns: 40px 1fr !important; grid-template-areas: "chk cat" "chk q" !important; align-items: start; }
+  .qbank-chk { grid-area: chk; padding-top: 10px; }
+  .qbank-cat { grid-area: cat; padding-bottom: 0 !important; }
+  .qbank-q { grid-area: q; padding-top: 4px !important; }
+
+  /* Question Bank MANAGER rows: same idea — category pill above the question,
+     hide the secondary Job-Type/Used columns + the column header on a phone. */
+  .qbank-mgr-head { display: none !important; }
+  .qbank-mgr-row { grid-template-columns: 1fr auto !important; grid-template-areas: "cat actions" "q q" !important; row-gap: 6px; align-items: start !important; }
+  .qbank-mgr-cat { grid-area: cat; }
+  .qbank-mgr-actions { grid-area: actions; }
+  .qbank-mgr-q { grid-area: q; padding-right: 0 !important; }
+  .qbank-mgr-job, .qbank-mgr-used { display: none !important; }
+
+  /* Shortlist cards: lay the action buttons (Set Up Interview / Send Invite /
+     Reject etc.) as a clean full-width, left-aligned row directly under the name
+     + email — same as the Decision tab. The CV score sits on its own line with
+     the expand caret pushed to the far right (Decision-style balance). */
+  .sl-action-row { flex: 1 1 100% !important; justify-content: flex-start !important; order: 2; }
+  .score-strip { gap: 9px !important; }
+
+  /* Shortlist + CV-eval results: split the Skills · Experience · Education · Overall
+     row into 4 EQUAL columns spanning the full width (symmetrical spacing), with
+     the expand caret at the far right. */
+  .sl-score-cell, .cv-score-cell { order: 3; flex: 1 1 auto !important; gap: 2px !important; }
+  .sl-score-cell .score-strip-dim,
+  .sl-score-cell .score-strip-overall,
+  .cv-score-cell .score-strip-dim,
+  .cv-score-cell .score-strip-overall { flex: 1 1 0 !important; min-width: 0 !important; }
+  .sl-score-cell .score-strip-overall,
+  .cv-score-cell .score-strip-overall { border-left: none !important; padding-left: 0 !important; }
+  .sl-score-caret, .cv-score-caret { order: 4; padding-left: 6px; align-self: center; flex: 0 0 auto; }
+
+  /* Decision: the CV·Interview·Combined score row + caret sit together, right-
+     aligned, so the Combined score is beside the expand arrow (same as Shortlist). */
+  .dec-score-row { margin-left: auto; gap: 14px !important; }
+  .dec-score-caret { padding-left: 6px; }
+
+  /* Interview Results: split the Comm · Technical · Confidence · Overall row into
+     4 EQUAL columns spanning the full card width (symmetrical spacing), with the
+     expand caret at the far right. The wrapper is display:contents on desktop
+     (invisible) and a full-width flex row on mobile. */
+  .int-card-scorewrap { display: flex !important; align-items: center; gap: 4px; flex: 1 1 100%; }
+  .int-card-scores { flex: 1 1 auto !important; gap: 2px !important; }
+  .int-card-scores > div { flex: 1 1 0 !important; min-width: 0 !important; }
+  .int-card-scores > div:last-child { border-left: none !important; padding-left: 0 !important; }
+  .int-card-caret { align-self: center; flex: 0 0 auto; }
+
+  /* Interview Results search/sort row: the fixed 240px search + 160px sort
+     overflow a phone. Drop the redundant "Search by" label (the placeholder
+     already says it), let the search box flex to fill, and shrink the sort. */
+  .int-results-controls { gap: 8px; }
+  .int-results-controls .int-ctrl-label:not(.int-sort-label) { display: none; }
+  .int-search-input { width: auto !important; flex: 1 1 auto; min-width: 0; }
+  .int-sort-label { margin-left: 0 !important; }
+  .int-sort-select { width: auto !important; min-width: 124px; }
+
+  /* Collapsed Results card score strip (Communication/Technical/Confidence/
+     Overall): the 18px gaps + min-widths clip "Overall" off a phone. Span the
+     full card width on its own line and space the columns evenly so all 4 fit. */
+  .int-card-scores { gap: 6px !important; flex: 1 1 100%; justify-content: space-between; margin-top: 4px; }
+  .int-card-scores > div { min-width: 0 !important; }
+  .int-card-scores > div:last-child { padding-left: 8px !important; }
+
+  /* Emails table: hide Date/Candidate/Type on mobile — show only Recipient,
+     Subject, Status (3 columns that fit 390px without horizontal scroll). */
+  .emails-main-table { min-width: 0 !important; }
+  .emails-main-table th:nth-child(1),
+  .emails-main-table td:nth-child(1),
+  .emails-main-table th:nth-child(2),
+  .emails-main-table td:nth-child(2),
+  .emails-main-table th:nth-child(3),
+  .emails-main-table td:nth-child(3) { display: none !important; }
+
+  /* Users table: hide "Last login" column on mobile — User/Role/Status/Actions fit. */
+  .users-table { min-width: 0 !important; }
+  .users-table th:nth-child(4),
+  .users-table td:nth-child(4) { display: none !important; }
 }
 
 /* ── Live Interview ──────────────────────────────────────────── */

@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useNotifications } from '../../state/notifications';
 import { useEvalStatus } from '../../state/evalStatus';
-import { useServiceStatuses, SERVICES } from '../../state/serviceStatus';
+import { useServiceStatuses, SERVICES, setServiceChecksPaused } from '../../state/serviceStatus';
 
 // Header notification centre. Combines:
 //  • a live "AI is running" row driven by evalStatus (Ollama activity),
@@ -18,6 +18,18 @@ export default function NotificationBell() {
   const [expanded, setExpanded] = useState(false);   // pill slid out of the bell?
   const [displayItem, setDisplayItem] = useState(null); // retained during slide-back
   const [preview, setPreview] = useState(null);       // transient toast beside the bell
+  // The AI-activity pill slides out beside the bell; cap its width on a phone so
+  // it can't overflow the header (a 460px pill on a 390px screen broke the layout).
+  const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' && window.matchMedia('(max-width: 768px)').matches);
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 768px)');
+    const on = () => setIsMobile(mq.matches);
+    mq.addEventListener('change', on);
+    return () => mq.removeEventListener('change', on);
+  }, []);
+  const pillMax = isMobile
+    ? Math.round(Math.min(170, (typeof window !== 'undefined' ? window.innerWidth : 390) * 0.42))
+    : 460;
   const seenTopRef = useRef(undefined);
   const ref = useRef(null);
 
@@ -34,26 +46,18 @@ export default function NotificationBell() {
     }
   }, [items]);
 
-  // Notify when a service drops or recovers (skip the initial 'checking' baseline).
-  const prevStates = useRef({});
+  // NOTE: we deliberately do NOT fire "X went offline" / "X is back online"
+  // notifications. Local health checks time out transiently whenever the machine
+  // is under load (esp. while Ollama runs a ~90s CV evaluation), which produced
+  // bursts of false down/up alerts. The live status pills + the bell's offline
+  // count already surface real outages — no toast spam needed.
+
+  // Pause "offline" detection entirely while an AI task runs (Ollama pins the
+  // machine, so the health checks slow down — that's expected, not an outage).
   useEffect(() => {
-    SERVICES.forEach(svc => {
-      const cur = statuses[svc.key]?.state;
-      const prev = prevStates.current[svc.key];
-      if (cur && cur !== 'checking') {
-        if (prev && prev !== 'checking' && prev !== cur) {
-          if (cur === 'offline') {
-            addNotification({ type: 'service', dedupeKey: `svc-down-${svc.key}-${Date.now()}`, icon: '⚠️',
-              title: `${svc.label} went offline`, body: svc.offlineHint, nav: null });
-          } else if (cur === 'online') {
-            addNotification({ type: 'service', dedupeKey: `svc-up-${svc.key}-${Date.now()}`, icon: '✅',
-              title: `${svc.label} is back online`, body: 'Service recovered', nav: null });
-          }
-        }
-        prevStates.current[svc.key] = cur;
-      }
-    });
-  }, [statuses, addNotification]);
+    const busy = (evalState && evalState.phase === 'running') || (aiTask && aiTask.phase === 'running');
+    setServiceChecksPaused(busy);
+  }, [evalState, aiTask]);
 
   // Log AI tasks into the notification history when they finish, so there's a
   // record after the live row disappears. Keyed so each run logs once.
@@ -127,6 +131,7 @@ export default function NotificationBell() {
           arrives, then disappears (settling into the panel). Click to act on it. */}
       {preview && (
         <div
+          className="notif-preview"
           onClick={() => { go(preview.nav); setPreview(null); }}
           style={{ position: 'absolute', right: 'calc(100% + 10px)', top: '50%', transform: 'translateY(-50%)',
             width: 270, display: 'flex', gap: 10, alignItems: 'flex-start', padding: '10px 13px',
@@ -142,13 +147,16 @@ export default function NotificationBell() {
             style={{ background: 'none', border: 'none', color: 'var(--gray-300)', cursor: 'pointer', fontSize: 15, lineHeight: 1, flexShrink: 0, padding: 0 }}>×</button>
         </div>
       )}
-      {/* Sliding status pill — emerges from the bell while a task runs. */}
+      {/* Sliding status pill — emerges from the bell while a task runs. Hidden on
+          mobile (CSS .notif-pill) where it would overflow the header; there the
+          spinner ring on the bell + the panel's live row convey AI activity. */}
       <button type="button" onClick={toggle} title="Open notifications"
+        className="notif-pill"
         aria-hidden={!expanded} tabIndex={expanded ? 0 : -1}
         style={{ display: 'flex', alignItems: 'center', gap: 9, height: 40, overflow: 'hidden', whiteSpace: 'nowrap',
           borderRadius: 22, border: `1px solid ${expanded ? 'var(--gray-200)' : 'transparent'}`,
           background: open ? 'var(--gray-50)' : 'var(--surface)', cursor: 'pointer', fontFamily: 'inherit',
-          maxWidth: expanded ? 460 : 0, opacity: expanded ? 1 : 0,
+          maxWidth: expanded ? pillMax : 0, opacity: expanded ? 1 : 0,
           paddingLeft: expanded ? 11 : 0, paddingRight: expanded ? 14 : 0,
           marginRight: expanded ? 9 : 0, transform: expanded ? 'translateX(0)' : 'translateX(14px)',
           pointerEvents: expanded ? 'auto' : 'none',
@@ -168,6 +176,13 @@ export default function NotificationBell() {
           background: open ? 'var(--gray-50)' : 'var(--surface)', cursor: 'pointer', fontSize: 18, lineHeight: 1,
           display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
         🔔
+        {/* AI-activity spinner ring around the bell (replaces the pill on mobile;
+            harmless on desktop where the pill also shows). */}
+        {live.length > 0 && (
+          <span aria-hidden style={{ position: 'absolute', inset: -3, borderRadius: '50%',
+            border: '2px solid transparent', borderTopColor: '#7c3aed', borderRightColor: '#7c3aed',
+            animation: 'spin 0.8s linear infinite', pointerEvents: 'none' }} />
+        )}
         {totalBadge > 0 && (
           <span style={{ position: 'absolute', top: -3, right: -3, minWidth: 18, height: 18, padding: '0 5px',
             borderRadius: 9, background: '#dc2626', color: '#fff', fontSize: 11, fontWeight: 800,
@@ -178,7 +193,7 @@ export default function NotificationBell() {
       </button>
 
       {open && (
-        <div style={{ position: 'absolute', right: 0, top: 'calc(100% + 6px)', zIndex: 320, width: 320,
+        <div className="notif-panel" style={{ position: 'absolute', right: 0, top: 'calc(100% + 6px)', zIndex: 320, width: 320,
           background: 'var(--surface)', border: '1px solid var(--gray-200)', borderRadius: 12,
           boxShadow: '0 10px 34px rgba(0,0,0,0.16)', overflow: 'hidden' }}>
           <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--gray-100)', display: 'flex', alignItems: 'center' }}>

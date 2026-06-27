@@ -1,10 +1,33 @@
 # Docker Usage
 
-> **Project status:** Proof of concept, pre-finalization. The PostgreSQL container below is the only service that runs under Docker today; other services may be containerized during finalization. See `report/report.pdf` for the stakeholder progress report.
+> **Two modes (as of 2026-06-23):**
+> 1. **Full Docker Compose stack** (recommended) — the *entire* app runs in containers: postgres, n8n, ollama, sidecars, frontend. See the next section. This is the primary deployment.
+> 2. **Local Windows dev** (`start.sh`/`launch.bat`) — only PostgreSQL runs as a Docker container (`hr-postgres`); everything else runs as native processes. The single-container instructions further down describe *this* mode. Use it for native iteration on Windows.
 
-## TL;DR
+## Full Docker Compose stack
 
-The only Docker container in this project is **PostgreSQL**. There is **no `docker-compose.yml`** — the container is created and managed with plain `docker` commands. Docker Desktop must be running for the container to start.
+`docker-compose.yml` runs all five services. Authoritative reference: **README → "Docker Deployment"** and **CLAUDE.md §3**. Quick reference:
+
+```bash
+cp .env.example .env           # edit: SMTP/IMAP creds, OLLAMA_DOCKER_HOST, OLLAMA_DATA_DIR (D:)
+docker compose up -d           # starts postgres + n8n + ollama + sidecars + frontend
+docker compose exec ollama ollama pull qwen3:4b   # one-time model pull (→ OLLAMA_DATA_DIR on D:)
+# app: http://localhost:3001   n8n editor: http://localhost:5678 (admin@diyarme.com / ChangeMe123!)
+
+docker compose stop            # shut down (resume: docker compose start)
+docker compose down            # stop + remove containers (data kept)
+# ⚠️ NEVER `docker compose down -v` — deletes postgres_data/n8n_data/recordings (all data)
+```
+
+- **Ollama is always-on** (no profile flag). Models bind-mount to `OLLAMA_DATA_DIR` (keep on D:). Needs **WSL2 memory ≥ 6 GB** (`~/.wslconfig`) or `llama-server` OOM-kills → 0/0/0 evals.
+- **n8n** auto-imports/publishes the 6 workflows and seeds the postgres credential (encrypted with n8n's `Salted__`/MD5/base64 cipher; `N8N_ENCRYPTION_KEY` pinned in compose).
+- **Volumes:** `postgres_data`, `n8n_data`, `recordings` + the Ollama bind mount — all survive `stop`/`down`/`--build`. Only `down -v` destroys them.
+
+---
+
+## Local-dev mode: the single PostgreSQL container
+
+The rest of this doc covers **mode 2** — the `hr-postgres` container used by `start.sh`/`launch.bat`. Docker Desktop must be running for it to start.
 
 ---
 
@@ -162,6 +185,6 @@ Docker Desktop will now be limited to 4 GB of RAM. This is the current setting o
 
 ---
 
-## Why no `docker-compose.yml`?
+## History note
 
-This project has a single container and a single orchestration step. `docker run` is self-documenting at that scale, and avoids pulling in Compose as another dependency. If more services move to Docker (e.g., n8n container or Ollama container), converting to Compose would be reasonable.
+This doc originally said "there is no `docker-compose.yml`" because only PostgreSQL was containerized. **That changed on 2026-06-23** — the whole stack (postgres, n8n, ollama, sidecars, frontend) now runs under `docker-compose.yml` (see the "Full Docker Compose stack" section at the top). The single-`docker run` `hr-postgres` container documented above is retained only for the local Windows dev mode (`start.sh`).

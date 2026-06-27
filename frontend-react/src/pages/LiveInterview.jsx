@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, Fragment } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { apiGet, apiPost } from '../services/api';
 import { useEvalStatus } from '../state/evalStatus';
@@ -6,9 +6,14 @@ import { useUI } from '../state/uiState';
 import { useSelectedJob } from '../state/selectedJob';
 import { scoreColor } from '../utils/helpers';
 import EmptyState from '../components/common/EmptyState';
+import StickyContinue from '../components/common/StickyContinue';
+import PdfPreview from '../components/common/PdfPreview';
 import AIInterviews from './AIInterviews';
 
-const CAT_LABELS = { hr: 'Behavioural', technical: 'Technical', salary: 'Salary', iqama: 'Iqama / Visa', notice: 'Notice Period', location: 'Location' };
+// Phones can't render a PDF in an <iframe> — use the canvas preview there.
+const IS_MOBILE = typeof window !== 'undefined' && window.matchMedia('(max-width: 768px)').matches;
+
+const CAT_LABELS = { hr: 'Behavioural', technical: 'Technical', salary: 'Salary', iqama: 'Visa', notice: 'Notice Period', location: 'Location' };
 const CAT_COLOR  = { hr: '#2563eb', technical: '#16a34a', salary: '#d97706', iqama: '#7c3aed', notice: '#dc2626', location: '#0891b2' };
 const CAT_BG     = { hr: '#eff6ff', technical: '#f0fdf4', salary: '#fffbeb', iqama: '#f5f3ff', notice: '#fef2f2', location: '#ecfeff' };
 
@@ -56,6 +61,8 @@ export default function LiveInterview() {
   const [candidateName, setCandidateName] = useState('');
   const [loadingJobs, setLoadingJobs]     = useState(true);
   const [loadingCands, setLoadingCands]   = useState(false);
+  const continueAnchorRef                 = useRef(null); // floating Continue hides when this inline one is in view
+  const [footerVisible, setFooterVisible] = useState(false);
 
   const [qMode, setQMode]                 = useState('from-bank');
   const [customQs, setCustomQs]           = useState([]);
@@ -141,6 +148,19 @@ export default function LiveInterview() {
     const match = jobs.find(j => String(j.JobId) === String(selectedJob.id));
     if (match) handleJobChange(String(match.JobId));
   }, [selectedJob, jobs]);
+
+  // Track whether the inline footer (with the Continue button) is visible, so
+  // both sticky floating buttons hide when the user has scrolled to the bottom.
+  useEffect(() => {
+    const el = continueAnchorRef?.current;
+    if (!el) { setFooterVisible(false); return; }
+    const obs = new IntersectionObserver(
+      ([entry]) => setFooterVisible(entry.isIntersecting),
+      { threshold: 0 },
+    );
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, [continueAnchorRef, candidateName]);
 
   // Restore the last-worked candidate when returning to this tab (navigating
   // away and back). Skips if a candidate is already selected or a deep-link
@@ -300,7 +320,7 @@ export default function LiveInterview() {
         });
         const j = await r.json();
         let out = (j.response || '').replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
-        out = (out.split('\n').map(s => s.trim()).filter(Boolean).pop() || '').replace(/^["'“”]+|["'“”]+$/g, '').trim();
+        out = (out.split('\n').map(s => s.trim()).filter(Boolean).pop() || '').replace(/^["'""]+|["'""]+$/g, '').trim();
         return out;
       }, { to: `/live-interview?setupCandidate=${candidateId}&setupJob=${jobId}`, hint: candidateName ? `Back to ${candidateName}` : 'Back to Interview Setup' });
       if (!text) { showToast('No question returned — is Ollama running?', 'error'); return; }
@@ -395,6 +415,37 @@ export default function LiveInterview() {
   const customCount = combined.filter(q => q.source === 'custom').length;
   const filledCount = combined.length;
 
+  // Shared banner shown below the selected candidate — on mobile it renders
+  // inside the card grid (right after the selected card); on desktop it renders
+  // below ALL cards so it never interrupts the grid flow.
+  const candidateBannerContent = candidateName ? (
+    <>
+      {interviewedIds.has(String(candidateId)) && (
+        <div style={{ marginBottom: 10, padding: '9px 14px', background: '#fef3c7', border: '1px solid #fde68a', borderRadius: 6, fontSize: 12.5, color: '#92400e' }}>
+          ⚠️ <strong>{candidateName}</strong> already completed an interview — see the <strong>Results</strong> step. Generating a new link will let them interview again.
+        </div>
+      )}
+      <div style={{ padding: '9px 14px', background: '#eff6ff', border: '1px solid #dbeafe', borderRadius: 6, fontSize: 13, color: '#1e40af', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
+        <span>Interviewing <strong>{candidateName}</strong>{jobTitle && <> for <strong>{jobTitle}</strong></>}</span>
+        <button onClick={toggleCv}
+          style={{ fontSize: 12, fontWeight: 600, padding: '4px 12px', borderRadius: 6, border: '1px solid #bfdbfe', background: 'var(--surface)', color: '#2563eb', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>
+          📄 {cvPanel.open ? 'Hide CV' : cvPanel.loading ? 'Loading…' : 'View CV'}
+        </button>
+      </div>
+      {cvPanel.open && cvPanel.url && (
+        <div style={{ marginTop: 10, border: '1px solid var(--gray-200)', borderRadius: 8, overflow: 'hidden' }}>
+          <div style={{ display: 'flex', gap: 14, justifyContent: 'flex-end', padding: '6px 10px', background: 'var(--gray-50)', borderBottom: '1px solid var(--gray-200)' }}>
+            <a href={cvPanel.url} target="_blank" rel="noreferrer" style={{ fontSize: 12, fontWeight: 600, color: '#2563eb', textDecoration: 'none' }}>Open ↗</a>
+            <a href={cvPanel.url} download={`${candidateName || 'candidate'}-CV.pdf`} style={{ fontSize: 12, fontWeight: 600, color: '#2563eb', textDecoration: 'none' }}>⤓ Download</a>
+          </div>
+          {IS_MOBILE
+            ? <PdfPreview url={cvPanel.url} />
+            : <iframe title="Candidate CV" src={cvPanel.url} style={{ width: '100%', height: 600, border: 'none', display: 'block' }} />}
+        </div>
+      )}
+    </>
+  ) : null;
+
   return (
     <div className="container tab-fade-in">
       {/* Numbered stepper (CV-Evaluation style) */}
@@ -418,53 +469,42 @@ export default function LiveInterview() {
           {/* Select Candidate — card grid, mirroring CV Evaluation's Select Job */}
           <div style={cardStyle}>
             {!jobId ? (
-              <EmptyState>Pick a job from the “Current Job” selector at the top.</EmptyState>
+              selectedJob
+                ? <EmptyState>No shortlisted candidates for <strong>{selectedJob.job_title}</strong> yet — add some in the <strong>Shortlist</strong> tab first.</EmptyState>
+                : <EmptyState>Pick a job from the "Current Job" selector at the top.</EmptyState>
             ) : loadingCands ? (
               <EmptyState>Loading candidates…</EmptyState>
             ) : candidates.length === 0 ? (
-              <EmptyState>No shortlisted candidates for this job yet.</EmptyState>
+              <EmptyState>No shortlisted candidates for <strong>{jobTitle}</strong> yet — shortlist some candidates first.</EmptyState>
             ) : (
-              <div className="job-card-grid">
-                {[...candidates]
-                  .sort((a, b) => (interviewedIds.has(String(a.CandidateId)) ? 1 : 0) - (interviewedIds.has(String(b.CandidateId)) ? 1 : 0))
-                  .map(c => {
-                    const done = interviewedIds.has(String(c.CandidateId));
-                    const sel = String(candidateId) === String(c.CandidateId);
-                    return (
-                      <div key={c.CandidateId} className={`job-card ${sel ? 'selected' : ''}`} onClick={() => handleCandidateChange(String(c.CandidateId))}>
-                        <div className="job-card-title">{c.FullName}</div>
-                        <div className="job-card-meta">
-                          {c.OverallScore != null && <span style={{ fontWeight: 700, color: scoreColor(c.OverallScore) }}>CV {parseFloat(c.OverallScore).toFixed(1)}</span>}
-                          {done && <span className="dot" style={{ color: '#166534', fontWeight: 600 }}>✓ Interviewed</span>}
-                        </div>
-                        {(c.Email || c.email) && <div className="job-card-stats"><span>{c.Email || c.email}</span></div>}
-                      </div>
-                    );
-                  })}
-              </div>
-            )}
-
-            {candidateName && interviewedIds.has(String(candidateId)) && (
-              <div style={{ marginTop: 12, padding: '9px 14px', background: '#fef3c7', border: '1px solid #fde68a', borderRadius: 6, fontSize: 12.5, color: '#92400e' }}>
-                ⚠️ <strong>{candidateName}</strong> already completed an interview — see the <strong>Results</strong> step. Generating a new link will let them interview again.
-              </div>
-            )}
-            {candidateName && (
               <>
-                <div style={{ marginTop: 12, padding: '9px 14px', background: '#eff6ff', border: '1px solid #dbeafe', borderRadius: 6, fontSize: 13, color: '#1e40af', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
-                  <span>Interviewing <strong>{candidateName}</strong>{jobTitle && <> for <strong>{jobTitle}</strong></>}</span>
-                  <button onClick={toggleCv}
-                    style={{ fontSize: 12, fontWeight: 600, padding: '4px 12px', borderRadius: 6, border: '1px solid #bfdbfe', background: 'var(--surface)', color: '#2563eb', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>
-                    📄 {cvPanel.open ? 'Hide CV' : cvPanel.loading ? 'Loading…' : 'View CV'}
-                  </button>
+                <div className="job-card-grid">
+                  {[...candidates]
+                    .sort((a, b) => (interviewedIds.has(String(a.CandidateId)) ? 1 : 0) - (interviewedIds.has(String(b.CandidateId)) ? 1 : 0))
+                    .map(c => {
+                      const done = interviewedIds.has(String(c.CandidateId));
+                      const sel = String(candidateId) === String(c.CandidateId);
+                      return (
+                        <Fragment key={c.CandidateId}>
+                          <div className={`job-card ${sel ? 'selected' : ''}`} onClick={() => handleCandidateChange(String(c.CandidateId))}>
+                            <div className="job-card-title">{c.FullName}</div>
+                            <div className="job-card-meta">
+                              {c.OverallScore != null && <span style={{ fontWeight: 700, color: scoreColor(c.OverallScore) }}>CV {parseFloat(c.OverallScore).toFixed(1)}</span>}
+                              {done && <span className="dot" style={{ color: '#166534', fontWeight: 600 }}>✓ Interviewed</span>}
+                            </div>
+                            {(c.Email || c.email) && <div className="job-card-stats"><span>{c.Email || c.email}</span></div>}
+                          </div>
+                          {/* Mobile: show context banner right after the selected card */}
+                          {sel && candidateName && IS_MOBILE && (
+                            <div style={{ gridColumn: '1 / -1' }}>{candidateBannerContent}</div>
+                          )}
+                        </Fragment>
+                      );
+                    })}
                 </div>
-                {cvPanel.open && cvPanel.url && (
-                  <div style={{ marginTop: 10, border: '1px solid var(--gray-200)', borderRadius: 8, overflow: 'hidden' }}>
-                    <div style={{ display: 'flex', justifyContent: 'flex-end', padding: '6px 10px', background: 'var(--gray-50)', borderBottom: '1px solid var(--gray-200)' }}>
-                      <a href={cvPanel.url} target="_blank" rel="noreferrer" style={{ fontSize: 12, color: '#2563eb', textDecoration: 'none' }}>Open in new tab ↗</a>
-                    </div>
-                    <iframe title="Candidate CV" src={cvPanel.url} style={{ width: '100%', height: 600, border: 'none', display: 'block' }} />
-                  </div>
+                {/* Desktop: show context banner below ALL cards — never interrupts the grid */}
+                {candidateId && candidateName && !IS_MOBILE && (
+                  <div style={{ marginTop: 12 }}>{candidateBannerContent}</div>
                 )}
               </>
             )}
@@ -473,8 +513,24 @@ export default function LiveInterview() {
           {candidateName && (
             <div className="wizard-footer">
               <span className="step-info">Step 1 of 3</span>
-              <button className="btn btn-primary" onClick={() => setMainTab('questions')}>Continue to Interview Questions →</button>
+              <button ref={continueAnchorRef} className="btn btn-primary" onClick={() => setMainTab('questions')}>Continue to Interview Questions →</button>
             </div>
+          )}
+          <StickyContinue
+            show={!!candidateName}
+            anchorRef={continueAnchorRef}
+            label="Continue to Interview Questions"
+            onClick={() => setMainTab('questions')}
+          />
+          {/* Sticky View CV button — floats above Continue, hides when footer scrolls into view */}
+          {candidateName && !footerVisible && (
+            <button
+              type="button"
+              className="sticky-view-cv"
+              onClick={toggleCv}
+            >
+              📄 {cvPanel.open ? 'Hide CV' : cvPanel.loading ? 'Loading…' : 'View CV'}
+            </button>
           )}
         </div>
       )}
@@ -501,9 +557,9 @@ export default function LiveInterview() {
 
             <div style={{ display: 'flex', gap: 12, marginBottom: 20 }}>
               {[
-                { key: 'from-bank',    icon: '📚', label: 'From Question Bank', desc: 'Pick from your saved questions' },
-                { key: 'ai-generate',  icon: '✨', label: 'AI Generate',         desc: 'Preview & edit before sending' },
-                { key: 'custom',       icon: '✏️',  label: 'Write My Own',        desc: 'Type your own questions'       },
+                { key: 'from-bank',    icon: '📚', label: 'From Question Bank' },
+                { key: 'ai-generate',  icon: '✨', label: 'AI Generate'         },
+                { key: 'custom',       icon: '✏️',  label: 'Write My Own'        },
               ].map(m => {
                 const active = qMode === m.key;
                 return (
@@ -520,7 +576,6 @@ export default function LiveInterview() {
                   >
                     <span style={{ fontSize: 22, lineHeight: 1 }}>{m.icon}</span>
                     <span style={{ fontSize: 13, fontWeight: 600, color: active ? '#2563eb' : 'var(--gray-700)' }}>{m.label}</span>
-                    <span style={{ fontSize: 11, color: 'var(--gray-400)', lineHeight: 1.4 }}>{m.desc}</span>
                   </button>
                 );
               })}
@@ -538,7 +593,7 @@ export default function LiveInterview() {
 
             {/* AI Generate — controls only; results land in the set below */}
             <div style={{ display: qMode === 'ai-generate' ? 'block' : 'none' }}>
-              <div style={{ display: 'grid', gridTemplateColumns: '160px 1fr auto auto', gap: 14, alignItems: 'end', marginBottom: 14 }}>
+              <div className="int-ai-grid" style={{ display: 'grid', gridTemplateColumns: '160px 1fr auto auto', gap: 14, alignItems: 'end', marginBottom: 14 }}>
                 <div className="form-group" style={{ marginBottom: 0 }}>
                   <label>No. of questions</label>
                   <select value={numQ} onChange={e => setNumQ(Number(e.target.value))}>
@@ -569,11 +624,11 @@ export default function LiveInterview() {
                   </button>
                 )}
               </div>
-              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <div className="int-topic-row" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                 <input value={aiTopic} onChange={e => setAiTopic(e.target.value)}
                   onKeyDown={e => { if (e.key === 'Enter') generateFromTopic(); }}
                   placeholder={'Tailor a question — type a topic, e.g. "AWS experience"'}
-                  style={{ flex: 1, padding: '9px 12px', fontSize: 13.5, border: '1px solid var(--gray-300)', borderRadius: 8, outline: 'none', background: 'var(--surface)', color: 'var(--gray-800)', fontFamily: 'inherit' }} />
+                  style={{ flex: 1, minWidth: 0, padding: '9px 12px', fontSize: 13.5, border: '1px solid var(--gray-300)', borderRadius: 8, outline: 'none', background: 'var(--surface)', color: 'var(--gray-800)', fontFamily: 'inherit' }} />
                 <button className="btn btn-secondary btn-sm" onClick={generateFromTopic} disabled={!aiTopic.trim()} style={{ whiteSpace: 'nowrap' }}>✨ Generate from topic</button>
               </div>
               <div style={{ marginTop: 10, fontSize: 12, color: 'var(--gray-400)' }}>
@@ -583,7 +638,7 @@ export default function LiveInterview() {
 
             {/* Write My Own — type-and-add box; questions append to the set below */}
             <div style={{ display: qMode === 'custom' ? 'block' : 'none' }}>
-              <div style={{ display: 'flex', gap: 8, alignItems: 'stretch' }}>
+              <div className="int-custom-row" style={{ display: 'flex', gap: 8, alignItems: 'stretch' }}>
                 <input
                   value={customDraft}
                   onChange={e => setCustomDraft(e.target.value)}
@@ -818,12 +873,12 @@ function BankPicker({ onSelect, selected }) {
   return (
     <div>
       {/* Filter bar */}
-      <div style={{ display: 'flex', gap: 10, marginBottom: 12, flexWrap: 'wrap', alignItems: 'center' }}>
+      <div className="qbank-filterbar" style={{ display: 'flex', gap: 10, marginBottom: 12, flexWrap: 'wrap', alignItems: 'center' }}>
         <input
           type="text" placeholder="Search questions…" value={search} onChange={e => setSearch(e.target.value)}
           style={{ flex: 1, minWidth: 180, padding: '8px 12px', fontSize: 13, border: '1px solid var(--gray-300)', borderRadius: 6, outline: 'none', fontFamily: 'inherit' }}
         />
-        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+        <div className="qbank-cats" style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
           {cats.map(c => (
             <button
               key={c}
@@ -865,6 +920,7 @@ function BankPicker({ onSelect, selected }) {
             {visible.map((b, i) => (
               <div
                 key={b.id}
+                className="qbank-row"
                 style={{
                   display: 'grid', gridTemplateColumns: '40px 1fr 110px',
                   borderBottom: i < visible.length - 1 ? '1px solid var(--gray-100)' : 'none',
@@ -873,11 +929,11 @@ function BankPicker({ onSelect, selected }) {
                 }}
                 onClick={() => toggle(b)}
               >
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <div className="qbank-chk" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                   <input type="checkbox" checked={checkedIds.has(b.id)} onChange={() => toggle(b)} onClick={e => e.stopPropagation()} style={{ cursor: 'pointer' }} />
                 </div>
-                <div style={{ padding: '10px 12px', fontSize: 13, color: 'var(--gray-900)', lineHeight: 1.5 }}>{b.question}</div>
-                <div style={{ display: 'flex', alignItems: 'center', padding: '10px 8px' }}>
+                <div className="qbank-q" style={{ padding: '10px 12px', fontSize: 13, color: 'var(--gray-900)', lineHeight: 1.5 }}>{b.question}</div>
+                <div className="qbank-cat" style={{ display: 'flex', alignItems: 'center', padding: '10px 8px' }}>
                   <span style={{ padding: '3px 8px', borderRadius: 12, fontSize: 11, fontWeight: 700, background: CAT_BG[b.category] || '#f1f5f9', color: CAT_COLOR[b.category] || '#475569' }}>
                     {CAT_LABELS[b.category] || b.category}
                   </span>
@@ -1190,25 +1246,27 @@ function QuestionBankTab({ showToast }) {
       )}
 
       {/* Filters */}
-      <div style={{ display: 'flex', gap: 10, marginBottom: 12, flexWrap: 'wrap', alignItems: 'center' }}>
+      <div className="qbank-filterbar" style={{ display: 'flex', gap: 10, marginBottom: 12, flexWrap: 'wrap', alignItems: 'center' }}>
         <input
           type="text" placeholder="Search…" value={search} onChange={e => setSearch(e.target.value)}
           style={{ flex: 1, minWidth: 160, padding: '8px 12px', fontSize: 13, border: '1px solid var(--gray-300)', borderRadius: 6, outline: 'none', fontFamily: 'inherit' }}
         />
-        {cats.map(c => (
-          <button
-            key={c}
-            onClick={() => setCatFilter(c)}
-            style={{
-              padding: '5px 12px', borderRadius: 20, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit',
-              border: `1px solid ${catFilter === c ? (CAT_COLOR[c] || '#2563eb') : 'var(--gray-200)'}`,
-              background: catFilter === c ? (CAT_BG[c] || 'var(--tint-info)') : 'var(--surface)',
-              color: catFilter === c ? (CAT_COLOR[c] || '#2563eb') : 'var(--gray-500)',
-            }}
-          >
-            {c === 'all' ? `All (${rows.length})` : CAT_LABELS[c]}
-          </button>
-        ))}
+        <div className="qbank-cats" style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+          {cats.map(c => (
+            <button
+              key={c}
+              onClick={() => setCatFilter(c)}
+              style={{
+                padding: '5px 12px', borderRadius: 20, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit',
+                border: `1px solid ${catFilter === c ? (CAT_COLOR[c] || '#2563eb') : 'var(--gray-200)'}`,
+                background: catFilter === c ? (CAT_BG[c] || 'var(--tint-info)') : 'var(--surface)',
+                color: catFilter === c ? (CAT_COLOR[c] || '#2563eb') : 'var(--gray-500)',
+              }}
+            >
+              {c === 'all' ? `All (${rows.length})` : CAT_LABELS[c]}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Table */}
@@ -1225,7 +1283,7 @@ function QuestionBankTab({ showToast }) {
       {!loading && rows.length > 0 && (
         <div style={{ border: '1px solid var(--gray-200)', borderRadius: 8, overflow: 'hidden' }}>
           {/* Header */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 120px 180px 80px 80px', background: 'var(--gray-50)', borderBottom: '1px solid var(--gray-200)', padding: '9px 14px', fontSize: 11, fontWeight: 700, color: 'var(--gray-500)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+          <div className="qbank-mgr-head" style={{ display: 'grid', gridTemplateColumns: '1fr 120px 180px 80px 80px', background: 'var(--gray-50)', borderBottom: '1px solid var(--gray-200)', padding: '9px 14px', fontSize: 11, fontWeight: 700, color: 'var(--gray-500)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
             <div>Question</div>
             <div>Category</div>
             <div>Job Type</div>
@@ -1238,6 +1296,7 @@ function QuestionBankTab({ showToast }) {
           {visible.map((r, i) => (
             <div
               key={r.id}
+              className="qbank-mgr-row"
               style={{
                 display: 'grid', gridTemplateColumns: '1fr 120px 180px 80px 80px',
                 borderBottom: i < visible.length - 1 ? '1px solid var(--gray-100)' : 'none',
@@ -1245,15 +1304,15 @@ function QuestionBankTab({ showToast }) {
                 background: editing === r.id ? 'var(--tint-info)' : 'var(--surface)',
               }}
             >
-              <div style={{ fontSize: 13, color: 'var(--gray-900)', lineHeight: 1.4, paddingRight: 12 }}>{r.question}</div>
-              <div>
+              <div className="qbank-mgr-q" style={{ fontSize: 13, color: 'var(--gray-900)', lineHeight: 1.4, paddingRight: 12 }}>{r.question}</div>
+              <div className="qbank-mgr-cat">
                 <span style={{ padding: '3px 9px', borderRadius: 12, fontSize: 11, fontWeight: 700, background: CAT_BG[r.category] || '#f1f5f9', color: CAT_COLOR[r.category] || '#475569' }}>
                   {CAT_LABELS[r.category] || r.category}
                 </span>
               </div>
-              <div style={{ fontSize: 12, color: 'var(--gray-500)' }}>{r.jobType || '—'}</div>
-              <div style={{ textAlign: 'center', fontSize: 12, color: 'var(--gray-400)' }}>{r.timesUsed || 0}</div>
-              <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
+              <div className="qbank-mgr-job" style={{ fontSize: 12, color: 'var(--gray-500)' }}>{r.jobType || '—'}</div>
+              <div className="qbank-mgr-used" style={{ textAlign: 'center', fontSize: 12, color: 'var(--gray-400)' }}>{r.timesUsed || 0}</div>
+              <div className="qbank-mgr-actions" style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
                 <button
                   onClick={() => startEdit(r)}
                   style={{ padding: '4px 10px', fontSize: 12, fontWeight: 600, color: '#2563eb', background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 5, cursor: 'pointer', fontFamily: 'inherit' }}

@@ -3,10 +3,13 @@ import { useNavigate } from 'react-router-dom';
 import { apiGet } from '../services/api';
 import { useSelectedJob } from '../state/selectedJob';
 import { useUI } from '../state/uiState';
+import { useAuth } from '../state/auth';
 import Badge from '../components/common/Badge';
 import EmptyState from '../components/common/EmptyState';
 import Loading from '../components/common/Loading';
 import Select from '../components/common/Select';
+import ShowSelect from '../components/common/ShowSelect';
+import { BRAND_NAME } from '../config/brand';
 import Modal from '../components/modals/Modal';
 import { sendEmailRequest, getEmailStatus, buildEmailHtml } from '../services/email';
 import { formatDate, emailTypeLabel as baseEmailTypeLabel } from '../utils/helpers';
@@ -14,10 +17,13 @@ import { formatDate, emailTypeLabel as baseEmailTypeLabel } from '../utils/helpe
 // Emails tab uses a shorter label for the recommendation/handoff type.
 const emailTypeLabel = (t) => t === 'recommendation' ? 'Handed to HM' : baseEmailTypeLabel(t);
 
+const emailMenuItem = { display: 'flex', alignItems: 'center', gap: 10, width: '100%', textAlign: 'left', padding: '10px 14px', fontSize: 13.5, fontWeight: 500, color: 'var(--gray-700)', border: 'none', background: 'none', cursor: 'pointer', fontFamily: 'inherit' };
+
 export default function Emails() {
   const navigate = useNavigate();
   const { selectedJob, setSelectedJob } = useSelectedJob();
   const { showToast } = useUI();
+  const { isAdmin } = useAuth();
   const [jobs, setJobs] = useState([]);
   const [jobId, setJobId] = useState('');
   const [allJobs, setAllJobs] = useState(false); // "All jobs" cross-view (Emails-only)
@@ -27,6 +33,16 @@ export default function Emails() {
   const [revalidating, setRevalidating] = useState(false); // any background fetch → spins the ↺ icon
   const [showSmtpHelp, setShowSmtpHelp] = useState(false);
   const [showTest, setShowTest] = useState(false);
+  const [showActions, setShowActions] = useState(false); // gear menu (Setup Guide / Test email)
+  const actionsRef = useRef(null);
+  useEffect(() => {
+    if (!showActions) return;
+    const onDoc = (e) => { if (actionsRef.current && !actionsRef.current.contains(e.target)) setShowActions(false); };
+    const onKey = (e) => { if (e.key === 'Escape') setShowActions(false); };
+    document.addEventListener('mousedown', onDoc);
+    document.addEventListener('keydown', onKey);
+    return () => { document.removeEventListener('mousedown', onDoc); document.removeEventListener('keydown', onKey); };
+  }, [showActions]);
   const [testTo, setTestTo] = useState('');
   const [testSending, setTestSending] = useState(false);
   const [expandedRow, setExpandedRow] = useState(null); // email id of expanded row
@@ -124,9 +140,10 @@ export default function Emails() {
         showToast(st.message, st.type);
         if (res.data?.status === 'sent' || res.data?.status === 'logged') { setShowCompose(false); loadEmails(); }
       } else {
-        // One-off to anyone → send straight through the SMTP sidecar (branded
-        // HTML, not tied to a candidate so it isn't logged to a candidate's history).
-        const r = await fetch('http://localhost:8901/', {
+        // One-off to anyone → send through the SMTP sidecar (branded HTML, not
+        // tied to a candidate so it isn't logged). Same-origin /smtp/ (nginx
+        // proxy) so it works through a tunnel/phone, not just localhost.
+        const r = await fetch('/smtp/', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ to, subject, body, html_body: buildEmailHtml(body) }),
         });
@@ -192,12 +209,14 @@ export default function Emails() {
     if (!/@/.test(to) || !/\./.test(to.split('@').pop() || '')) { showToast('Enter a valid email address', 'error'); return; }
     setTestSending(true);
     try {
-      const res = await fetch('http://localhost:8901/', {
+      // Same-origin /smtp/ (nginx → SMTP sidecar) so it works on a phone/tunnel,
+      // not just on the HR machine's localhost.
+      const res = await fetch('/smtp/', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           to,
-          subject: 'Diyar HR — SMTP test email',
-          body: 'This is a test email from the Diyar HR app. If you received it, your SMTP credential is delivering correctly.',
+          subject: `${BRAND_NAME} — SMTP test email`,
+          body: `This is a test email from the ${BRAND_NAME} app. If you received it, your SMTP credential is delivering correctly.`,
         }),
       });
       const j = await res.json().catch(() => ({}));
@@ -205,7 +224,7 @@ export default function Emails() {
       else if (j.status === 'logged') showToast('SMTP not configured — nothing was sent. See Setup Guide.', 'error');
       else showToast(`Send failed: ${j.error || 'unknown error'}`, 'error');
     } catch {
-      showToast('Could not reach the SMTP sidecar (port 8901). Is start.sh running?', 'error');
+      showToast('Could not reach the SMTP service. Is the stack running?', 'error');
     } finally { setTestSending(false); }
   }
 
@@ -236,9 +255,10 @@ export default function Emails() {
 
   return (
     <div className="container tab-fade-in">
-      <div style={{ display: 'flex', gap: '12px', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap' }}>
-        {/* Job comes from the global "Current Job" picker. The one Emails-only
-            extra is the cross-job "All jobs" view (merged inbox). */}
+      {/* Row 1: the "All jobs" toggle + the compact action icons share one line.
+          Job otherwise comes from the global "Current Job" picker; "All jobs" is
+          the Emails-only cross-job merged view. */}
+      <div className="emails-toolbar-top" style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '10px', flexWrap: 'wrap' }}>
         <button
           className={`filter-tab ${allJobs ? 'active' : ''}`}
           onClick={() => {
@@ -248,18 +268,60 @@ export default function Emails() {
           }}
           title="Show email history merged across every job"
         >🌐 All jobs</button>
-        <div className="filter-tabs">
+        {/* Mobile-only status dropdown (All/Sent/Failed/Inbound) — shares this row
+            with All jobs + the action icons. The pill tabs below show on desktop. */}
+        <ShowSelect
+          filters={[{ key: 'all', label: 'All' }, { key: 'sent', label: 'Sent' }, { key: 'failed', label: 'Failed' }, { key: 'inbound', label: 'Inbound' }]}
+          value={statusFilter}
+          onChange={setStatusFilter}
+        />
+        {/* Status filter pills (desktop) — share this one line with All jobs +
+            actions; on mobile the dropdown above replaces them. */}
+        <div className="filter-tabs emails-status-tabs">
           {['all', 'sent', 'failed', 'inbound'].map(f => (
             <button key={f} className={`filter-tab ${statusFilter === f ? 'active' : ''}`} onClick={() => setStatusFilter(f)}>
               {f.charAt(0).toUpperCase() + f.slice(1)}
             </button>
           ))}
         </div>
-        {/* Actions on the right of the job row */}
+        {/* Compact actions: ⚙ tucks away Setup Guide / Test Email, blue + composes. */}
         <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginLeft: 'auto' }}>
-          <button className="btn btn-secondary btn-sm" onClick={() => setShowSmtpHelp(true)}>Setup Guide</button>
-          <button className="btn btn-secondary btn-sm" onClick={() => setShowTest(true)}>Send Test Email</button>
-          <button className="btn btn-primary btn-sm" onClick={openCompose}>✉ New Email</button>
+          <div ref={actionsRef} style={{ position: 'relative' }}>
+            <button
+              onClick={() => setShowActions(o => !o)}
+              title="Email settings"
+              style={{ width: 32, height: 32, borderRadius: '50%', flexShrink: 0, border: '1px solid var(--gray-200)', background: showActions ? 'var(--gray-50)' : 'var(--surface)', cursor: 'pointer', fontSize: 15, color: 'var(--gray-500)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'inherit' }}
+            >⚙</button>
+            {showActions && (
+              <div className="menu-reveal" style={{ position: 'absolute', right: 0, top: 'calc(100% + 6px)', zIndex: 200, minWidth: 190, background: 'var(--surface)', border: '1px solid var(--gray-200)', borderRadius: 10, boxShadow: '0 10px 30px rgba(0,0,0,0.16)', overflow: 'hidden' }}>
+                <button style={emailMenuItem} onClick={() => { setShowActions(false); setShowSmtpHelp(true); }}
+                  onMouseEnter={e => e.currentTarget.style.background = 'var(--gray-50)'} onMouseLeave={e => e.currentTarget.style.background = 'none'}>
+                  <span style={{ width: 18, textAlign: 'center' }}>📘</span> Setup Guide
+                </button>
+                <button style={emailMenuItem} onClick={() => { setShowActions(false); setShowTest(true); }}
+                  onMouseEnter={e => e.currentTarget.style.background = 'var(--gray-50)'} onMouseLeave={e => e.currentTarget.style.background = 'none'}>
+                  <span style={{ width: 18, textAlign: 'center' }}>✉</span> Send Test Email
+                </button>
+                {isAdmin && (
+                  <button style={{ ...emailMenuItem, borderTop: '1px solid var(--gray-100)' }} onClick={() => { setShowActions(false); navigate('/email-templates'); }}
+                    onMouseEnter={e => e.currentTarget.style.background = 'var(--gray-50)'} onMouseLeave={e => e.currentTarget.style.background = 'none'}>
+                    <span style={{ width: 18, textAlign: 'center' }}>📝</span> Email templates
+                  </button>
+                )}
+                {isAdmin && (
+                  <button style={emailMenuItem} onClick={() => { setShowActions(false); navigate('/audit-log'); }}
+                    onMouseEnter={e => e.currentTarget.style.background = 'var(--gray-50)'} onMouseLeave={e => e.currentTarget.style.background = 'none'}>
+                    <span style={{ width: 18, textAlign: 'center' }}>🧾</span> Audit log
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+          <button
+            onClick={openCompose}
+            title="New email"
+            style={{ width: 32, height: 32, borderRadius: '50%', flexShrink: 0, border: 'none', background: '#2563eb', color: '#fff', fontSize: 22, fontWeight: 500, lineHeight: 1, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'inherit' }}
+          >+</button>
           <button
             onClick={loadEmails}
             disabled={revalidating}
@@ -280,7 +342,7 @@ export default function Emails() {
           // Keep current rows on screen while refetching (e.g. toggling "All jobs")
           // — just dim them — instead of swapping the whole table for a spinner,
           // which caused a flash + layout jump. The ↺ icon spins to show activity.
-          <table style={{ width: '100%', tableLayout: 'fixed', opacity: loading ? 0.5 : 1, transition: 'opacity 0.18s ease' }}>
+          <table className="emails-main-table" style={{ width: '100%', tableLayout: 'fixed', opacity: loading ? 0.5 : 1, transition: 'opacity 0.18s ease' }}>
             <thead><tr>
               <th style={{ width: '148px' }}>Date</th>
               <th style={{ width: '138px' }}>Candidate</th>
@@ -292,13 +354,12 @@ export default function Emails() {
             <tbody>
               {filtered.map(e => {
                 const inbound = e.direction === 'inbound';
-                const rowBg = inbound ? { background: '#faf5ff' } : (e.status === 'failed' ? { background: '#fef2f2' } : {});
+                const rowClass = `email-row-clickable${inbound ? ' email-row-inbound' : ''}${!inbound && e.status === 'failed' ? ' email-row-failed' : ''}`;
                 return (
                 <React.Fragment key={e.id}>
                   <tr
-                    className="email-row-clickable"
+                    className={rowClass}
                     onClick={() => setExpandedRow(expandedRow === e.id ? null : e.id)}
-                    style={rowBg}
                   >
                     <td style={{ fontSize: '13px', color: 'var(--gray-500)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{new Date(e.sent_at).toLocaleDateString()} {new Date(e.sent_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</td>
                     <td style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}><strong>{e.candidate_name || '\u2014'}</strong></td>

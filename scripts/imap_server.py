@@ -34,7 +34,10 @@ import urllib.request
 from email.header import decode_header
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
-LISTEN_HOST = '127.0.0.1'
+# Per the sidecar portability rule: read SIDECAR_HOST (default 127.0.0.1 for
+# local dev). Docker compose sets SIDECAR_HOST=0.0.0.0 so the status port binds
+# on all interfaces like the other sidecars.
+LISTEN_HOST = os.environ.get('SIDECAR_HOST', '127.0.0.1')
 LISTEN_PORT = 8902
 
 # Mutated by the poll thread, read by the HTTP handler. Plain dict + GIL is

@@ -105,8 +105,15 @@ class Handler(BaseHTTPRequestHandler):
                     skipped.append(fn + ' (too large)')
                     continue
                 total += len(data)
-                part = MIMEApplication(data, Name=fn)
-                part['Content-Disposition'] = f'attachment; filename="{fn}"'
+                # Use the real subtype (e.g. application/pdf) so clients open it
+                # directly, and let add_header RFC-2231-encode the filename. The old
+                # manual `Name=`/`filename="..."` folded long names (e.g. "Interview
+                # Report - Full Name.pdf") across header lines, mangling the .pdf
+                # extension so the attachment wouldn't open. add_header handles it.
+                mime = str(a.get('mime') or 'application/octet-stream')
+                subtype = mime.split('/', 1)[1] if '/' in mime else 'octet-stream'
+                part = MIMEApplication(data, _subtype=subtype)
+                part.add_header('Content-Disposition', 'attachment', filename=fn)
                 parts.append(part)
             if recording_file:
                 fn = os.path.basename(recording_file)
@@ -118,8 +125,8 @@ class Handler(BaseHTTPRequestHandler):
                 else:
                     data = path.read_bytes()
                     total += len(data)
-                    part = MIMEApplication(data, Name=fn)
-                    part['Content-Disposition'] = f'attachment; filename="{fn}"'
+                    part = MIMEApplication(data, _subtype='octet-stream')
+                    part.add_header('Content-Disposition', 'attachment', filename=fn)
                     parts.append(part)
 
             if html_body:

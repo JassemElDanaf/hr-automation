@@ -24,7 +24,13 @@ const AUDIT_MAP = {
 export async function apiGet(path) {
   const res = await fetch(`${API_BASE}${path}`);
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  return res.json();
+  // n8n's respondToWebhook returns an EMPTY body when the SQL query yields 0
+  // rows (e.g. a job with no interview sessions yet). res.json() throws on an
+  // empty string, so parse defensively — same pattern as apiPost below.
+  const text = await res.text();
+  if (!text) return {};
+  try { return JSON.parse(text); }
+  catch { return {}; }
 }
 
 export async function apiPost(path, data) {

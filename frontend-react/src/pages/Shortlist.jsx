@@ -9,6 +9,8 @@ import ScoreBadge from '../components/common/ScoreBadge';
 import EmptyState from '../components/common/EmptyState';
 import Loading from '../components/common/Loading';
 import Select from '../components/common/Select';
+import ScoreStrip from '../components/common/ScoreStrip';
+import ShowSelect from '../components/common/ShowSelect';
 import { sendEmailRequest, getInterviewTemplate, getOfferTemplate, getRejectionTemplate, getEmailStatus } from '../services/email';
 import { emailTypeLabel, scoreColor } from '../utils/helpers';
 import EvalDetailModal from '../components/modals/EvalDetailModal';
@@ -436,29 +438,33 @@ export default function Shortlist() {
       {!loading && jobId && data.length > 0 && (
         <div className="results-filter-bar">
           <span className="results-filter-label">Show:</span>
-          {[
-            { key: 'all', label: 'All', count: data.length },
-            { key: 'shortlisted', label: 'Shortlisted', count: data.filter(d => !isSlArchived(d.id) && d.status === 'shortlisted' && !isInvited(d)).length },
-            { key: 'invited', label: 'Invited', count: data.filter(d => !isSlArchived(d.id) && isInvited(d)).length },
-            { key: 'interviewed', label: 'Interviewed', count: data.filter(d => !isSlArchived(d.id) && d.status === 'interviewed').length },
-            { key: 'hired', label: 'Hired', count: data.filter(d => !isSlArchived(d.id) && d.status === 'hired').length },
-            { key: 'rejected', label: 'Rejected', count: data.filter(d => !isSlArchived(d.id) && d.status === 'rejected').length },
-            { key: 'archived', label: 'Archived', count: data.filter(d => isSlArchived(d.id)).length },
-          ].map(f => (
-            <button key={f.key} className={`results-filter-btn${slFilter === f.key ? ' active' : ''}`} onClick={() => switchSlFilter(f.key)}>
-              {f.label}
-              <span className="results-filter-count">{f.count}</span>
-            </button>
-          ))}
-          <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, alignItems: 'center' }}>
-            <span style={{ fontSize: 12.5, color: 'var(--gray-500)', whiteSpace: 'nowrap' }}>Sort by</span>
-            <select value={slSort} onChange={e => setSlSort(e.target.value)}
-              style={{ width: 150, flexShrink: 0, padding: '7px 12px', border: '1px solid var(--gray-200)', borderRadius: 'var(--radius)', fontSize: 13, fontFamily: 'inherit', outline: 'none', background: 'var(--surface)', cursor: 'pointer' }}>
+          {(() => {
+            const slFilters = [
+              { key: 'all', label: 'All', count: data.length },
+              { key: 'shortlisted', label: 'Shortlisted', count: data.filter(d => !isSlArchived(d.id) && d.status === 'shortlisted' && !isInvited(d)).length },
+              { key: 'invited', label: 'Invited', count: data.filter(d => !isSlArchived(d.id) && isInvited(d)).length },
+              { key: 'interviewed', label: 'Interviewed', count: data.filter(d => !isSlArchived(d.id) && d.status === 'interviewed').length },
+              { key: 'rejected', label: 'Rejected', count: data.filter(d => !isSlArchived(d.id) && d.status === 'rejected').length },
+              { key: 'archived', label: 'Archived', count: data.filter(d => isSlArchived(d.id)).length },
+            ];
+            return (<>
+              <ShowSelect filters={slFilters} value={slFilter} onChange={switchSlFilter} />
+              {slFilters.map(f => (
+                <button key={f.key} className={`results-filter-btn${slFilter === f.key ? ' active' : ''}`} onClick={() => switchSlFilter(f.key)}>
+                  {f.label}
+                  <span className="results-filter-count">{f.count}</span>
+                </button>
+              ))}
+            </>);
+          })()}
+          <div className="results-sort" style={{ marginLeft: 'auto', display: 'flex', gap: 8, alignItems: 'center' }}>
+            <span className="results-sort-label" style={{ fontSize: 12.5, color: 'var(--gray-500)', whiteSpace: 'nowrap' }}>Sort by</span>
+            <select className="results-sort-select" value={slSort} onChange={e => setSlSort(e.target.value)}>
               <option value="recent">Most recent</option>
               <option value="score">Highest score</option>
               <option value="name">Name (A–Z)</option>
             </select>
-            <button onClick={loadShortlist} title="Refresh" className="btn btn-sm btn-secondary" style={{ flexShrink: 0 }}>↻</button>
+            <button onClick={loadShortlist} title="Refresh" className="btn btn-sm btn-secondary results-refresh" style={{ flexShrink: 0 }}>↻</button>
           </div>
         </div>
       )}
@@ -498,7 +504,7 @@ export default function Shortlist() {
                   {/* Stage actions — inline (no overflow menu, which gets clipped by
                       the card's overflow:hidden). Secondary actions live in the
                       expanded panel, consistent with the other tabs. */}
-                  <div onClick={e => e.stopPropagation()} style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 6, flexShrink: 0, flexWrap: 'wrap' }}>
+                  <div className="sl-action-row" onClick={e => e.stopPropagation()} style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 6, flexShrink: 0, flexWrap: 'wrap' }}>
                     {archived ? (
                       <button className="btn btn-sm btn-secondary" onClick={() => restoreSlArchive(s.id)}>Restore</button>
                     ) : (s.status === 'shortlisted' || s.status === 'interviewed') ? (
@@ -521,20 +527,23 @@ export default function Shortlist() {
                     ) : null}
                   </div>
 
-                  {/* CV score */}
-                  <div style={{ textAlign: 'center', minWidth: 50, borderLeft: '1px solid var(--gray-200)', paddingLeft: 14 }}>
-                    {overall != null
-                      ? <div style={{ fontSize: 22, fontWeight: 800, color: scoreColor(overall), lineHeight: 1 }}>{overall.toFixed(1)}</div>
-                      : <div style={{ fontSize: 18, color: 'var(--gray-300)' }}>—</div>}
-                    <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--gray-400)', marginTop: 3 }}>CV</div>
-                  </div>
-                  <span style={{ color: 'var(--gray-400)', fontSize: 13, flexShrink: 0, transition: 'transform 0.25s ease', transform: isOpen ? 'rotate(180deg)' : 'none' }}>▾</span>
+                  {/* CV score breakdown (Skills · Exp · Edu · overall) */}
+                  <ScoreStrip
+                    className="sl-score-cell"
+                    dims={[
+                      { label: 'Skills', value: s.skills_score },
+                      { label: 'Experience', value: s.experience_score },
+                      { label: 'Education', value: s.education_score },
+                    ]}
+                    overall={{ label: 'CV', value: s.overall_score }}
+                  />
+                  <span className="sl-score-caret" style={{ color: 'var(--gray-400)', fontSize: 13, flexShrink: 0, transition: 'transform 0.25s ease', transform: isOpen ? 'rotate(180deg)' : 'none' }}>▾</span>
                 </div>
 
                 {/* Smooth-expanding detail */}
                 <div style={{ display: 'grid', gridTemplateRows: isOpen ? '1fr' : '0fr', transition: 'grid-template-rows 0.28s ease' }}>
                   <div style={{ overflow: 'hidden' }}>
-                    <div style={{ borderTop: '1px solid var(--gray-100)', background: 'var(--surface-2)', padding: 18, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+                    <div className="expand-2col" style={{ borderTop: '1px solid var(--gray-100)', background: 'var(--surface-2)', padding: 18, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
                       {/* CV side */}
                       <div style={{ background: 'var(--surface)', border: '1px solid var(--gray-200)', borderRadius: 10, padding: 16 }}>
                         <div style={{ fontSize: 11, fontWeight: 700, color: '#2563eb', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 12 }}>CV Evaluation</div>
