@@ -374,7 +374,7 @@ tr.row-duplicate:hover td { background: #fef3c7; }
 
 /* Results filter bar */
 .results-filter-bar {
-  display: flex; align-items: center; gap: 8px;
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
   margin-bottom: 20px; padding: 10px 16px;
   background: var(--gray-50); border: 1px solid var(--gray-200);
   border-radius: var(--radius);
