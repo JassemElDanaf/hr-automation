@@ -20,7 +20,7 @@ if [ "$OLLAMA_HOST" = "auto" ] || [ -z "$OLLAMA_HOST" ]; then
 fi
 SIDECAR="${SIDECAR_DOCKER_HOST:-sidecars}"
 export DB_FILE="/home/node/.n8n/database.sqlite"
-NODE="/opt/nodejs/node-v24.14.1/bin/node"
+NODE=$(find /opt/nodejs -name node -type f 2>/dev/null | head -1)
 export SQLITE3_MOD="/usr/local/lib/node_modules/n8n/node_modules/.pnpm/sqlite3@5.1.7/node_modules/sqlite3"
 
 # ── Sync config file encryption key with N8N_ENCRYPTION_KEY env var ──────────

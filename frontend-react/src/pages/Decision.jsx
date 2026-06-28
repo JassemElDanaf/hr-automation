@@ -34,9 +34,9 @@ function StatChip({ value, label }) {
 // Tinted callout for strengths / weaknesses / summary text.
 function Callout({ label, text, tone = 'neutral' }) {
   const tones = {
-    pos:     { border: '#86efac', bg: '#f0fdf4', label: '#166534' },
-    neg:     { border: '#fca5a5', bg: '#fef2f2', label: '#991b1b' },
-    neutral: { border: '#cbd5e1', bg: '#f8fafc', label: 'var(--gray-500)' },
+    pos:     { border: 'var(--tint-success-border, #86efac)', bg: 'var(--tint-success)', label: 'var(--color-success, #166534)' },
+    neg:     { border: 'var(--tint-danger-border, #fca5a5)',  bg: 'var(--tint-danger)',   label: 'var(--color-danger,  #991b1b)' },
+    neutral: { border: 'var(--gray-300)',                     bg: 'var(--surface-2)',      label: 'var(--gray-500)' },
   };
   const t = tones[tone] || tones.neutral;
   return (

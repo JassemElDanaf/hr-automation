@@ -1,6 +1,9 @@
-FROM python:3.11-slim
+FROM python:3.11-slim-bookworm
 
 WORKDIR /app
+
+# Retry failed apt fetches up to 5 times (guards against flaky CDN mirrors)
+RUN echo 'Acquire::Retries "5";' > /etc/apt/apt.conf.d/80-retries
 
 # System deps
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -10,7 +13,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Python deps
-RUN pip install --no-cache-dir psycopg2-binary
+RUN pip install --no-cache-dir --retries 10 --timeout 120 psycopg2-binary
 
 # Copy project files needed by sidecars
 COPY scripts/ ./scripts/
