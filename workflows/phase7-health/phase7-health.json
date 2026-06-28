@@ -43,7 +43,7 @@
     {
       "parameters": {
         "respondWith": "json",
-        "responseBody": "={{ (() => { const c = $json.error?.code; if (!c || c === 429) return JSON.stringify({ ok: true, model: 'gemini-2.0-flash', detail: c === 429 ? 'api key valid · rate limited' : ($json.candidates?.[0]?.content?.parts?.[0]?.text || 'ok') }); return JSON.stringify({ ok: false, model: 'gemini-2.0-flash', error: $json.error?.message || 'API error ' + c }); })() }}",
+        "responseBody": "={{ JSON.stringify({ ok: !$json.error || $json.error.code === 429, model: 'gemini-2.0-flash', detail: !$json.error ? ($json.candidates?.[0]?.content?.parts?.[0]?.text || 'ok') : ($json.error.code === 429 ? 'api key valid' : ($json.error.message || 'api error')) }) }}",
         "options": {}
       },
       "id": "health-gemini-ok",
