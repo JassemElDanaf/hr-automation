@@ -320,11 +320,13 @@
         920
       ],
       "onError": "continueRegularOutput",
-      "retryOnFail": false
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000
     },
     {
       "parameters": {
-        "jsCode": "const items = $input.all();\nconst promptItems = $('Eval - Prepare Prompts').all();\nconst results = [];\nfunction extractJson(text) {\n  if (!text) return null;\n  text = text.replace(/<think>[\\s\\S]*?<\\/think>/gi, '').trim();\n  text = text.replace(/^```(?:json)?\\s*/i, '').replace(/\\s*```\\s*$/i, '').trim();\n  try { return JSON.parse(text); } catch(_) {}\n  const start = text.indexOf('{');\n  if (start < 0) return null;\n  let depth = 0;\n  for (let i = start; i < text.length; i++) {\n    if (text[i] === '{') depth++;\n    else if (text[i] === '}') {\n      depth--;\n      if (depth === 0) {\n        try { return JSON.parse(text.slice(start, i + 1)); } catch(_) { return null; }\n      }\n    }\n  }\n  return null;\n}\nfunction clampScore(v) {\n  const n = typeof v === 'number' ? v : parseFloat(v);\n  return isNaN(n) ? null : Math.min(10, Math.max(0, Math.round(n * 10) / 10));\n}\nfunction toStr(v) { return Array.isArray(v) ? v.join('; ') : (v || ''); }\nfor (let i = 0; i < items.length; i++) {\n  const raw = items[i].json;\n  const meta = promptItems[i]?.json || {};\n  const wSkills = meta.wSkills || 0.4;\n  const wExp = meta.wExp || 0.35;\n  const wEdu = meta.wEdu || 0.25;\n  let aiText = (raw.response || '').trim();\n  if (!aiText && raw.thinking) aiText = raw.thinking;\n  const parsed = extractJson(aiText);\n  let skillsScore = parsed ? clampScore(parsed.skills_score) : null;\n  let expScore = parsed ? clampScore(parsed.experience_score) : null;\n  let eduScore = parsed ? clampScore(parsed.education_score) : null;\n  let strengths, weaknesses, reasoning, parseError = false;\n  if (skillsScore !== null && expScore !== null && eduScore !== null) {\n    strengths = toStr(parsed.strengths);\n    weaknesses = toStr(parsed.weaknesses);\n    reasoning = parsed.reasoning || 'AI evaluation by Qwen3';\n    if (meta.has_items) {\n      const missing = toStr(parsed.required_missing);\n      const met = toStr(parsed.items_met);\n      if (missing) reasoning += '\\n\\nRequired items NOT met: ' + missing;\n      if (met) reasoning += '\\n\\nRequired items met: ' + met;\n    }\n  } else {\n    skillsScore = 0; expScore = 0; eduScore = 0;\n    strengths = '';\n    weaknesses = '';\n    reasoning = 'AI evaluation failed to produce structured scores. Please re-run the evaluation.';\n    parseError = true;\n  }\n  const overall = Math.round((skillsScore * wSkills + expScore * wExp + eduScore * wEdu) * 10) / 10;\n  results.push({ json: {\n    error: false,\n    parse_error: parseError,\n    candidate_id: meta.candidate_id,\n    candidate_name: meta.candidate_name,\n    job_opening_id: meta.job_opening_id,\n    overall_score: overall,\n    skills_score: skillsScore,\n    experience_score: expScore,\n    education_score: eduScore,\n    reasoning: reasoning,\n    strengths: strengths,\n    weaknesses: weaknesses,\n    sql: 'INSERT INTO evaluations (candidate_id, job_opening_id, overall_score, skills_score, experience_score, education_score, reasoning, strengths, weaknesses) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *',\n    params: [meta.candidate_id, meta.job_opening_id, overall, skillsScore, expScore, eduScore, reasoning, strengths, weaknesses]\n  }});\n}\nreturn results;"
+        "jsCode": "const items = $input.all();\nconst promptItems = $('Eval - Prepare Prompts').all();\nconst results = [];\nfunction extractJson(text) {\n  if (!text) return null;\n  text = text.replace(/<think>[\\s\\S]*?<\\/think>/gi, '').trim();\n  text = text.replace(/^```(?:json)?\\s*/i, '').replace(/\\s*```\\s*$/i, '').trim();\n  try { return JSON.parse(text); } catch(_) {}\n  const start = text.indexOf('{');\n  if (start < 0) return null;\n  let depth = 0;\n  for (let i = start; i < text.length; i++) {\n    if (text[i] === '{') depth++;\n    else if (text[i] === '}') {\n      depth--;\n      if (depth === 0) {\n        try { return JSON.parse(text.slice(start, i + 1)); } catch(_) { return null; }\n      }\n    }\n  }\n  return null;\n}\nfunction clampScore(v) {\n  const n = typeof v === 'number' ? v : parseFloat(v);\n  return isNaN(n) ? null : Math.min(10, Math.max(0, Math.round(n * 10) / 10));\n}\nfunction toStr(v) { return Array.isArray(v) ? v.join('; ') : (v || ''); }\nfor (let i = 0; i < items.length; i++) {\n  const raw = items[i].json;\n  const meta = promptItems[i]?.json || {};\n  const wSkills = meta.wSkills || 0.4;\n  const wExp = meta.wExp || 0.35;\n  const wEdu = meta.wEdu || 0.25;\n  let aiText = (raw.response || '').trim();\n  if (!aiText && raw.thinking) aiText = raw.thinking;\n  const parsed = extractJson(aiText);\n  let skillsScore = parsed ? clampScore(parsed.skills_score) : null;\n  let expScore = parsed ? clampScore(parsed.experience_score) : null;\n  let eduScore = parsed ? clampScore(parsed.education_score) : null;\n  let strengths, weaknesses, reasoning, parseError = false;\n  if (skillsScore !== null && expScore !== null && eduScore !== null) {\n    strengths = toStr(parsed.strengths);\n    weaknesses = toStr(parsed.weaknesses);\n    reasoning = parsed.reasoning || 'AI evaluation by Ollama (qwen3)';\n    if (meta.has_items) {\n      const missing = toStr(parsed.required_missing);\n      const met = toStr(parsed.items_met);\n      if (missing) reasoning += '\\n\\nRequired items NOT met: ' + missing;\n      if (met) reasoning += '\\n\\nRequired items met: ' + met;\n    }\n  } else {\n    skillsScore = 0; expScore = 0; eduScore = 0;\n    strengths = '';\n    weaknesses = '';\n    reasoning = 'AI evaluation failed to produce structured scores. Please re-run the evaluation.';\n    parseError = true;\n  }\n  const overall = Math.round((skillsScore * wSkills + expScore * wExp + eduScore * wEdu) * 10) / 10;\n  results.push({ json: {\n    error: false,\n    parse_error: parseError,\n    candidate_id: meta.candidate_id,\n    candidate_name: meta.candidate_name,\n    job_opening_id: meta.job_opening_id,\n    overall_score: overall,\n    skills_score: skillsScore,\n    experience_score: expScore,\n    education_score: eduScore,\n    reasoning: reasoning,\n    strengths: strengths,\n    weaknesses: weaknesses,\n    sql: 'INSERT INTO evaluations (candidate_id, job_opening_id, overall_score, skills_score, experience_score, education_score, reasoning, strengths, weaknesses) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *',\n    params: [meta.candidate_id, meta.job_opening_id, overall, skillsScore, expScore, eduScore, reasoning, strengths, weaknesses]\n  }});\n}\nreturn results;"
       },
       "id": "parse-ai-response",
       "name": "Eval - Score Candidates",
@@ -959,7 +961,10 @@
         920,
         3020
       ],
-      "onError": "continueErrorOutput"
+      "onError": "continueErrorOutput",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000
     },
     {
       "parameters": {
@@ -1321,7 +1326,10 @@
         1580,
         4000
       ],
-      "onError": "continueErrorOutput"
+      "onError": "continueErrorOutput",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000
     },
     {
       "parameters": {
