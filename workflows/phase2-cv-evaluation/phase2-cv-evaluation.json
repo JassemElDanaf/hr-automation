@@ -303,7 +303,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ 'https://generativeai.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=' + $env.GEMINI_API_KEY }}",
+        "url": "={{ 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=' + $env.GEMINI_API_KEY }}",
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={{ $json.requestBody }}",
@@ -945,7 +945,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ 'https://generativeai.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=' + $env.GEMINI_API_KEY }}",
+        "url": "={{ 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=' + $env.GEMINI_API_KEY }}",
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={{ $json.requestBody }}",
@@ -1310,7 +1310,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ 'https://generativeai.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=' + $env.GEMINI_API_KEY }}",
+        "url": "={{ 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=' + $env.GEMINI_API_KEY }}",
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={{ $json.requestBody }}",

@@ -52,7 +52,7 @@ done
 
 # ── Publish (activate) all workflows ─────────────────────────────────────────
 echo "[n8n-setup] Publishing workflows..."
-for id in 1 2 3 4 5 6; do
+for id in 1 2 3 4 5 6 7; do
   n8n publish:workflow --id=$id 2>&1 | grep -v "Error tracking\|older than 6"
 done
 

@@ -1,0 +1,107 @@
+{
+  "id": "7",
+  "name": "Phase 7 — Health Checks",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "gemini-health",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "health-gemini-wh",
+      "name": "Gemini - Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        250,
+        300
+      ],
+      "webhookId": "gemini-health"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=' + $env.GEMINI_API_KEY }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={ \"contents\": [{\"parts\": [{\"text\": \"ping\"}]}], \"generationConfig\": {\"maxOutputTokens\": 5} }",
+        "options": {
+          "timeout": 10000,
+          "ignoreHttpStatusErrors": true
+        }
+      },
+      "id": "health-gemini-call",
+      "name": "Gemini - Ping",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        500,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ (() => { const c = $json.error?.code; if (!c || c === 429) return JSON.stringify({ ok: true, model: 'gemini-2.0-flash', detail: c === 429 ? 'api key valid · rate limited' : ($json.candidates?.[0]?.content?.parts?.[0]?.text || 'ok') }); return JSON.stringify({ ok: false, model: 'gemini-2.0-flash', error: $json.error?.message || 'API error ' + c }); })() }}",
+        "options": {}
+      },
+      "id": "health-gemini-ok",
+      "name": "Gemini - OK",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        750,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ ok: false, model: 'gemini-2.0-flash', error: $json.message || 'Gemini API unreachable — check GEMINI_API_KEY' }) }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "health-gemini-err",
+      "name": "Gemini - Error",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        750,
+        400
+      ]
+    }
+  ],
+  "connections": {
+    "Gemini - Webhook": {
+      "main": [
+        [
+          {
+            "node": "Gemini - Ping",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini - Ping": {
+      "main": [
+        [
+          {
+            "node": "Gemini - OK",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 0
+}
