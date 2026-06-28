@@ -1,9 +1,9 @@
-# Diyar HR — Docker Compose
+# Diyar HR — Docker Compose (Gemini branch)
 # Usage:
-#   1. cp .env.example .env  &&  edit .env  (fill in SMTP/IMAP creds)
+#   1. cp .env.example .env  &&  edit .env  (fill in SMTP/IMAP + GEMINI_API_KEY)
 #   2. docker compose up -d
 #
-# Ollama runs on the host (port 11434). Containers reach it via host.docker.internal.
+# AI evaluation is handled by the Gemini API — no local Ollama needed.
 # All data is persisted in named volumes; nothing is lost on restart.
 
 services:
@@ -44,26 +44,23 @@ services:
       N8N_PORT: "5678"
       N8N_PROTOCOL: "http"
       WEBHOOK_URL: "http://n8n:5678/"
-      # HR PostgreSQL credential overwrite (applied to ALL postgres-type credentials)
+      # HR PostgreSQL credential overwrite
       DB_HOST:    postgres
       DB_PORT:    "5432"
       DB_NAME:    ${POSTGRES_DB:-hr_automation}
       DB_USER:    ${POSTGRES_USER:-hr_admin}
       DB_PASS:    ${POSTGRES_PASSWORD:-hr_pass}
-      # Tenant company name baked into AI-generated content (JD/criteria) at import.
-      # Single source of truth for the company — change in .env to rebrand.
+      # Tenant company name baked into AI-generated content at import time
       COMPANY_NAME: ${COMPANY_NAME:-Diyar United Company}
-      # Fixed encryption key — must match what the entrypoint script uses to encrypt credentials
+      # Fixed encryption key
       N8N_ENCRYPTION_KEY: "diyar-hr-n8n-key-2026"
-      # Owner account — auto-created on first boot, skips setup wizard
+      # Owner account
       N8N_OWNER_EMAIL: "admin@diyarme.com"
       N8N_OWNER_PASSWORD: "ChangeMe123!"
       N8N_OWNER_FIRST_NAME: "Admin"
       N8N_OWNER_LAST_NAME: "User"
-      # Ollama host. Default = Ollama running on the HOST (reachable via
-      # host.docker.internal). Set OLLAMA_DOCKER_HOST=ollama in .env to use the
-      # bundled Docker Ollama service instead (run with: --profile ollama).
-      OLLAMA_DOCKER_HOST: ${OLLAMA_DOCKER_HOST:-host.docker.internal}
+      # Gemini API key — exposed to n8n workflows via $env.GEMINI_API_KEY
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
     volumes:
       - n8n_data:/home/node/.n8n
       - ./workflows:/workflows:ro
@@ -79,37 +76,9 @@ services:
       timeout: 5s
       retries: 30
       start_period: 60s
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-
-  # ── Ollama (always-on — the portable CPU fallback) ───────────────────────
-  # Always started by `docker compose up -d`. It AUTO-PULLS qwen3:4b on first
-  # boot (skipped if already present in the bind-mounted store), so a fresh
-  # clone on any machine "just works" with no manual pull.
-  #   • On a box WITH a host Ollama (e.g. GPU on Windows), n8n auto-detects and
-  #     uses that for speed; this container just idles as a ready fallback.
-  #   • On a box WITHOUT one (e.g. a fresh Ubuntu pull), n8n auto-detects nothing
-  #     and uses THIS container (CPU). See scripts/n8n-entrypoint.sh.
-  # No published port (11434) so it never conflicts with a host Ollama — n8n and
-  # nginx reach it over the internal Docker network at ollama:11434.
-  # Model files persist via the bind mount to OLLAMA_DATA_DIR (keep on D:).
-  ollama:
-    image: ollama/ollama:latest
-    restart: unless-stopped
-    entrypoint: ["/bin/sh", "-c"]
-    command: ["ollama serve & until ollama list >/dev/null 2>&1; do sleep 1; done; ollama list | grep -qi qwen3 || ollama pull qwen3:4b; wait"]
-    volumes:
-      - "${OLLAMA_DATA_DIR:-./ollama-data}:/root/.ollama"
-    healthcheck:
-      test: ["CMD-SHELL", "ollama list || exit 1"]
-      interval: 10s
-      timeout: 5s
-      retries: 30
-      start_period: 180s
 
   # ── Python sidecars (SMTP / IMAP / Recording / Auth) ─────────────────────
   sidecars:
-    image: jassemeldanaf/diyar-sidecars:latest
     build:
       context: .
       dockerfile: Dockerfile.sidecars
@@ -151,16 +120,12 @@ services:
 
   # ── React frontend (nginx) ────────────────────────────────────────────────
   frontend:
-    image: jassemeldanaf/diyar-frontend:latest
     build:
       context: .
       dockerfile: Dockerfile.frontend
     restart: unless-stopped
     ports:
       - "3001:80"
-    # Lets nginx proxy /ollama/ → the host Ollama (GPU) for the in-app health check.
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
     depends_on:
       - n8n
       - sidecars
