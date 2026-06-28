@@ -27,6 +27,10 @@
   --tint-danger: #fef2f2;
   --tint-info: #eff6ff;
   --tint-warning: #fffbeb;
+  --tint-success-border: #86efac;
+  --tint-danger-border: #fca5a5;
+  --color-success: #166534;
+  --color-danger: #991b1b;
 }
 
 /* ── Dark theme ──────────────────────────────────────────────────
@@ -44,6 +48,10 @@ html[data-theme="dark"] {
   --tint-danger: #2b1719;
   --tint-info: #15243b;
   --tint-warning: #2a2410;
+  --tint-success-border: #166534;
+  --tint-danger-border: #7f1d1d;
+  --color-success: #4ade80;
+  --color-danger: #f87171;
   --gray-50: #22272e;
   --gray-100: #2d333b;
   --gray-200: #373e47;
