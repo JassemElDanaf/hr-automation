@@ -108,6 +108,7 @@ services:
 
   # ── Python sidecars (SMTP / IMAP / Recording / Auth) ─────────────────────
   sidecars:
+    image: jassemeldanaf/diyar-sidecars:latest
     build:
       context: .
       dockerfile: Dockerfile.sidecars
@@ -147,6 +148,7 @@ services:
 
   # ── React frontend (nginx) ────────────────────────────────────────────────
   frontend:
+    image: jassemeldanaf/diyar-frontend:latest
     build:
       context: .
       dockerfile: Dockerfile.frontend
