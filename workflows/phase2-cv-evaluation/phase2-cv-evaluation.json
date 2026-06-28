@@ -308,7 +308,8 @@
         "specifyBody": "json",
         "jsonBody": "={{ $json.requestBody }}",
         "options": {
-          "timeout": 30000
+          "timeout": 30000,
+          "ignoreHttpStatusErrors": true
         }
       },
       "id": "call-ollama",
@@ -319,7 +320,6 @@
         1360,
         920
       ],
-      "onError": "continueRegularOutput",
       "retryOnFail": true,
       "maxTries": 3,
       "waitBetweenTries": 3000
@@ -950,7 +950,8 @@
         "specifyBody": "json",
         "jsonBody": "={{ $json.requestBody }}",
         "options": {
-          "timeout": 30000
+          "timeout": 30000,
+          "ignoreHttpStatusErrors": true
         }
       },
       "id": "gen-crit-ollama",
@@ -961,14 +962,13 @@
         920,
         3020
       ],
-      "onError": "continueErrorOutput",
       "retryOnFail": true,
       "maxTries": 3,
       "waitBetweenTries": 3000
     },
     {
       "parameters": {
-        "jsCode": "function stripLLMPreamble(text) {\n  if (!text) return '';\n  // 4. Strip wrapping markdown code fences.\n  text = text.replace(/^```(?:markdown|md|text)?\\s*\\n?/i, '').replace(/\\n?```\\s*$/i, '');\n  text = text.trim();\n  // 5. Look for the first acceptable starting line (markdown heading, About the Role, Job Title:, **bold field).\n  const startMatch = text.match(/(^|\\n)(#{1,6}\\s+\\S|About the Role\\b|Job Title\\s*:|Department\\s*:|SKILLS\\s*:|\\*\\*[A-Z])/);\n  if (startMatch) {\n    const idx = startMatch.index + (startMatch[1] ? startMatch[1].length : 0);\n    return text.slice(idx).trim();\n  }\n  // 6. Fallback: strip leading reasoning preamble lines. Stops at first non-preamble line.\n  const preambleRe = /^(okay\\b|alright\\b|sure[,!]?\\s|so[,]?\\s|let'?s\\b|let me\\b|first[,]?\\s|to start\\b|i\\b(?:'m|m| am| need| will| think| should| have|'ll)|i'?ll\\b|the user\\b|here'?s\\b|here is\\b|thinking[:\\s]|reasoning[:\\s]|analysis[:\\s]|plan[:\\s]|step \\d|the assistant\\b|as an? (?:ai|hr))/i;\n  const lines = text.split('\\n');\n  let start = 0;\n  while (start < lines.length) {\n    const ln = lines[start].trim();\n    if (ln && !preambleRe.test(ln)) break;\n    start++;\n  }\n  return lines.slice(start).join('\\n').trim();\n}\nconst raw = $input.first().json;\nlet text = ((raw.candidates?.[0]?.content?.parts?.[0]?.text || '') || raw.text || '').trim();\n\ntext = stripLLMPreamble(text);\nif (!text) return [{ json: { success: false, error: 'Gemini returned an empty response' } }];\nreturn [{ json: { success: true, criteria_text: text } }];\n"
+        "jsCode": "function stripLLMPreamble(text) {\n  if (!text) return '';\n  // 4. Strip wrapping markdown code fences.\n  text = text.replace(/^```(?:markdown|md|text)?\\s*\\n?/i, '').replace(/\\n?```\\s*$/i, '');\n  text = text.trim();\n  // 5. Look for the first acceptable starting line (markdown heading, About the Role, Job Title:, **bold field).\n  const startMatch = text.match(/(^|\\n)(#{1,6}\\s+\\S|About the Role\\b|Job Title\\s*:|Department\\s*:|SKILLS\\s*:|\\*\\*[A-Z])/);\n  if (startMatch) {\n    const idx = startMatch.index + (startMatch[1] ? startMatch[1].length : 0);\n    return text.slice(idx).trim();\n  }\n  // 6. Fallback: strip leading reasoning preamble lines. Stops at first non-preamble line.\n  const preambleRe = /^(okay\\b|alright\\b|sure[,!]?\\s|so[,]?\\s|let'?s\\b|let me\\b|first[,]?\\s|to start\\b|i\\b(?:'m|m| am| need| will| think| should| have|'ll)|i'?ll\\b|the user\\b|here'?s\\b|here is\\b|thinking[:\\s]|reasoning[:\\s]|analysis[:\\s]|plan[:\\s]|step \\d|the assistant\\b|as an? (?:ai|hr))/i;\n  const lines = text.split('\\n');\n  let start = 0;\n  while (start < lines.length) {\n    const ln = lines[start].trim();\n    if (ln && !preambleRe.test(ln)) break;\n    start++;\n  }\n  return lines.slice(start).join('\\n').trim();\n}\nconst raw = $input.first().json;\nconst apiErr = raw.error;\nif (apiErr) {\n  const msg = apiErr.code === 429 ? 'Gemini rate limited — please wait a moment and try again' : (apiErr.message || 'Gemini API error');\n  return [{ json: { success: false, error: msg } }];\n}\n\nlet text = ((raw.candidates?.[0]?.content?.parts?.[0]?.text || '') || raw.text || '').trim();\n\ntext = stripLLMPreamble(text);\nif (!text) return [{ json: { success: false, error: 'Gemini returned an empty response' } }];\nreturn [{ json: { success: true, criteria_text: text } }];\n"
       },
       "id": "gen-crit-parse",
       "name": "GenCrit - Parse Response",
@@ -1315,7 +1315,8 @@
         "specifyBody": "json",
         "jsonBody": "={{ $json.requestBody }}",
         "options": {
-          "timeout": 30000
+          "timeout": 30000,
+          "ignoreHttpStatusErrors": true
         }
       },
       "id": "int-q-ollama",
@@ -1326,14 +1327,13 @@
         1580,
         4000
       ],
-      "onError": "continueErrorOutput",
       "retryOnFail": true,
       "maxTries": 3,
       "waitBetweenTries": 3000
     },
     {
       "parameters": {
-        "jsCode": "const raw = $input.first().json;\nconst ctx = $('IntQ - Build Prompt').first().json;\nlet text = ((raw.candidates?.[0]?.content?.parts?.[0]?.text || '') || raw.text || '').trim();\nlet parsed = null;\ntry { parsed = JSON.parse(text); } catch (e) {\n  const start = text.indexOf('{');\n  const end = text.lastIndexOf('}');\n  if (start !== -1 && end > start) {\n    try { parsed = JSON.parse(text.substring(start, end + 1)); } catch {}\n  }\n}\nif (!parsed || !Array.isArray(parsed.questions)) {\n  return [{ json: { success: false, error: 'Could not parse questions from Gemini response', raw: text.substring(0, 500) } }];\n}\nconst allowed = new Set();\nif (ctx.includeHr) allowed.add('hr');\nif (ctx.includeTechnical) allowed.add('technical');\nif (ctx.includeSalary) allowed.add('salary');\nconst fallbackCategory = ctx.includeHr ? 'hr' : (ctx.includeTechnical ? 'technical' : 'salary');\n// Map\n// common variants to the canonical names so we don't silently drop valid questions and end up\n// returning fewer than the user asked for.\nconst ALIASES = {\n  hr: 'hr', behavioral: 'hr', behavioural: 'hr', behavior: 'hr', behaviour: 'hr',\n  soft: 'hr', 'soft skills': 'hr', cultural: 'hr', 'cultural fit': 'hr', motivation: 'hr', personality: 'hr',\n  technical: 'technical', tech: 'technical', skills: 'technical', skill: 'technical', engineering: 'technical', coding: 'technical',\n  salary: 'salary', compensation: 'salary', pay: 'salary', 'expected salary': 'salary', comp: 'salary'\n};\nconst cleaned = parsed.questions\n  .filter(q => q && q.question)\n  .map(q => {\n    const rawCat = String(q.category || '').toLowerCase().trim();\n    const aliased = ALIASES[rawCat] || rawCat;\n    const cat = allowed.has(aliased) ? aliased : fallbackCategory;\n    return { category: cat, question: String(q.question).trim(), hints: String(q.hints || '').trim() };\n  })\n  .slice(0, ctx.numQuestions);\nreturn [{ json: { success: true, candidate: ctx.candidate, job: ctx.job, questions: cleaned } }];"
+        "jsCode": "const raw = $input.first().json;\nconst apiErr = raw.error;\nif (apiErr) {\n  const msg = apiErr.code === 429 ? 'Gemini rate limited — please wait a moment and try again' : (apiErr.message || 'Gemini API error');\n  return [{ json: { success: false, error: msg } }];\n}\n\nconst ctx = $('IntQ - Build Prompt').first().json;\nlet text = ((raw.candidates?.[0]?.content?.parts?.[0]?.text || '') || raw.text || '').trim();\nlet parsed = null;\ntry { parsed = JSON.parse(text); } catch (e) {\n  const start = text.indexOf('{');\n  const end = text.lastIndexOf('}');\n  if (start !== -1 && end > start) {\n    try { parsed = JSON.parse(text.substring(start, end + 1)); } catch {}\n  }\n}\nif (!parsed || !Array.isArray(parsed.questions)) {\n  return [{ json: { success: false, error: 'Could not parse questions from Gemini response', raw: text.substring(0, 500) } }];\n}\nconst allowed = new Set();\nif (ctx.includeHr) allowed.add('hr');\nif (ctx.includeTechnical) allowed.add('technical');\nif (ctx.includeSalary) allowed.add('salary');\nconst fallbackCategory = ctx.includeHr ? 'hr' : (ctx.includeTechnical ? 'technical' : 'salary');\n// Map\n// common variants to the canonical names so we don't silently drop valid questions and end up\n// returning fewer than the user asked for.\nconst ALIASES = {\n  hr: 'hr', behavioral: 'hr', behavioural: 'hr', behavior: 'hr', behaviour: 'hr',\n  soft: 'hr', 'soft skills': 'hr', cultural: 'hr', 'cultural fit': 'hr', motivation: 'hr', personality: 'hr',\n  technical: 'technical', tech: 'technical', skills: 'technical', skill: 'technical', engineering: 'technical', coding: 'technical',\n  salary: 'salary', compensation: 'salary', pay: 'salary', 'expected salary': 'salary', comp: 'salary'\n};\nconst cleaned = parsed.questions\n  .filter(q => q && q.question)\n  .map(q => {\n    const rawCat = String(q.category || '').toLowerCase().trim();\n    const aliased = ALIASES[rawCat] || rawCat;\n    const cat = allowed.has(aliased) ? aliased : fallbackCategory;\n    return { category: cat, question: String(q.question).trim(), hints: String(q.hints || '').trim() };\n  })\n  .slice(0, ctx.numQuestions);\nreturn [{ json: { success: true, candidate: ctx.candidate, job: ctx.job, questions: cleaned } }];"
       },
       "id": "int-q-parse",
       "name": "IntQ - Parse Response",

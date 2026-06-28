@@ -170,7 +170,8 @@
         "specifyBody": "json",
         "jsonBody": "={{ JSON.stringify({ systemInstruction: { parts: [{ text: 'You are an expert HR copywriter. Write compelling, professional job descriptions. Respond ONLY with valid JSON matching the requested schema—no preamble, no markdown.' }] }, contents: [{ parts: [{ text: `Generate a job description for the position below at Diyar United Company. Return ONLY a JSON object (no other text) with these exact keys:\n{\"about\": \"2-3 sentence paragraph about the role\", \"responsibilities\": [\"5 to 7 specific bullet strings\"], \"requirements\": [\"5 to 7 specific bullet strings\"], \"niceToHave\": [\"3 to 4 bullet strings\"], \"offer\": [\"3 to 4 bullet strings\"]}\nUse the real company name \"Diyar United Company\" where relevant; never use placeholders.\n\nPosition:\n- Job Title: ${$json.job_title}\n- Department: ${$json.department}\n- Employment Type: ${$json.employment_type}\n- Seniority Level: ${$json.seniority_level}\n- Location: ${$json.location_type}${$json.reporting_to ? '\\n- Reporting To: ' + $json.reporting_to : ''}${$json.ai_context ? '\\n- Required skills/keywords: ' + $json.ai_context : ''}` }] }], generationConfig: { temperature: 0.2, maxOutputTokens: 2048, responseMimeType: 'application/json' } }) }}",
         "options": {
-          "timeout": 30000
+          "timeout": 30000,
+          "ignoreHttpStatusErrors": true
         }
       },
       "id": "ollama-generate",
