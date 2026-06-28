@@ -130,6 +130,16 @@ services:
       - n8n
       - sidecars
 
+  # ── Cloudflare quick tunnel (no account needed) ──────────────────────────
+  # Generates a random trycloudflare.com URL on every launch.
+  # Get the URL from: docker compose logs cloudflared | grep trycloudflare
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    command: tunnel --url http://frontend:80 --no-autoupdate
+    depends_on:
+      - frontend
+
 volumes:
   postgres_data:
   n8n_data:
