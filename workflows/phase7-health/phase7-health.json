@@ -71,6 +71,56 @@
         750,
         400
       ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "ollama-health",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "health-ollama-wh",
+      "name": "Ollama - Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        250,
+        520
+      ],
+      "webhookId": "ollama-health"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ ($env.OLLAMA_HOST || 'http://ollama:11434') + '/api/tags' }}",
+        "options": {
+          "timeout": 5000
+        }
+      },
+      "id": "health-ollama-call",
+      "name": "Ollama - Tags",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        500,
+        520
+      ],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify((() => { if ($json.error) return { ok: false, error: 'offline' }; const tags = $json.models || []; const model = tags.find(m => m.name && m.name.startsWith('qwen3:4b')); return { ok: !!model, model: model ? model.name : null, available: tags.map(m => m.name), error: model ? undefined : 'model_not_pulled' }; })()) }}",
+        "options": {}
+      },
+      "id": "health-ollama-ok",
+      "name": "Ollama - OK",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        750,
+        520
+      ]
     }
   ],
   "connections": {
@@ -90,6 +140,28 @@
         [
           {
             "node": "Gemini - OK",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ollama - Webhook": {
+      "main": [
+        [
+          {
+            "node": "Ollama - Tags",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ollama - Tags": {
+      "main": [
+        [
+          {
+            "node": "Ollama - OK",
             "type": "main",
             "index": 0
           }

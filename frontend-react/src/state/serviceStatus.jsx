@@ -36,6 +36,21 @@ export const SERVICES = [
     },
   },
   {
+    key: 'ollama',
+    label: 'Ollama',
+    desc: 'Local LLM fallback (llama3.2:3b) — activates automatically when Gemini quota is exhausted',
+    offlineHint: (detail) => detail === 'model_not_pulled'
+      ? 'Model still downloading — wait a few minutes then recheck.'
+      : 'Ollama container is starting up. Run: docker compose up -d ollama',
+    check: async () => {
+      const r = await fetch('/webhook/ollama-health', { signal: AbortSignal.timeout(8000) });
+      const j = await r.json().catch(() => ({}));
+      if (j.ok) return { ok: true, detail: j.model || 'llama3.2:3b' };
+      if (j.error === 'model_not_pulled') return { ok: false, detail: 'pulling model…' };
+      return { ok: false, detail: j.error || 'offline' };
+    },
+  },
+  {
     key: 'smtp',
     label: 'SMTP',
     desc: 'Email sidecar — handles all candidate email sends',

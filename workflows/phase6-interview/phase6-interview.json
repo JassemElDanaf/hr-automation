@@ -166,10 +166,7 @@
         "jsonBody": "={{ $json.requestBody }}",
         "options": {
           "timeout": 30000,
-          "ignoreHttpStatusErrors": true,
-          "retryOnFail": true,
-          "maxTries": 3,
-          "waitBetweenTries": 5000
+          "ignoreHttpStatusErrors": true
         }
       },
       "id": "call-intv-nextq",
@@ -180,9 +177,7 @@
         710,
         700
       ],
-      "retryOnFail": true,
-      "maxTries": 2,
-      "waitBetweenTries": 5000
+      "continueOnFail": true
     },
     {
       "parameters": {
@@ -253,10 +248,7 @@
         "jsonBody": "={{ $json.requestBody }}",
         "options": {
           "timeout": 30000,
-          "ignoreHttpStatusErrors": true,
-          "retryOnFail": true,
-          "maxTries": 3,
-          "waitBetweenTries": 5000
+          "ignoreHttpStatusErrors": true
         }
       },
       "id": "call-intv-eval",
@@ -267,9 +259,7 @@
         710,
         900
       ],
-      "retryOnFail": true,
-      "maxTries": 2,
-      "waitBetweenTries": 5000
+      "continueOnFail": true
     },
     {
       "parameters": {
@@ -862,6 +852,166 @@
           "responseCode": 200
         }
       }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "17189827-f9e",
+              "leftValue": "={{ !!$json.error }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "ffc566e2-3fb",
+      "name": "IntNextQ - Quota?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        990,
+        700
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const orig = $('IntNextQ - Build Prompt').item.json;\nconst geminiReq = JSON.parse(orig.requestBody || '{}');\nconst sysText = geminiReq.systemInstruction?.parts?.[0]?.text || '';\nconst userText = geminiReq.contents?.[0]?.parts?.[0]?.text || '';\nconst expectJson = geminiReq.generationConfig?.responseMimeType === 'application/json';\nconst temp = geminiReq.generationConfig?.temperature ?? 0.3;\nreturn [{ json: { ...orig, requestBody: JSON.stringify({ model: 'qwen3:4b', prompt: (sysText ? sysText + '\\n\\n' : '') + userText, stream: false, ...(expectJson ? { format: 'json' } : {}), options: { temperature: temp, num_predict: 4000 } }) } }];"
+      },
+      "id": "614ae7fe-51a",
+      "name": "IntNextQ - Ollama Req",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        990,
+        900
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ ($env.OLLAMA_HOST || 'http://ollama:11434') + '/api/generate' }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.requestBody }}",
+        "options": {
+          "timeout": 300000
+        }
+      },
+      "id": "01283f8a-66f",
+      "name": "IntNextQ - Ollama",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1270,
+        900
+      ],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const r = $json;\n// qwen3 puts response in thinking field when in thinking mode; try all locations\nconst text = r.response || r.thinking || r.message?.content || '';\nreturn [{ json: { candidates: [{ content: { parts: [{ text }] } }], _source: r.error ? 'ollama_failed' : 'ollama', _model: r.model } }];"
+      },
+      "id": "07b1ef5c-053",
+      "name": "IntNextQ - Ollama Norm",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1550,
+        900
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "95e20b5d-2cd",
+              "leftValue": "={{ !!$json.error }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "22364465-4b2",
+      "name": "IntEval - Quota?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        990,
+        900
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const orig = $('IntEval - Build Prompt').item.json;\nconst geminiReq = JSON.parse(orig.requestBody || '{}');\nconst sysText = geminiReq.systemInstruction?.parts?.[0]?.text || '';\nconst userText = geminiReq.contents?.[0]?.parts?.[0]?.text || '';\nconst expectJson = geminiReq.generationConfig?.responseMimeType === 'application/json';\nconst temp = geminiReq.generationConfig?.temperature ?? 0.3;\nreturn [{ json: { ...orig, requestBody: JSON.stringify({ model: 'qwen3:4b', prompt: (sysText ? sysText + '\\n\\n' : '') + userText, stream: false, ...(expectJson ? { format: 'json' } : {}), options: { temperature: temp, num_predict: 4000 } }) } }];"
+      },
+      "id": "220f0a13-634",
+      "name": "IntEval - Ollama Req",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        990,
+        1100
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ ($env.OLLAMA_HOST || 'http://ollama:11434') + '/api/generate' }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.requestBody }}",
+        "options": {
+          "timeout": 300000
+        }
+      },
+      "id": "4d10c343-933",
+      "name": "IntEval - Ollama",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1270,
+        1100
+      ],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const r = $json;\n// qwen3 puts response in thinking field when in thinking mode; try all locations\nconst text = r.response || r.thinking || r.message?.content || '';\nreturn [{ json: { candidates: [{ content: { parts: [{ text }] } }], _source: r.error ? 'ollama_failed' : 'ollama', _model: r.model } }];"
+      },
+      "id": "c888dcbc-ce5",
+      "name": "IntEval - Ollama Norm",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1550,
+        1100
+      ]
     }
   ],
   "connections": {
@@ -946,7 +1096,7 @@
       "main": [
         [
           {
-            "node": "IntNextQ - Parse",
+            "node": "IntNextQ - Quota?",
             "type": "main",
             "index": 0
           }
@@ -990,7 +1140,7 @@
       "main": [
         [
           {
-            "node": "IntEval - Parse",
+            "node": "IntEval - Quota?",
             "type": "main",
             "index": 0
           }
@@ -1255,6 +1405,108 @@
         [
           {
             "node": "CQ List - Respond",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IntNextQ - Quota?": {
+      "main": [
+        [
+          {
+            "node": "IntNextQ - Ollama Req",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "IntNextQ - Parse",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IntNextQ - Ollama Req": {
+      "main": [
+        [
+          {
+            "node": "IntNextQ - Ollama",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IntNextQ - Ollama": {
+      "main": [
+        [
+          {
+            "node": "IntNextQ - Ollama Norm",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IntNextQ - Ollama Norm": {
+      "main": [
+        [
+          {
+            "node": "IntNextQ - Parse",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IntEval - Quota?": {
+      "main": [
+        [
+          {
+            "node": "IntEval - Ollama Req",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "IntEval - Parse",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IntEval - Ollama Req": {
+      "main": [
+        [
+          {
+            "node": "IntEval - Ollama",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IntEval - Ollama": {
+      "main": [
+        [
+          {
+            "node": "IntEval - Ollama Norm",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IntEval - Ollama Norm": {
+      "main": [
+        [
+          {
+            "node": "IntEval - Parse",
             "type": "main",
             "index": 0
           }

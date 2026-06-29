@@ -309,10 +309,7 @@
         "jsonBody": "={{ $json.requestBody }}",
         "options": {
           "timeout": 30000,
-          "ignoreHttpStatusErrors": true,
-          "retryOnFail": true,
-          "maxTries": 3,
-          "waitBetweenTries": 5000
+          "ignoreHttpStatusErrors": true
         }
       },
       "id": "call-ollama",
@@ -323,9 +320,7 @@
         1360,
         920
       ],
-      "retryOnFail": true,
-      "maxTries": 2,
-      "waitBetweenTries": 5000
+      "continueOnFail": true
     },
     {
       "parameters": {
@@ -954,10 +949,7 @@
         "jsonBody": "={{ $json.requestBody }}",
         "options": {
           "timeout": 30000,
-          "ignoreHttpStatusErrors": true,
-          "retryOnFail": true,
-          "maxTries": 3,
-          "waitBetweenTries": 5000
+          "ignoreHttpStatusErrors": true
         }
       },
       "id": "gen-crit-ollama",
@@ -968,9 +960,7 @@
         920,
         3020
       ],
-      "retryOnFail": true,
-      "maxTries": 2,
-      "waitBetweenTries": 5000
+      "continueOnFail": true
     },
     {
       "parameters": {
@@ -1322,10 +1312,7 @@
         "jsonBody": "={{ $json.requestBody }}",
         "options": {
           "timeout": 30000,
-          "ignoreHttpStatusErrors": true,
-          "retryOnFail": true,
-          "maxTries": 3,
-          "waitBetweenTries": 5000
+          "ignoreHttpStatusErrors": true
         }
       },
       "id": "int-q-ollama",
@@ -1336,9 +1323,7 @@
         1580,
         4000
       ],
-      "retryOnFail": true,
-      "maxTries": 2,
-      "waitBetweenTries": 5000
+      "continueOnFail": true
     },
     {
       "parameters": {
@@ -1385,6 +1370,246 @@
       "position": [
         2020,
         4000
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "f0172c19-272",
+              "leftValue": "={{ !!$json.error }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "3fa8be31-355",
+      "name": "Eval - Quota?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1640,
+        920
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const orig = $('Eval - Prepare Prompts').item.json;\nconst geminiReq = JSON.parse(orig.requestBody || '{}');\nconst sysText = geminiReq.systemInstruction?.parts?.[0]?.text || '';\nconst userText = geminiReq.contents?.[0]?.parts?.[0]?.text || '';\nconst expectJson = geminiReq.generationConfig?.responseMimeType === 'application/json';\nconst temp = geminiReq.generationConfig?.temperature ?? 0.3;\nreturn [{ json: { ...orig, requestBody: JSON.stringify({ model: 'qwen3:4b', prompt: (sysText ? sysText + '\\n\\n' : '') + userText, stream: false, ...(expectJson ? { format: 'json' } : {}), options: { temperature: temp, num_predict: 4000 } }) } }];"
+      },
+      "id": "fe6b6283-e73",
+      "name": "Eval - Ollama Req",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1640,
+        1120
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ ($env.OLLAMA_HOST || 'http://ollama:11434') + '/api/generate' }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.requestBody }}",
+        "options": {
+          "timeout": 300000
+        }
+      },
+      "id": "c94ac469-e04",
+      "name": "Eval - Ollama",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1920,
+        1120
+      ],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const r = $json;\n// qwen3 puts response in thinking field when in thinking mode; try all locations\nconst text = r.response || r.thinking || r.message?.content || '';\nreturn [{ json: { candidates: [{ content: { parts: [{ text }] } }], _source: r.error ? 'ollama_failed' : 'ollama', _model: r.model } }];"
+      },
+      "id": "fc0c7888-6ea",
+      "name": "Eval - Ollama Norm",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2200,
+        1120
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "d936a770-47b",
+              "leftValue": "={{ !!$json.error }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "1da88d47-c7c",
+      "name": "GenCrit - Quota?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1200,
+        3020
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const orig = $('GenCrit - Build Prompt').item.json;\nconst geminiReq = JSON.parse(orig.requestBody || '{}');\nconst sysText = geminiReq.systemInstruction?.parts?.[0]?.text || '';\nconst userText = geminiReq.contents?.[0]?.parts?.[0]?.text || '';\nconst expectJson = geminiReq.generationConfig?.responseMimeType === 'application/json';\nconst temp = geminiReq.generationConfig?.temperature ?? 0.3;\nreturn [{ json: { ...orig, requestBody: JSON.stringify({ model: 'qwen3:4b', prompt: (sysText ? sysText + '\\n\\n' : '') + userText, stream: false, ...(expectJson ? { format: 'json' } : {}), options: { temperature: temp, num_predict: 4000 } }) } }];"
+      },
+      "id": "257549fa-cfb",
+      "name": "GenCrit - Ollama Req",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1200,
+        3220
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ ($env.OLLAMA_HOST || 'http://ollama:11434') + '/api/generate' }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.requestBody }}",
+        "options": {
+          "timeout": 300000
+        }
+      },
+      "id": "cede052e-f4e",
+      "name": "GenCrit - Ollama",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1480,
+        3220
+      ],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const r = $json;\n// qwen3 puts response in thinking field when in thinking mode; try all locations\nconst text = r.response || r.thinking || r.message?.content || '';\nreturn [{ json: { candidates: [{ content: { parts: [{ text }] } }], _source: r.error ? 'ollama_failed' : 'ollama', _model: r.model } }];"
+      },
+      "id": "9ea6735c-f5c",
+      "name": "GenCrit - Ollama Norm",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1760,
+        3220
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "bff5f8ee-3ec",
+              "leftValue": "={{ !!$json.error }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "cf0bed55-b78",
+      "name": "IntQ - Quota?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1860,
+        4000
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const orig = $('IntQ - Build Prompt').item.json;\nconst geminiReq = JSON.parse(orig.requestBody || '{}');\nconst sysText = geminiReq.systemInstruction?.parts?.[0]?.text || '';\nconst userText = geminiReq.contents?.[0]?.parts?.[0]?.text || '';\nconst expectJson = geminiReq.generationConfig?.responseMimeType === 'application/json';\nconst temp = geminiReq.generationConfig?.temperature ?? 0.3;\nreturn [{ json: { ...orig, requestBody: JSON.stringify({ model: 'qwen3:4b', prompt: (sysText ? sysText + '\\n\\n' : '') + userText, stream: false, ...(expectJson ? { format: 'json' } : {}), options: { temperature: temp, num_predict: 4000 } }) } }];"
+      },
+      "id": "cb2bcf7a-964",
+      "name": "IntQ - Ollama Req",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1860,
+        4200
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ ($env.OLLAMA_HOST || 'http://ollama:11434') + '/api/generate' }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.requestBody }}",
+        "options": {
+          "timeout": 300000
+        }
+      },
+      "id": "28d3bd19-8ad",
+      "name": "IntQ - Ollama",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2140,
+        4200
+      ],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const r = $json;\n// qwen3 puts response in thinking field when in thinking mode; try all locations\nconst text = r.response || r.thinking || r.message?.content || '';\nreturn [{ json: { candidates: [{ content: { parts: [{ text }] } }], _source: r.error ? 'ollama_failed' : 'ollama', _model: r.model } }];"
+      },
+      "id": "18f20dbd-4ad",
+      "name": "IntQ - Ollama Norm",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2420,
+        4200
       ]
     }
   ],
@@ -1535,7 +1760,7 @@
       "main": [
         [
           {
-            "node": "Eval - Score Candidates",
+            "node": "Eval - Quota?",
             "type": "main",
             "index": 0
           }
@@ -1823,7 +2048,7 @@
       "main": [
         [
           {
-            "node": "GenCrit - Parse Response",
+            "node": "GenCrit - Quota?",
             "type": "main",
             "index": 0
           }
@@ -1994,7 +2219,7 @@
       "main": [
         [
           {
-            "node": "IntQ - Parse Response",
+            "node": "IntQ - Quota?",
             "type": "main",
             "index": 0
           }
@@ -2013,6 +2238,159 @@
         [
           {
             "node": "IntQ - Success Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Eval - Quota?": {
+      "main": [
+        [
+          {
+            "node": "Eval - Ollama Req",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Eval - Score Candidates",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Eval - Ollama Req": {
+      "main": [
+        [
+          {
+            "node": "Eval - Ollama",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Eval - Ollama": {
+      "main": [
+        [
+          {
+            "node": "Eval - Ollama Norm",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Eval - Ollama Norm": {
+      "main": [
+        [
+          {
+            "node": "Eval - Score Candidates",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GenCrit - Quota?": {
+      "main": [
+        [
+          {
+            "node": "GenCrit - Ollama Req",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "GenCrit - Parse Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GenCrit - Ollama Req": {
+      "main": [
+        [
+          {
+            "node": "GenCrit - Ollama",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GenCrit - Ollama": {
+      "main": [
+        [
+          {
+            "node": "GenCrit - Ollama Norm",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GenCrit - Ollama Norm": {
+      "main": [
+        [
+          {
+            "node": "GenCrit - Parse Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IntQ - Quota?": {
+      "main": [
+        [
+          {
+            "node": "IntQ - Ollama Req",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "IntQ - Parse Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IntQ - Ollama Req": {
+      "main": [
+        [
+          {
+            "node": "IntQ - Ollama",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IntQ - Ollama": {
+      "main": [
+        [
+          {
+            "node": "IntQ - Ollama Norm",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IntQ - Ollama Norm": {
+      "main": [
+        [
+          {
+            "node": "IntQ - Parse Response",
             "type": "main",
             "index": 0
           }

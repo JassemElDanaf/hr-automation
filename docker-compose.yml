@@ -1,9 +1,10 @@
-# Diyar HR — Docker Compose (Gemini branch)
+# Diyar HR — Docker Compose (Gemini branch + Ollama fallback)
 # Usage:
 #   1. cp .env.example .env  &&  edit .env  (fill in SMTP/IMAP + GEMINI_API_KEY)
 #   2. docker compose up -d
 #
-# AI evaluation is handled by the Gemini API — no local Ollama needed.
+# Primary AI: Gemini API.  Fallback AI: Ollama (llama3.2:3b) — kicks in automatically
+# when Gemini returns 429 / quota-exhausted.  Model is cached in ./ollama-data.
 # All data is persisted in named volumes; nothing is lost on restart.
 
 services:
@@ -63,6 +64,8 @@ services:
       N8N_BLOCK_ENV_ACCESS_IN_NODE: "false"
       # Gemini API key — exposed to n8n workflows via $env.GEMINI_API_KEY
       GEMINI_API_KEY: ${GEMINI_API_KEY}
+      # Ollama fallback — reachable within the Docker network
+      OLLAMA_HOST: "http://ollama:11434"
     volumes:
       - n8n_data:/home/node/.n8n
       - ./workflows:/workflows:ro
@@ -141,6 +144,25 @@ services:
     command: tunnel --url http://frontend:80 --no-autoupdate
     depends_on:
       - frontend
+
+  # ── Ollama (local LLM fallback — activates when Gemini quota is exhausted) ──
+  ollama:
+    image: ollama/ollama:latest
+    restart: unless-stopped
+    entrypoint: ["/bin/sh", "/entrypoint.sh"]
+    volumes:
+      - ./ollama-data:/root/.ollama
+      - ./scripts/ollama-entrypoint.sh:/entrypoint.sh:ro
+    environment:
+      OLLAMA_MODEL: "qwen3:4b"
+    ports:
+      - "11434:11434"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:11434/ > /dev/null 2>&1"]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
 
 volumes:
   postgres_data:

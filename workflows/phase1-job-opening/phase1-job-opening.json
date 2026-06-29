@@ -182,9 +182,7 @@
         1160,
         300
       ],
-      "retryOnFail": true,
-      "maxTries": 2,
-      "waitBetweenTries": 5000
+      "continueOnFail": true
     },
     {
       "parameters": {
@@ -877,6 +875,86 @@
         1140,
         2320
       ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "0f176d6f-417",
+              "leftValue": "={{ !!$json.error }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "5349a916-8fa",
+      "name": "Create - Quota?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1440,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const orig = $('Create - Route by Source').item.json;\nconst sysText = 'You are an expert HR copywriter. Write compelling, professional job descriptions. Respond ONLY with valid JSON matching the requested schema\u2014no preamble, no markdown.';\nconst userText = `Generate a job description for the position below at Diyar United Company. Return ONLY a JSON object (no other text) with these exact keys:\\n{\"about\": \"2-3 sentence paragraph about the role\", \"responsibilities\": [\"5 to 7 specific bullet strings\"], \"requirements\": [\"5 to 7 specific bullet strings\"], \"niceToHave\": [\"3 to 4 bullet strings\"], \"offer\": [\"3 to 4 bullet strings\"]}\\nUse the real company name \\\"Diyar United Company\\\" where relevant; never use placeholders.\\n\\nPosition:\\n- Job Title: ${orig.job_title}\\n- Department: ${orig.department}\\n- Employment Type: ${orig.employment_type}\\n- Seniority Level: ${orig.seniority_level}\\n- Location: ${orig.location_type}${orig.reporting_to ? '\\\\n- Reporting To: ' + orig.reporting_to : ''}${orig.ai_context ? '\\\\n- Required skills/keywords: ' + orig.ai_context : ''}`;\nreturn [{ json: { ...orig, requestBody: JSON.stringify({ model: 'qwen3:4b', prompt: sysText + '\\n\\n' + userText, stream: false, format: 'json', options: { temperature: 0.2, num_predict: 2048 } }) } }];"
+      },
+      "id": "9ff4c0e8-ec4",
+      "name": "Create - Ollama Req",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1440,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ ($env.OLLAMA_HOST || 'http://ollama:11434') + '/api/generate' }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.requestBody }}",
+        "options": {
+          "timeout": 300000
+        }
+      },
+      "id": "17e912e8-7dc",
+      "name": "Create - Ollama",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1720,
+        500
+      ],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const r = $json;\n// qwen3 puts response in thinking field when in thinking mode; try all locations\nconst text = r.response || r.thinking || r.message?.content || '';\nreturn [{ json: { candidates: [{ content: { parts: [{ text }] } }], _source: r.error ? 'ollama_failed' : 'ollama', _model: r.model } }];"
+      },
+      "id": "4bb34c59-4ba",
+      "name": "Create - Ollama Norm",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2000,
+        500
+      ]
     }
   ],
   "connections": {
@@ -1000,7 +1078,7 @@
       "main": [
         [
           {
-            "node": "Create - Process AI Response",
+            "node": "Create - Quota?",
             "type": "main",
             "index": 0
           }
@@ -1267,6 +1345,57 @@
         [
           {
             "node": "Toggle - Not Found",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create - Quota?": {
+      "main": [
+        [
+          {
+            "node": "Create - Ollama Req",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Create - Process AI Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create - Ollama Req": {
+      "main": [
+        [
+          {
+            "node": "Create - Ollama",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create - Ollama": {
+      "main": [
+        [
+          {
+            "node": "Create - Ollama Norm",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create - Ollama Norm": {
+      "main": [
+        [
+          {
+            "node": "Create - Process AI Response",
             "type": "main",
             "index": 0
           }
