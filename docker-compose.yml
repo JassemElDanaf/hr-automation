@@ -125,6 +125,12 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "python3 -c \"import socket; socket.create_connection(('localhost', 8904), 2)\""]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
 
   # ── React frontend (nginx) ────────────────────────────────────────────────
   frontend:
@@ -137,6 +143,12 @@ services:
     depends_on:
       - n8n
       - sidecars
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO /dev/null http://127.0.0.1/ || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
 
   # ── Cloudflare quick tunnel (no account needed) ──────────────────────────
   # Generates a random trycloudflare.com URL on every launch.
@@ -154,18 +166,18 @@ services:
     restart: unless-stopped
     entrypoint: ["/bin/sh", "/entrypoint.sh"]
     volumes:
-      - ./ollama-data:/root/.ollama
+      - ${OLLAMA_DATA_DIR:-./ollama-data}:/root/.ollama
       - ./scripts/ollama-entrypoint.sh:/entrypoint.sh:ro
     environment:
       OLLAMA_MODEL: "qwen3:4b"
     ports:
       - "11434:11434"
     healthcheck:
-      test: ["CMD-SHELL", "curl -sf http://localhost:11434/ > /dev/null 2>&1"]
+      test: ["CMD-SHELL", "bash -c 'echo > /dev/tcp/127.0.0.1/11434' 2>/dev/null"]
       interval: 15s
       timeout: 5s
       retries: 20
-      start_period: 10s
+      start_period: 30s
 
 volumes:
   postgres_data:
