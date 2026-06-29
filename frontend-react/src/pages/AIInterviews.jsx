@@ -190,7 +190,7 @@ export default function AIInterviews({ embedded = false }) {
       showToast('Evaluation complete', 'success');
       const res = await apiGet(`/interview/sessions?jobId=${jobId}`);
       setSessions(Array.isArray(res) ? res : (res.data || []));
-    } catch { showToast('Re-evaluation failed — is Ollama running?', 'error'); }
+    } catch { showToast('Re-evaluation failed — check Gemini API key', 'error'); }
     finally { setReEvaluating(p => ({ ...p, [s.id]: false })); }
   }
 

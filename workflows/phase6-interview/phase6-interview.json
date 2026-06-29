@@ -146,7 +146,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const body = $input.first().json.body || $input.first().json || {};\nconst jobTitle = (body.jobTitle || 'the position').substring(0, 100);\nconst candidateName = (body.candidateName || 'the candidate').substring(0, 100);\nconst questionNumber = parseInt(body.questionNumber) || 1;\nconst totalQuestions = parseInt(body.totalQuestions) || 10;\nconst language = body.language === 'ar' ? 'Arabic' : 'English';\nconst isFirst = !!body.isFirst;\nconst transcript = Array.isArray(body.transcript) ? body.transcript.slice(-4) : [];\nconst recentLines = transcript.map(t => `[${t.time||''}] ${t.speaker}: ${t.text}`).join('\\n');\nconst contextBlock = recentLines ? `\\nRecent conversation:\\n${recentLines}\\n` : '';\nconst prompt = `You are an AI interviewer conducting a structured job interview for the position of ${jobTitle} at Diyar United Company.\\nCandidate: ${candidateName}${contextBlock}\\n\\nGenerate interview question ${questionNumber} of ${totalQuestions}.\\n${isFirst ? 'This is the opening question — start with something to put the candidate at ease, like about their background or motivation.' : 'Build naturally on the conversation so far.'}\\nLanguage: ${language}\\n\\nReturn ONLY valid JSON:\\n{\\\"question\\\": \\\"Your interview question here\\\"}`;\nreturn [{ json: { requestBody: { model: 'qwen3:4b', prompt, think: false, stream: false, format: 'json', options: { temperature: 0.7, num_predict: 300 } } } }];"
+        "jsCode": "const body = $input.first().json.body || $input.first().json || {};\nconst jobTitle = (body.jobTitle || 'the position').substring(0, 100);\nconst candidateName = (body.candidateName || 'the candidate').substring(0, 100);\nconst questionNumber = parseInt(body.questionNumber) || 1;\nconst totalQuestions = parseInt(body.totalQuestions) || 10;\nconst language = body.language === 'ar' ? 'Arabic' : 'English';\nconst isFirst = !!body.isFirst;\nconst transcript = Array.isArray(body.transcript) ? body.transcript.slice(-4) : [];\nconst recentLines = transcript.map(t => `[${t.time||''}] ${t.speaker}: ${t.text}`).join('\\n');\nconst contextBlock = recentLines ? `\\nRecent conversation:\\n${recentLines}\\n` : '';\nconst prompt = `You are an AI interviewer conducting a structured job interview for the position of ${jobTitle} at Diyar United Company.\\nCandidate: ${candidateName}${contextBlock}\\n\\nGenerate interview question ${questionNumber} of ${totalQuestions}.\\n${isFirst ? 'This is the opening question \u2014 start with something to put the candidate at ease, like about their background or motivation.' : 'Build naturally on the conversation so far.'}\\nLanguage: ${language}\\n\\nReturn ONLY valid JSON:\\n{\\\"question\\\": \\\"Your interview question here\\\"}`;\nreturn [{ json: { requestBody: JSON.stringify({ systemInstruction: { parts: [{ text: 'You are an AI interviewer. Generate the next interview question based on conversation context. Respond ONLY with valid JSON.' }] }, contents: [{ parts: [{ text: prompt }] }], generationConfig: { temperature: 0.5, maxOutputTokens: 400, responseMimeType: 'application/json' } }) } }];"
       },
       "id": "build-intv-nextq",
       "name": "IntNextQ - Build Prompt",
@@ -160,12 +160,13 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "http://127.0.0.1:11434/api/generate",
+        "url": "={{ 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=' + $env.GEMINI_API_KEY }}",
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={{ $json.requestBody }}",
         "options": {
-          "timeout": 120000
+          "timeout": 30000,
+          "ignoreHttpStatusErrors": true
         }
       },
       "id": "call-intv-nextq",
@@ -176,13 +177,11 @@
         710,
         700
       ],
-      "retryOnFail": true,
-      "maxTries": 3,
-      "waitBetweenTries": 3000
+      "continueOnFail": true
     },
     {
       "parameters": {
-        "jsCode": "const raw = $input.first().json;\nlet text = (raw.response || '').trim();\ntext = text.replace(/<think>[\\s\\S]*?<\\/think>/gi, '').replace(/^```json\\s*/i, '').replace(/```\\s*$/i, '').trim();\nlet parsed = null;\ntry { parsed = JSON.parse(text); } catch(e) {\n  const s = text.indexOf('{');\n  const e2 = text.lastIndexOf('}');\n  if (s >= 0 && e2 > s) try { parsed = JSON.parse(text.slice(s, e2+1)); } catch {}\n}\nconst question = parsed?.question || parsed?.text || 'Could you tell me more about your relevant experience for this role?';\nreturn [{ json: { question } }];"
+        "jsCode": "const raw = $input.first().json;\nif (raw.error) {\n  const msg = raw.error.code === 429 ? 'Gemini rate limited \u2014 please wait a moment' : (raw.error.message || 'Gemini API error');\n  return [{ json: { error: true, message: msg } }];\n}\n\nlet text = ((raw.candidates?.[0]?.content?.parts?.[0]?.text || '') || '').trim();\nlet parsed = null;\ntry { parsed = JSON.parse(text); } catch(e) {\n  const s = text.indexOf('{');\n  const e2 = text.lastIndexOf('}');\n  if (s >= 0 && e2 > s) try { parsed = JSON.parse(text.slice(s, e2+1)); } catch {}\n}\nconst question = parsed?.question || parsed?.text || 'Could you tell me more about your relevant experience for this role?';\nreturn [{ json: { question } }];"
       },
       "id": "parse-intv-nextq",
       "name": "IntNextQ - Parse",
@@ -229,7 +228,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const body = $input.first().json.body || $input.first().json || {};\nconst jobTitle = (body.jobTitle || 'the position').substring(0, 100);\nconst candidateName = (body.candidateName || 'the candidate').substring(0, 100);\nconst duration = parseInt(body.durationSeconds || body.duration) || 0;\nconst minutes = Math.floor(duration/60);\nconst qaPairs = Array.isArray(body.qaPairs) ? body.qaPairs : (Array.isArray(body.transcript) ? body.transcript : []);\nconst customQuestions = Array.isArray(body.customQuestions) ? body.customQuestions : [];\nconst modelAnswerMap = {};\ncustomQuestions.forEach((q, i) => { if (q.modelAnswer && q.modelAnswer.trim()) modelAnswerMap[i] = q.modelAnswer.trim(); });\nconst hasRubric = Object.keys(modelAnswerMap).length > 0;\n\nconst REQ_CATEGORIES = ['salary', 'iqama', 'notice', 'location'];\nconst requirementQs = [];\ncustomQuestions.forEach((q, i) => { if (REQ_CATEGORIES.includes((q.category||'').toLowerCase()) && q.modelAnswer && q.modelAnswer.trim()) requirementQs.push({ index: i, category: (q.category||'').toLowerCase(), question: q.question || q.text || '', requirement: q.modelAnswer.trim() }); });\nconst hasRequirements = requirementQs.length > 0;\n\nconst noResponseCount = qaPairs.filter(p => {\n  const a = (p.answer || '').trim().toLowerCase();\n  return a === '(no response)' || a === '(no answer captured)' || a === '';\n}).length;\nconst totalQ = qaPairs.length;\n\nconst qText = qaPairs.map((p, i) => {\n  const ma = modelAnswerMap[i];\n  const rubricLine = ma ? '\\nExpected answer: ' + ma : '';\n  return 'Q' + (i+1) + '. ' + (p.question||'') + rubricLine + '\\nCandidate\\'s answer: ' + ((p.answer||'(no answer captured)').substring(0,500));\n}).join('\\n\\n');\n\nconst rubricInstruction = hasRubric ? '\\nFor questions with an \"Expected answer\", score primarily on alignment with that rubric.' : '';\n\nconst requirementsBlock = hasRequirements ? '\\n\\nREQUIREMENTS TO EXTRACT:\\n' + requirementQs.map(r => '- Q' + (r.index+1) + ' [' + r.category + ']: \"' + r.question + '\" -> Required: \"' + r.requirement + '\"').join('\\n') + '\\n\\nFor each requirement above, extract the candidate\\'s stated answer and determine if it meets the requirement (met: true/false).' : '';\nconst requirementsJson = hasRequirements ? ',\\n  \"requirements\": [{\"index\": 1, \"category\": \"salary\", \"question\": \"...\", \"requirement\": \"...\", \"extracted\": \"candidate stated value\", \"met\": true, \"note\": \"brief note\"}]' : '';\n\nconst penaltyInstruction = noResponseCount === 0 ? '' :\n  '\\n\\nPENALTY RULES (non-negotiable):\\n' +\n  '- Every \"(no response)\" or \"(no answer captured)\" answer scores 1-2 for that question — the candidate said nothing.\\n' +\n  (noResponseCount >= Math.ceil(totalQ / 2)\n    ? '- The candidate failed to answer ' + noResponseCount + ' out of ' + totalQ + ' questions. Overall MUST be ≤ 3.\\n'\n    : '- The candidate failed to answer ' + noResponseCount + ' out of ' + totalQ + ' questions. Overall MUST be ≤ 5.\\n') +\n  '- Do NOT inflate scores based on one good answer. Score reflects the full interview, not cherry-picked moments.\\n' +\n  '- overall must equal the rounded average of communication + technical + confidence + cultureFit — do not independently estimate it.';\n\nconst prompt = 'You are a strict HR evaluator for a competitive role. Score honestly — unanswered questions are a serious red flag.\\n\\nPosition: ' + jobTitle + '\\nCandidate: ' + candidateName + '\\nDuration: ' + minutes + ' minute(s), ' + totalQ + ' questions asked\\n\\nQuestions and Answers:\\n' + (qText||'No Q&A captured.') + rubricInstruction + requirementsBlock + penaltyInstruction + '\\n\\nRate 1-10 on each dimension. Return ONLY valid JSON:\\n{\\n  \"communication\": <score>,\\n  \"technical\": <score>,\\n  \"confidence\": <score>,\\n  \"cultureFit\": <score>,\\n  \"overall\": <average of above 4>,\\n  \"summary\": \"2-3 sentence honest performance summary\",\\n  \"recommendation\": \"Hire / Consider / Don\\'t Recommend — 1-2 sentence justification\",\\n  \"perQuestion\": [{\"index\": 1, \"score\": <score>, \"feedback\": \"one sentence\"}]' + requirementsJson + '\\n}';\n\nreturn [{ json: { requestBody: { model: 'qwen3:4b', prompt, think: false, stream: false, format: 'json', options: { temperature: 0.2, num_predict: 2500 } } } }];"
+        "jsCode": "const body = $input.first().json.body || $input.first().json || {};\nconst jobTitle = (body.jobTitle || 'the position').substring(0, 100);\nconst candidateName = (body.candidateName || 'the candidate').substring(0, 100);\nconst duration = parseInt(body.durationSeconds || body.duration) || 0;\nconst minutes = Math.floor(duration/60);\nconst qaPairs = Array.isArray(body.qaPairs) ? body.qaPairs : (Array.isArray(body.transcript) ? body.transcript : []);\nconst customQuestions = Array.isArray(body.customQuestions) ? body.customQuestions : [];\nconst modelAnswerMap = {};\ncustomQuestions.forEach((q, i) => { if (q.modelAnswer && q.modelAnswer.trim()) modelAnswerMap[i] = q.modelAnswer.trim(); });\nconst hasRubric = Object.keys(modelAnswerMap).length > 0;\n\nconst REQ_CATEGORIES = ['salary', 'iqama', 'notice', 'location'];\nconst requirementQs = [];\ncustomQuestions.forEach((q, i) => { if (REQ_CATEGORIES.includes((q.category||'').toLowerCase()) && q.modelAnswer && q.modelAnswer.trim()) requirementQs.push({ index: i, category: (q.category||'').toLowerCase(), question: q.question || q.text || '', requirement: q.modelAnswer.trim() }); });\nconst hasRequirements = requirementQs.length > 0;\n\nconst noResponseCount = qaPairs.filter(p => {\n  const a = (p.answer || '').trim().toLowerCase();\n  return a === '(no response)' || a === '(no answer captured)' || a === '';\n}).length;\nconst totalQ = qaPairs.length;\n\nconst qText = qaPairs.map((p, i) => {\n  const ma = modelAnswerMap[i];\n  const rubricLine = ma ? '\\nExpected answer: ' + ma : '';\n  return 'Q' + (i+1) + '. ' + (p.question||'') + rubricLine + '\\nCandidate\\'s answer: ' + ((p.answer||'(no answer captured)').substring(0,500));\n}).join('\\n\\n');\n\nconst rubricInstruction = hasRubric ? '\\nFor questions with an \"Expected answer\", score primarily on alignment with that rubric.' : '';\n\nconst requirementsBlock = hasRequirements ? '\\n\\nREQUIREMENTS TO EXTRACT:\\n' + requirementQs.map(r => '- Q' + (r.index+1) + ' [' + r.category + ']: \"' + r.question + '\" -> Required: \"' + r.requirement + '\"').join('\\n') + '\\n\\nFor each requirement above, extract the candidate\\'s stated answer and determine if it meets the requirement (met: true/false).' : '';\nconst requirementsJson = hasRequirements ? ',\\n  \"requirements\": [{\"index\": 1, \"category\": \"salary\", \"question\": \"...\", \"requirement\": \"...\", \"extracted\": \"candidate stated value\", \"met\": true, \"note\": \"brief note\"}]' : '';\n\nconst penaltyInstruction = noResponseCount === 0 ? '' :\n  '\\n\\nPENALTY RULES (non-negotiable):\\n' +\n  '- Every \"(no response)\" or \"(no answer captured)\" answer scores 1-2 for that question \u2014 the candidate said nothing.\\n' +\n  (noResponseCount >= Math.ceil(totalQ / 2)\n    ? '- The candidate failed to answer ' + noResponseCount + ' out of ' + totalQ + ' questions. Overall MUST be \u2264 3.\\n'\n    : '- The candidate failed to answer ' + noResponseCount + ' out of ' + totalQ + ' questions. Overall MUST be \u2264 5.\\n') +\n  '- Do NOT inflate scores based on one good answer. Score reflects the full interview, not cherry-picked moments.\\n' +\n  '- overall must equal the rounded average of communication + technical + confidence + cultureFit \u2014 do not independently estimate it.';\n\nconst prompt = 'You are a strict HR evaluator for a competitive role. Score honestly \u2014 unanswered questions are a serious red flag.\\n\\nPosition: ' + jobTitle + '\\nCandidate: ' + candidateName + '\\nDuration: ' + minutes + ' minute(s), ' + totalQ + ' questions asked\\n\\nQuestions and Answers:\\n' + (qText||'No Q&A captured.') + rubricInstruction + requirementsBlock + penaltyInstruction + '\\n\\nRate 1-10 on each dimension. Return ONLY valid JSON:\\n{\\n  \"communication\": <score>,\\n  \"technical\": <score>,\\n  \"confidence\": <score>,\\n  \"cultureFit\": <score>,\\n  \"overall\": <average of above 4>,\\n  \"summary\": \"2-3 sentence honest performance summary\",\\n  \"recommendation\": \"Hire / Consider / Don\\'t Recommend \u2014 1-2 sentence justification\",\\n  \"perQuestion\": [{\"index\": 1, \"score\": <score>, \"feedback\": \"one sentence\"}]' + requirementsJson + '\\n}';\n\nreturn [{ json: { requestBody: JSON.stringify({ systemInstruction: { parts: [{ text: 'You are an expert interview evaluator. Assess candidate responses fairly and objectively. Respond ONLY with valid JSON matching the requested schema\u2014no preamble, no markdown.' }] }, contents: [{ parts: [{ text: prompt }] }], generationConfig: { temperature: 0.2, maxOutputTokens: 2048, responseMimeType: 'application/json' } }) } }];"
       },
       "id": "build-intv-eval",
       "name": "IntEval - Build Prompt",
@@ -243,12 +242,13 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "http://127.0.0.1:11434/api/generate",
+        "url": "={{ 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=' + $env.GEMINI_API_KEY }}",
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={{ $json.requestBody }}",
         "options": {
-          "timeout": 300000
+          "timeout": 30000,
+          "ignoreHttpStatusErrors": true
         }
       },
       "id": "call-intv-eval",
@@ -259,13 +259,11 @@
         710,
         900
       ],
-      "retryOnFail": true,
-      "maxTries": 3,
-      "waitBetweenTries": 3000
+      "continueOnFail": true
     },
     {
       "parameters": {
-        "jsCode": "const raw = $input.first().json;\nlet text = (raw.response || '').trim();\ntext = text.replace(/<think>[\\s\\S]*?<\\/think>/gi,'').replace(/^```json\\s*/i,'').replace(/```\\s*$/i,'').trim();\nfunction ex(t) { try { return JSON.parse(t); } catch {} const s=t.indexOf('{'),e=t.lastIndexOf('}'); if(s<0||e<s) return null; try { return JSON.parse(t.slice(s,e+1)); } catch { return null; } }\nfunction c(v) { const n=parseFloat(v); return isNaN(n)?0:Math.min(10,Math.max(0,Math.round(n*10)/10)); }\nconst p = ex(text);\nreturn [{ json: { communication: p?c(p.communication):0, technical: p?c(p.technical):0, confidence: p?c(p.confidence):0, cultureFit: p?c(p.cultureFit):0, overall: p?c(p.overall):0, summary: p?.summary||'Evaluation could not be generated.', recommendation: p?.recommendation||'', perQuestion: p?.perQuestion||[], requirements: p?.requirements||[] } }];"
+        "jsCode": "const raw = $input.first().json;\nif (raw.error) {\n  const msg = raw.error.code === 429 ? 'Gemini rate limited \u2014 please wait a moment' : (raw.error.message || 'Gemini API error');\n  return [{ json: { error: true, message: msg } }];\n}\n\nlet text = ((raw.candidates?.[0]?.content?.parts?.[0]?.text || '') || '').trim();\nfunction ex(t) { try { return JSON.parse(t); } catch {} const s=t.indexOf('{'),e=t.lastIndexOf('}'); if(s<0||e<s) return null; try { return JSON.parse(t.slice(s,e+1)); } catch { return null; } }\nfunction c(v) { const n=parseFloat(v); return isNaN(n)?0:Math.min(10,Math.max(0,Math.round(n*10)/10)); }\nconst p = ex(text);\nreturn [{ json: { communication: p?c(p.communication):0, technical: p?c(p.technical):0, confidence: p?c(p.confidence):0, cultureFit: p?c(p.cultureFit):0, overall: p?c(p.overall):0, summary: p?.summary||'Evaluation could not be generated.', recommendation: p?.recommendation||'', perQuestion: p?.perQuestion||[], requirements: p?.requirements||[] } }];"
       },
       "id": "parse-intv-eval",
       "name": "IntEval - Parse",
@@ -329,7 +327,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const body = $input.first().json.body;\nconst scores = body.scores || {};\nconst evalId = parseInt(body.evaluationId) || 0;\nreturn [{\n  json: {\n    jobId: parseInt(body.jobId) || 0,\n    candidateId: parseInt(body.candidateId) || 0,\n    evaluationId: evalId > 0 ? evalId : null,\n    candidateName: (body.candidateName || '').replace(/'/g, \"''\"),\n    durationSeconds: parseInt(body.durationSeconds) || 0,\n    transcript: JSON.stringify(body.transcript || []).replace(/'/g, \"''\"),\n    qaPairs: JSON.stringify(body.transcript || []).replace(/'/g, \"''\"),\n    communication: parseFloat(scores.communication) || 0,\n    technical: parseFloat(scores.technical) || 0,\n    confidence: parseFloat(scores.confidence) || 0,\n    cultureFit: parseFloat(scores.cultureFit) || 0,\n    overall: parseFloat(scores.overall) || 0,\n    summary: (scores.summary || '').replace(/'/g, \"''\"),\n    recommendation: (scores.recommendation || '').replace(/'/g, \"''\"),\n    perQuestion: JSON.stringify(scores.perQuestion || []).replace(/'/g, \"''\"),\n    recordingPath: (body.recordingPath || '').replace(/'/g, \"''\"),\n    requirementsMatch: JSON.stringify(scores.requirements || body.requirementsMatch || []).replace(/'/g, \"''\")\n  }\n}];"
+        "jsCode": "const body = $input.first().json.body || $input.first().json || {};\nconst scores = body.scores || {};\nconst evalId = parseInt(body.evaluationId) || 0;\nreturn [{\n  json: {\n    jobId: parseInt(body.jobId) || 0,\n    candidateId: parseInt(body.candidateId) || 0,\n    evaluationId: evalId > 0 ? evalId : null,\n    candidateName: (body.candidateName || '').replace(/'/g, \"''\"),\n    durationSeconds: parseInt(body.durationSeconds) || 0,\n    transcript: JSON.stringify(body.transcript || []).replace(/'/g, \"''\"),\n    qaPairs: JSON.stringify(body.transcript || []).replace(/'/g, \"''\"),\n    communication: parseFloat(scores.communication) || 0,\n    technical: parseFloat(scores.technical) || 0,\n    confidence: parseFloat(scores.confidence) || 0,\n    cultureFit: parseFloat(scores.cultureFit) || 0,\n    overall: parseFloat(scores.overall) || 0,\n    summary: (scores.summary || '').replace(/'/g, \"''\"),\n    recommendation: (scores.recommendation || '').replace(/'/g, \"''\"),\n    perQuestion: JSON.stringify(scores.perQuestion || []).replace(/'/g, \"''\"),\n    recordingPath: (body.recordingPath || '').replace(/'/g, \"''\"),\n    requirementsMatch: JSON.stringify(scores.requirements || body.requirementsMatch || []).replace(/'/g, \"''\")\n  }\n}];"
       },
       "id": "prep-intv-tx",
       "name": "IntTx - Prep",
@@ -854,6 +852,166 @@
           "responseCode": 200
         }
       }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "17189827-f9e",
+              "leftValue": "={{ !!$json.error }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "ffc566e2-3fb",
+      "name": "IntNextQ - Quota?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        990,
+        700
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const orig = $('IntNextQ - Build Prompt').item.json;\nconst geminiReq = JSON.parse(orig.requestBody || '{}');\nconst sysText = geminiReq.systemInstruction?.parts?.[0]?.text || '';\nconst userText = geminiReq.contents?.[0]?.parts?.[0]?.text || '';\nconst expectJson = geminiReq.generationConfig?.responseMimeType === 'application/json';\nconst temp = geminiReq.generationConfig?.temperature ?? 0.3;\nreturn [{ json: { ...orig, requestBody: JSON.stringify({ model: 'qwen3:4b', prompt: (sysText ? sysText + '\\n\\n' : '') + userText, stream: false, ...(expectJson ? { format: 'json' } : {}), options: { temperature: temp, num_predict: 4000 } }) } }];"
+      },
+      "id": "614ae7fe-51a",
+      "name": "IntNextQ - Ollama Req",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        990,
+        900
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ ($env.OLLAMA_HOST || 'http://ollama:11434') + '/api/generate' }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.requestBody }}",
+        "options": {
+          "timeout": 300000
+        }
+      },
+      "id": "01283f8a-66f",
+      "name": "IntNextQ - Ollama",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1270,
+        900
+      ],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const r = $json;\n// qwen3 puts response in thinking field when in thinking mode; try all locations\nconst text = r.response || r.thinking || r.message?.content || '';\nreturn [{ json: { candidates: [{ content: { parts: [{ text }] } }], _source: r.error ? 'ollama_failed' : 'ollama', _model: r.model } }];"
+      },
+      "id": "07b1ef5c-053",
+      "name": "IntNextQ - Ollama Norm",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1550,
+        900
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "95e20b5d-2cd",
+              "leftValue": "={{ !!$json.error }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "22364465-4b2",
+      "name": "IntEval - Quota?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        990,
+        900
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const orig = $('IntEval - Build Prompt').item.json;\nconst geminiReq = JSON.parse(orig.requestBody || '{}');\nconst sysText = geminiReq.systemInstruction?.parts?.[0]?.text || '';\nconst userText = geminiReq.contents?.[0]?.parts?.[0]?.text || '';\nconst expectJson = geminiReq.generationConfig?.responseMimeType === 'application/json';\nconst temp = geminiReq.generationConfig?.temperature ?? 0.3;\nreturn [{ json: { ...orig, requestBody: JSON.stringify({ model: 'qwen3:4b', prompt: (sysText ? sysText + '\\n\\n' : '') + userText, stream: false, ...(expectJson ? { format: 'json' } : {}), options: { temperature: temp, num_predict: 4000 } }) } }];"
+      },
+      "id": "220f0a13-634",
+      "name": "IntEval - Ollama Req",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        990,
+        1100
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ ($env.OLLAMA_HOST || 'http://ollama:11434') + '/api/generate' }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.requestBody }}",
+        "options": {
+          "timeout": 300000
+        }
+      },
+      "id": "4d10c343-933",
+      "name": "IntEval - Ollama",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1270,
+        1100
+      ],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const r = $json;\n// qwen3 puts response in thinking field when in thinking mode; try all locations\nconst text = r.response || r.thinking || r.message?.content || '';\nreturn [{ json: { candidates: [{ content: { parts: [{ text }] } }], _source: r.error ? 'ollama_failed' : 'ollama', _model: r.model } }];"
+      },
+      "id": "c888dcbc-ce5",
+      "name": "IntEval - Ollama Norm",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1550,
+        1100
+      ]
     }
   ],
   "connections": {
@@ -938,7 +1096,7 @@
       "main": [
         [
           {
-            "node": "IntNextQ - Parse",
+            "node": "IntNextQ - Quota?",
             "type": "main",
             "index": 0
           }
@@ -982,7 +1140,7 @@
       "main": [
         [
           {
-            "node": "IntEval - Parse",
+            "node": "IntEval - Quota?",
             "type": "main",
             "index": 0
           }
@@ -1247,6 +1405,108 @@
         [
           {
             "node": "CQ List - Respond",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IntNextQ - Quota?": {
+      "main": [
+        [
+          {
+            "node": "IntNextQ - Ollama Req",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "IntNextQ - Parse",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IntNextQ - Ollama Req": {
+      "main": [
+        [
+          {
+            "node": "IntNextQ - Ollama",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IntNextQ - Ollama": {
+      "main": [
+        [
+          {
+            "node": "IntNextQ - Ollama Norm",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IntNextQ - Ollama Norm": {
+      "main": [
+        [
+          {
+            "node": "IntNextQ - Parse",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IntEval - Quota?": {
+      "main": [
+        [
+          {
+            "node": "IntEval - Ollama Req",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "IntEval - Parse",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IntEval - Ollama Req": {
+      "main": [
+        [
+          {
+            "node": "IntEval - Ollama",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IntEval - Ollama": {
+      "main": [
+        [
+          {
+            "node": "IntEval - Ollama Norm",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IntEval - Ollama Norm": {
+      "main": [
+        [
+          {
+            "node": "IntEval - Parse",
             "type": "main",
             "index": 0
           }

@@ -84,7 +84,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "http://127.0.0.1:8901/",
+        "url": "http://sidecars:8901/",
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={{ JSON.stringify({ to: $json.recipient_email, subject: $json.subject, body: $json.body, attachments: $json.attachments || [], recording_file: $json.recording_file || '', html_body: $json.html_body || '' }) }}",
@@ -131,7 +131,7 @@
         "operation": "executeQuery",
         "query": "INSERT INTO email_log (candidate_id, job_opening_id, email_type, recipient_email, subject, body, status, error_message, direction, message_id) VALUES ($1, $2, $3, $4, $5, $6, 'failed', $7, 'outbound', NULL) RETURNING *",
         "options": {
-          "queryReplacement": "={{ [$('Send - Validate & Build Email').item.json.candidate_id, $('Send - Validate & Build Email').item.json.job_opening_id, $('Send - Validate & Build Email').item.json.email_type, $('Send - Validate & Build Email').item.json.recipient_email, $('Send - Validate & Build Email').item.json.subject, $('Send - Validate & Build Email').item.json.body, (($json.error && ($json.error.message || $json.error.description)) || 'SMTP bridge unreachable at http://127.0.0.1:8901/ — is scripts/smtp_server.py running?')] }}"
+          "queryReplacement": "={{ [$('Send - Validate & Build Email').item.json.candidate_id, $('Send - Validate & Build Email').item.json.job_opening_id, $('Send - Validate & Build Email').item.json.email_type, $('Send - Validate & Build Email').item.json.recipient_email, $('Send - Validate & Build Email').item.json.subject, $('Send - Validate & Build Email').item.json.body, (($json.error && ($json.error.message || $json.error.description)) || 'SMTP bridge unreachable at http://sidecars:8901/ — is scripts/smtp_server.py running?')] }}"
         }
       },
       "id": "log-bridge-down",

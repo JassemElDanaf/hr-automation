@@ -289,7 +289,7 @@ export default function LiveInterview() {
       }), { to: `/live-interview?setupCandidate=${candidateId}&setupJob=${jobId}`, hint: candidateName ? `Back to ${candidateName}` : 'Back to Interview Setup' });
       const data = res.data || res;
       const qs = Array.isArray(data) ? data : (data.questions || []);
-      if (!qs.length) { showToast('No questions returned — is Ollama running?', 'error'); return; }
+      if (!qs.length) { showToast('No questions returned — check Gemini API key', 'error'); return; }
       const mapped = qs.map(q => ({ id: _nextId++, text: q.question || q.text || '', category: q.category || 'hr', selected: true }));
       setGeneratedQs(mapped);
       // Persist directly (not only via the mount-time effect) so the questions
@@ -305,7 +305,7 @@ export default function LiveInterview() {
   }
 
   // Tailored single-question generation: type a topic, the local model writes the
-  // question. Calls Ollama directly (CORS allowed for the app origin in start.sh).
+  // question. Calls Gemini via n8n webhook.
   async function generateFromTopic() {
     const topic = aiTopic.trim();
     if (!topic) { showToast('Type a topic first — e.g. "AWS experience"', 'error'); return; }
@@ -323,11 +323,11 @@ export default function LiveInterview() {
         out = (out.split('\n').map(s => s.trim()).filter(Boolean).pop() || '').replace(/^["'""]+|["'""]+$/g, '').trim();
         return out;
       }, { to: `/live-interview?setupCandidate=${candidateId}&setupJob=${jobId}`, hint: candidateName ? `Back to ${candidateName}` : 'Back to Interview Setup' });
-      if (!text) { showToast('No question returned — is Ollama running?', 'error'); return; }
+      if (!text) { showToast('No question returned — check Gemini API key', 'error'); return; }
       setGeneratedQs(p => [...p, { id: _nextId++, text, category: 'technical', selected: true }]);
       setAiTopic('');
       showToast('Tailored question added', 'success');
-    } catch { showToast('Failed to generate — is Ollama running?', 'error'); }
+    } catch { showToast('Failed to generate — check Gemini API key', 'error'); }
   }
 
   async function saveGeneratedToBank() {

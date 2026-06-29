@@ -1,0 +1,179 @@
+{
+  "id": "7",
+  "name": "Phase 7 \u2014 Health Checks",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "gemini-health",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "health-gemini-wh",
+      "name": "Gemini - Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        250,
+        300
+      ],
+      "webhookId": "gemini-health"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=' + $env.GEMINI_API_KEY }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={ \"contents\": [{\"parts\": [{\"text\": \"ping\"}]}], \"generationConfig\": {\"maxOutputTokens\": 5} }",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "health-gemini-call",
+      "name": "Gemini - Ping",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        500,
+        300
+      ],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ ok: !$json.error, model: 'gemini-2.5-flash', error: !$json.error ? undefined : (/429|quota|RESOURCE_EXHAUSTED/i.test(JSON.stringify($json.error)) ? 'quota_exhausted' : 'unreachable') }) }}",
+        "options": {}
+      },
+      "id": "health-gemini-ok",
+      "name": "Gemini - OK",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        750,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ ok: false, model: 'gemini-2.5-flash', error: $json.message || 'Gemini API unreachable \u2014 check GEMINI_API_KEY' }) }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "health-gemini-err",
+      "name": "Gemini - Error",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        750,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "ollama-health",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "health-ollama-wh",
+      "name": "Ollama - Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        250,
+        520
+      ],
+      "webhookId": "ollama-health"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ ($env.OLLAMA_HOST || 'http://ollama:11434') + '/api/tags' }}",
+        "options": {
+          "timeout": 5000
+        }
+      },
+      "id": "health-ollama-call",
+      "name": "Ollama - Tags",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        500,
+        520
+      ],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify((() => { if ($json.error) return { ok: false, error: 'offline' }; const tags = $json.models || []; const model = tags.find(m => m.name && m.name.startsWith('qwen3:4b')); return { ok: !!model, model: model ? model.name : null, available: tags.map(m => m.name), error: model ? undefined : 'model_not_pulled' }; })()) }}",
+        "options": {}
+      },
+      "id": "health-ollama-ok",
+      "name": "Ollama - OK",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        750,
+        520
+      ]
+    }
+  ],
+  "connections": {
+    "Gemini - Webhook": {
+      "main": [
+        [
+          {
+            "node": "Gemini - Ping",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini - Ping": {
+      "main": [
+        [
+          {
+            "node": "Gemini - OK",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ollama - Webhook": {
+      "main": [
+        [
+          {
+            "node": "Ollama - Tags",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ollama - Tags": {
+      "main": [
+        [
+          {
+            "node": "Ollama - OK",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 0
+}

@@ -4,12 +4,12 @@ import { login, gotoTab } from './helpers';
 // Full UI audit: tour every page, click every (safe) button, screenshot each
 // page, and FAIL if any JS/console error fires. Destructive / external-effect
 // buttons are skipped by label so the audit doesn't delete data or send email.
-// Destructive / external-effect / long-running (Ollama) buttons — skipped here
+// Destructive / external-effect / long-running (Gemini) buttons — skipped here
 // (functional specs 01–07 already exercise create/evaluate/send/interview).
 const SKIP = /log ?out|sign out|delete|remove|reject|hire|deactivate|archive|send|clear|reset|discard|unshortlist|revert|start your interview|hand ?off|offer|×|✕|close|generate|run eval|evaluate|upload|import|export|download|invite|create job|save|re-?evaluate|publish/i;
 
 // Known-benign console noise (favicon, third-party) we don't want to fail on.
-const IGNORE = /favicon|net::ERR_|Download the React DevTools|webkit|ResizeObserver/i;
+const IGNORE = /favicon|net::ERR_|Download the React DevTools|webkit|ResizeObserver|Blocked script execution in 'about:srcdoc'/i;
 
 function collectErrors(page: Page): string[] {
   const errors: string[] = [];

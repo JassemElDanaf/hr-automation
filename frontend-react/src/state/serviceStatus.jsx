@@ -1,9 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 
-// While a local AI task runs (Ollama CV eval / generation), the machine is pinned
-// and every health check — which all route through n8n/Ollama — slows down or
-// times out. That is EXPECTED, not an outage, so we pause "offline" detection for
-// the duration. The EvalStatus provider flips this via setServiceChecksPaused().
+// While an AI task runs (CV eval / generation), n8n may be briefly busy.
+// Pause "offline" detection for the duration so we don't false-alarm.
+// The EvalStatus provider flips this via setServiceChecksPaused().
 let _serviceChecksPaused = false;
 export function setServiceChecksPaused(v) { _serviceChecksPaused = !!v; }
 
@@ -22,17 +21,33 @@ export const SERVICES = [
     },
   },
   {
+    key: 'gemini',
+    label: 'Gemini',
+    desc: 'Gemini API — CV evaluation and question generation',
+    offlineHint: (detail) => detail === 'quota exhausted'
+      ? 'Daily limit reached — resets at midnight PT (08:00 UTC).'
+      : 'Check GEMINI_API_KEY in .env and restart docker compose.',
+    check: async () => {
+      const r = await fetch('/webhook/gemini-health', { signal: AbortSignal.timeout(12000) });
+      const j = await r.json().catch(() => ({}));
+      if (j.ok) return { ok: true, detail: j.model || 'gemini-2.5-flash-lite' };
+      if (j.error === 'quota_exhausted') return { ok: false, detail: 'quota exhausted' };
+      return { ok: false, detail: j.error || 'unreachable' };
+    },
+  },
+  {
     key: 'ollama',
     label: 'Ollama',
-    desc: 'Local AI — CV evaluation and question generation',
-    offlineHint: 'Run: ollama serve',
+    desc: 'Local LLM fallback (llama3.2:3b) — activates automatically when Gemini quota is exhausted',
+    offlineHint: (detail) => detail === 'model_not_pulled'
+      ? 'Model still downloading — wait a few minutes then recheck.'
+      : 'Ollama container is starting up. Run: docker compose up -d ollama',
     check: async () => {
-      // Relative — nginx proxies /ollama → the Ollama host (works through a tunnel).
-      const r = await fetch('/ollama/api/tags', { signal: AbortSignal.timeout(9000) });
-      if (!r.ok) return { ok: false };
-      const j = await r.json();
-      const qwen = (j.models || []).find(m => m.name.includes('qwen'));
-      return { ok: true, detail: qwen ? qwen.name.replace(':latest', '') : `${(j.models || []).length} model(s)` };
+      const r = await fetch('/webhook/ollama-health', { signal: AbortSignal.timeout(8000) });
+      const j = await r.json().catch(() => ({}));
+      if (j.ok) return { ok: true, detail: j.model || 'llama3.2:3b' };
+      if (j.error === 'model_not_pulled') return { ok: false, detail: 'pulling model…' };
+      return { ok: false, detail: j.error || 'offline' };
     },
   },
   {
@@ -75,9 +90,8 @@ export function useServiceStatuses() {
     Object.fromEntries(SERVICES.map(s => [s.key, { state: 'checking', detail: '' }]))
   );
 
-  // Debounce flapping: a single slow/timed-out check (e.g. Ollama busy mid-eval,
-  // or a brief Docker/WSL2 pause) must NOT flip a service to "offline". Only after
-  // TWO consecutive failed checks do we mark it offline. One success clears it.
+  // Debounce flapping: a single slow/timed-out check must NOT flip a service to
+  // "offline". Only after TWO consecutive failed checks do we mark it offline.
   const failCounts = useRef(Object.fromEntries(SERVICES.map(s => [s.key, 0])));
 
   // IMPORTANT: the periodic poll must NOT reset every pill to "checking" first —
@@ -128,7 +142,7 @@ export function useServiceStatuses() {
 
   useEffect(() => {
     check();                                   // silent first load (init shows 'checking')
-    const id = setInterval(() => check(), 30000); // silent polls — no blink
+    const id = setInterval(() => check(), 300000); // poll every 5 min — Gemini quota guard
     return () => clearInterval(id);
   }, [check]);
 

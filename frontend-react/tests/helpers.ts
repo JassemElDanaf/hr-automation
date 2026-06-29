@@ -2,9 +2,9 @@ import { Page, expect } from '@playwright/test';
 
 // ── Credentials (seeded this environment; all three reset to ChangeMe123!) ──
 export const USERS = {
-  admin:     { email: 'admin@diyarme.com',     password: 'ChangeMe123!' },
-  recruiter: { email: 'recruiter@diyarme.com', password: 'ChangeMe123!' },
-  viewer:    { email: 'viewer@diyarme.com',    password: 'ChangeMe123!' },
+  admin:     { email: 'admin@diyarme.com',     password: 'Admin1234!' },
+  recruiter: { email: 'recruiter@diyarme.com', password: 'Admin1234!' },
+  viewer:    { email: 'viewer@diyarme.com',    password: 'Admin1234!' },
 } as const;
 
 // ── QA data markers — global teardown deletes everything matching these ─────

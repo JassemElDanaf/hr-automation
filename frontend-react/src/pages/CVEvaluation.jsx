@@ -352,7 +352,7 @@ export default function CVEvaluation() {
     if (!evalSelectedJob || generating) return;
     if (criteriaText && !(await showConfirm({ title: 'Replace current draft?', message: 'This will replace the current criteria draft with newly generated criteria. Continue?', confirmLabel: 'Replace', cancelLabel: 'Keep current' }))) return;
     setGenerating(true);
-    setGenStatus('Calling Ollama (qwen3:4b)\u2026 30-90 seconds');
+    setGenStatus('Calling Gemini API\u2026 a few seconds');
     const previous = criteriaText;
     try {
       const res = await runAiTask('Generating evaluation criteria…', () => apiPost('/generate-criteria', {

@@ -1,31 +1,14 @@
 #!/bin/sh
 # n8n startup entrypoint — patch + import + publish workflows, seed credential, then run.
+# Gemini branch: no Ollama host detection needed — AI calls go to Gemini API.
 set -e
 
-# Ollama host selection. OLLAMA_DOCKER_HOST may be:
-#   host.docker.internal  → always use a host-installed Ollama (e.g. GPU on Windows)
-#   ollama                → always use the bundled Docker container (CPU)
-#   auto (default)        → detect: use a host Ollama if one is reachable, else the
-#                           bundled container. This makes a fresh `git pull` + Docker
-#                           run work anywhere (Ubuntu with no host Ollama → CPU container).
-OLLAMA_HOST="${OLLAMA_DOCKER_HOST:-auto}"
-if [ "$OLLAMA_HOST" = "auto" ] || [ -z "$OLLAMA_HOST" ]; then
-  if wget -q -T 3 -O /dev/null "http://host.docker.internal:11434/api/tags" 2>/dev/null; then
-    OLLAMA_HOST="host.docker.internal"
-    echo "[entrypoint] Ollama: host install detected (host.docker.internal:11434) — using it."
-  else
-    OLLAMA_HOST="ollama"
-    echo "[entrypoint] Ollama: no host install — using the bundled Docker container (CPU)."
-  fi
-fi
 SIDECAR="${SIDECAR_DOCKER_HOST:-sidecars}"
 export DB_FILE="/home/node/.n8n/database.sqlite"
 NODE=$(find /opt/nodejs -name node -type f 2>/dev/null | head -1)
 export SQLITE3_MOD="/usr/local/lib/node_modules/n8n/node_modules/.pnpm/sqlite3@5.1.7/node_modules/sqlite3"
 
 # ── Sync config file encryption key with N8N_ENCRYPTION_KEY env var ──────────
-# n8n 2.x refuses to start if the config file key != env var.
-# Overwrite the config file so they always match on every startup.
 mkdir -p /home/node/.n8n
 "$NODE" -e "
 const fs = require('fs');
@@ -43,10 +26,6 @@ export N8N_CREDENTIALS_OVERWRITE_DATA="{\"postgres\":{\"host\":\"${DB_HOST:-post
 PATCH_DIR="/tmp/workflows-patched"
 mkdir -p "$PATCH_DIR"
 
-# Global tenant company name — baked into the AI prompts (JD/criteria generation)
-# at import time so generated content references the right company. Single source
-# of truth: the COMPANY_NAME env (docker-compose ← .env). Escape sed specials so a
-# name with & or | doesn't break the substitution.
 COMPANY_NAME="${COMPANY_NAME:-Diyar United Company}"
 COMPANY_NAME_SED=$(printf '%s' "$COMPANY_NAME" | sed -e 's/[&|\\]/\\&/g')
 
@@ -55,8 +34,6 @@ find /workflows -name '*.json' -type f | while IFS= read -r f; do
   base_name=$(basename "$f")
   out="$PATCH_DIR/${dir_name}__${base_name}"
   sed \
-    -e "s|http://localhost:11434|http://${OLLAMA_HOST}:11434|g" \
-    -e "s|http://127.0.0.1:11434|http://${OLLAMA_HOST}:11434|g" \
     -e "s|http://127.0.0.1:8901|http://${SIDECAR}:8901|g" \
     -e "s|http://127.0.0.1:8902|http://${SIDECAR}:8902|g" \
     -e "s|http://127.0.0.1:8903|http://${SIDECAR}:8903|g" \
@@ -65,17 +42,29 @@ find /workflows -name '*.json' -type f | while IFS= read -r f; do
     "$f" > "$out"
 done
 
-# ── Import workflows ──────────────────────────────────────────────────────────
+# ── Import workflows (sorted; retry any that fail on first pass) ───────────────
 echo "[n8n-setup] Importing workflows..."
-for f in "$PATCH_DIR"/*.json; do
+FAILED=""
+for f in $(ls "$PATCH_DIR"/*.json | sort); do
   [ -f "$f" ] || continue
   echo "  $(basename "$f")"
-  n8n import:workflow --input="$f" 2>&1 || echo "  WARN: import failed for $f"
+  if ! n8n import:workflow --input="$f" 2>&1; then
+    echo "  WARN: import failed for $f (will retry)"
+    FAILED="$FAILED $f"
+  fi
 done
+# Retry pass — some workflows fail on cold start due to n8n validation quirks
+if [ -n "$FAILED" ]; then
+  echo "[n8n-setup] Retrying failed imports..."
+  for f in $FAILED; do
+    echo "  $(basename "$f")"
+    n8n import:workflow --input="$f" 2>&1 || echo "  WARN: retry failed for $f"
+  done
+fi
 
 # ── Publish (activate) all workflows ─────────────────────────────────────────
 echo "[n8n-setup] Publishing workflows..."
-for id in 1 2 3 4 5 6; do
+for id in 1 2 3 4 5 6 7; do
   n8n publish:workflow --id=$id 2>&1 | grep -v "Error tracking\|older than 6"
 done
 
@@ -92,13 +81,10 @@ const dbName      = process.env.DB_NAME     || 'hr_automation';
 const dbUser      = process.env.DB_USER     || 'hr_admin';
 const dbPass      = process.env.DB_PASS     || 'hr_pass';
 
-// Use the pinned encryption key from env (must match N8N_ENCRYPTION_KEY in docker-compose)
 const rawKey = process.env.N8N_ENCRYPTION_KEY;
 if (!rawKey) { console.error('[n8n-setup] N8N_ENCRYPTION_KEY not set'); process.exit(1); }
 
-// n8n cipher: OpenSSL-compatible AES-256-CBC with "Salted__" magic + MD5 key derivation
-// matches n8n-core/dist/encryption/cipher.js exactly
-const SALTED = Buffer.from('53616c7465645f5f', 'hex'); // "Salted__"
+const SALTED = Buffer.from('53616c7465645f5f', 'hex');
 
 function getKeyAndIv(encKey, salt) {
   const pass = Buffer.concat([Buffer.from(encKey, 'binary'), salt]);
@@ -126,7 +112,6 @@ const db  = new sqlite3.Database(DB_FILE);
 const now = new Date().toISOString();
 
 db.serialize(() => {
-  // Upsert credential
   db.run(
     `INSERT INTO credentials_entity (id, name, data, type, createdAt, updatedAt, isGlobal)
      VALUES ('1', 'Postgres HR', ?, 'postgres', ?, ?, 1)
@@ -135,7 +120,6 @@ db.serialize(() => {
     (e) => { if (e) console.error('[n8n-setup] Cred upsert error:', e.message); else console.log('[n8n-setup] Credential upserted.'); }
   );
 
-  // Share with personal project
   db.get(`SELECT id FROM project WHERE type='personal' LIMIT 1`, [], (e, row) => {
     if (e || !row) { console.log('[n8n-setup] No project found, skipping share.'); return; }
     db.run(
