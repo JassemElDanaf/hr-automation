@@ -46,11 +46,35 @@ export default function NotificationBell() {
     }
   }, [items]);
 
-  // NOTE: we deliberately do NOT fire "X went offline" / "X is back online"
-  // notifications. Local health checks time out transiently whenever the machine
-  // is under load (esp. while Ollama runs a ~90s CV evaluation), which produced
-  // bursts of false down/up alerts. The live status pills + the bell's offline
-  // count already surface real outages — no toast spam needed.
+  // Fire a notification when Gemini flips state (quota exhausted ↔ back online).
+  // We skip generic service state changes to avoid false-alarm spam from transient
+  // load, but Gemini's quota state is meaningful and slow-changing — worth surfacing.
+  const prevGeminiRef = useRef(null);
+  useEffect(() => {
+    const st = statuses.gemini;
+    if (!st) return;
+    const prev = prevGeminiRef.current;
+    prevGeminiRef.current = { state: st.state, detail: st.detail };
+    if (!prev || prev.state === 'checking') return; // skip initial load
+    if (prev.state !== 'offline' && st.state === 'offline') {
+      addNotification({
+        type: 'ai',
+        icon: '⚠️',
+        title: st.detail === 'quota exhausted' ? 'Gemini quota exhausted' : 'Gemini offline',
+        body: st.detail === 'quota exhausted'
+          ? 'Daily limit reached — resets at midnight PT (08:00 UTC)'
+          : 'Check GEMINI_API_KEY in .env and restart.',
+      });
+    } else if (prev.state === 'offline' && st.state === 'online') {
+      addNotification({
+        type: 'ai',
+        icon: '✅',
+        title: 'Gemini is back online',
+        body: st.detail || 'API key valid — ready',
+      });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [statuses.gemini]);
 
   // Pause "offline" detection entirely while an AI task runs (Ollama pins the
   // machine, so the health checks slow down — that's expected, not an outage).
@@ -234,12 +258,21 @@ export default function NotificationBell() {
                 const online = st.state === 'online', offline = st.state === 'offline';
                 const dot = online ? '#22c55e' : offline ? '#ef4444' : '#94a3b8';
                 return (
-                  <span key={svc.key} title={`${svc.label} — ${online ? 'running' : offline ? 'offline' : 'checking…'}${st.detail ? ' · ' + st.detail : ''}`}
+                  <span key={svc.key}
+                    title={online
+                      ? `${svc.label} · ${st.detail || 'running'}`
+                      : offline
+                        ? `${svc.label} — ${st.detail || 'offline'}\n${typeof svc.offlineHint === 'function' ? svc.offlineHint(st.detail) : (svc.offlineHint || '')}`
+                        : `${svc.label} — checking…`}
                     style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '3px 9px', borderRadius: 20,
-                      border: '1px solid var(--gray-200)', background: 'var(--surface)' }}>
+                      border: `1px solid ${offline ? 'rgba(239,68,68,0.25)' : 'var(--gray-200)'}`,
+                      background: offline ? 'rgba(239,68,68,0.06)' : 'var(--surface)' }}>
                     <span style={{ width: 7, height: 7, borderRadius: '50%', background: dot, flexShrink: 0,
                       animation: st.state === 'checking' ? 'spin 1s linear infinite' : 'none' }} />
-                    <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--gray-700)' }}>{svc.label}</span>
+                    <span style={{ fontSize: 11, fontWeight: 700, color: offline ? '#dc2626' : 'var(--gray-700)' }}>{svc.label}</span>
+                    {offline && st.detail && (
+                      <span style={{ fontSize: 10, color: '#dc2626', fontWeight: 500, opacity: 0.85 }}>{st.detail}</span>
+                    )}
                   </span>
                 );
               })}

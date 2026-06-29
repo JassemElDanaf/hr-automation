@@ -24,11 +24,15 @@ export const SERVICES = [
     key: 'gemini',
     label: 'Gemini',
     desc: 'Gemini API — CV evaluation and question generation',
-    offlineHint: 'Check GEMINI_API_KEY in .env and restart docker compose.',
+    offlineHint: (detail) => detail === 'quota exhausted'
+      ? 'Daily limit reached — resets at midnight PT (08:00 UTC).'
+      : 'Check GEMINI_API_KEY in .env and restart docker compose.',
     check: async () => {
       const r = await fetch('/webhook/gemini-health', { signal: AbortSignal.timeout(12000) });
       const j = await r.json().catch(() => ({}));
-      return { ok: !!j.ok, detail: j.ok ? j.model || 'gemini-2.5-flash' : (j.error || 'unreachable') };
+      if (j.ok) return { ok: true, detail: j.model || 'gemini-2.5-flash' };
+      if (j.error === 'quota_exhausted') return { ok: false, detail: 'quota exhausted' };
+      return { ok: false, detail: j.error || 'unreachable' };
     },
   },
   {
