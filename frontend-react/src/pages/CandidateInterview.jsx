@@ -432,6 +432,26 @@ export default function CandidateInterview() {
         };
         tick();
       }
+      // Probe whether the browser's speech recognition actually works (Chrome on Linux
+      // has webkitSpeechRecognition but fails with service-not-available at runtime).
+      // Test now so the candidate sees the text-input fallback before the interview starts.
+      const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (SR) {
+        const probe = new SR();
+        probe.lang = 'en-US';
+        await new Promise(r => {
+          const tid = setTimeout(() => { try { probe.abort(); } catch {} r(); }, 3000);
+          probe.onstart = () => { clearTimeout(tid); try { probe.abort(); } catch {} r(); };
+          probe.onerror = (ev) => {
+            clearTimeout(tid);
+            if (['service-not-available', 'network', 'not-allowed', 'audio-capture'].includes(ev.error)) {
+              setSttFailed(true);
+            }
+            r();
+          };
+          try { probe.start(); } catch { clearTimeout(tid); r(); }
+        });
+      }
     } catch {
       setDeviceError('Could not access camera or microphone. Check your browser permissions and that no other app is using them.');
     }
@@ -840,6 +860,11 @@ export default function CandidateInterview() {
               </div>
               <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 6 }}>Camera preview on the left. If both work, you're set.</div>
             </div>
+          </div>
+        )}
+        {devicesReady && sttFailed && (
+          <div style={{ marginTop: 10, padding: '8px 12px', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, fontSize: 12, color: '#92400e' }}>
+            Voice capture is not available in this browser — you'll type your answers during the interview. Everything else works normally.
           </div>
         )}
       </div>
