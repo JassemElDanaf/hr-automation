@@ -1028,7 +1028,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const query = $input.first().json.query || {};\nconst id = parseInt(query.candidate_id);\nif (!id || isNaN(id) || id < 1) {\n  return [{ json: { error: true, message: 'Valid candidate_id query parameter is required', status: 400 } }];\n}\nreturn [{ json: { error: false, sql: 'SELECT id, candidate_name, cv_file_name, cv_file_mime, cv_file_data FROM candidates WHERE id = ' + id } }];"
+        "jsCode": "const query = $input.first().json.query || {};\nconst id = parseInt(query.candidate_id);\nif (!id || isNaN(id) || id < 1) {\n  return [{ json: { error: true, message: 'Valid candidate_id query parameter is required', status: 400 } }];\n}\nreturn [{ json: { error: false, sql: 'SELECT id, candidate_name, cv_file_name, cv_file_mime, cv_file_data, cv_text FROM candidates WHERE id = ' + id } }];"
       },
       "id": "validate-cv-file-id",
       "name": "CVFile - Validate ID",

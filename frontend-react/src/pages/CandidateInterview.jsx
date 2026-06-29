@@ -579,7 +579,7 @@ export default function CandidateInterview() {
     // of "I can't hear the AI". Local OS voices (e.g. Microsoft Zira/David on
     // Windows) always work without internet.
     const localEn = en.filter(v => v.localService);
-    const niceLocal = ['Microsoft Zira', 'Microsoft Aria', 'Microsoft Jenny', 'Microsoft David', 'Microsoft Mark', 'Samantha', 'Karen'];
+    const niceLocal = ['Microsoft Aria', 'Microsoft Jenny', 'Microsoft Natasha', 'Samantha', 'Karen', 'Microsoft David', 'Microsoft Mark', 'Microsoft Zira'];
     for (const name of niceLocal) { const v = localEn.find(v => v.name.includes(name)); if (v) return v; }
     if (localEn.length) return localEn[0];
     // No local English voice — fall back to any English, then any voice at all.

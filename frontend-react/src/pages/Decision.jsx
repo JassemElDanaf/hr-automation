@@ -459,7 +459,7 @@ HR Department`;
                     ) : (
                       <>
                         <button className="btn btn-sm btn-primary" onClick={() => sendToHM(r)} title="Send the full screening pack (CV + interview scores · recording · transcript · PDF report) to the hiring manager">✉ {isSent ? 'Re-send to HM' : 'Send to HM'}</button>
-                        <button className="btn btn-sm btn-success" onClick={() => updateStatus(r.id, 'hired')}>Hire</button>
+                        <button className="btn btn-sm btn-success" onClick={async () => { await updateStatus(r.id, 'hired'); sendOffer(r); }}>Hire</button>
                         <button className="btn btn-sm btn-danger" onClick={() => rejectCandidate(r)}>Reject</button>
                       </>
                     )}

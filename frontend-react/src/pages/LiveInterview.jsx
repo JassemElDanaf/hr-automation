@@ -50,6 +50,7 @@ export default function LiveInterview() {
   const [mainTab, setMainTab] = useState(() =>
     new URLSearchParams(window.location.search).get('tab') === 'results' ? 'results' : 'candidate'
   );
+  const [resultsFocusId, setResultsFocusId] = useState(null);
 
   // ── Setup state ──
   const [jobs, setJobs]                   = useState([]);
@@ -424,8 +425,11 @@ export default function LiveInterview() {
   const candidateBannerContent = candidateName ? (
     <>
       {interviewedIds.has(String(candidateId)) && (
-        <div style={{ marginBottom: 10, padding: '9px 14px', background: '#fef3c7', border: '1px solid #fde68a', borderRadius: 6, fontSize: 12.5, color: '#92400e' }}>
-          ⚠️ <strong>{candidateName}</strong> already completed an interview — see the <strong>Results</strong> step. Generating a new link will let them interview again.
+        <div style={{ marginBottom: 10, padding: '9px 14px', background: '#fef3c7', border: '1px solid #fde68a', borderRadius: 6, fontSize: 12.5, color: '#92400e', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
+          <span>⚠️ <strong>{candidateName}</strong> already completed an interview. Generating a new link will let them interview again.</span>
+          <button onClick={() => { setResultsFocusId(candidateId); setMainTab('results'); }} style={{ fontFamily: 'inherit', fontSize: 12, fontWeight: 700, padding: '4px 12px', borderRadius: 6, border: '1px solid #d97706', background: '#fff', color: '#92400e', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+            🎬 See the interview
+          </button>
         </div>
       )}
       <div style={{ padding: '9px 14px', background: '#eff6ff', border: '1px solid #dbeafe', borderRadius: 6, fontSize: 13, color: '#1e40af', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
@@ -791,7 +795,7 @@ export default function LiveInterview() {
         </div>
       )}
 
-      {mainTab === 'results' && <AIInterviews embedded />}
+      {mainTab === 'results' && <AIInterviews embedded focusCandidateId={resultsFocusId} />}
       {mainTab === 'bank' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           <button className="btn btn-secondary btn-sm" style={{ alignSelf: 'flex-start' }} onClick={() => setMainTab('questions')}>← Back to Interview Questions</button>

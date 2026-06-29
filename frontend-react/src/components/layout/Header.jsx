@@ -222,7 +222,6 @@ export default function Header() {
                 {/* Info footer */}
                 <div style={{ padding: '9px 16px', borderTop: '1px solid var(--gray-100)', background: 'var(--gray-50)' }}>
                   <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--gray-500)' }}>{BRAND_NAME}</div>
-                  <div style={{ fontSize: 10.5, color: 'var(--gray-400)', marginTop: 1 }}>{BRAND_TAGLINE}</div>
                 </div>
               </div>
             )}

@@ -71,7 +71,7 @@ function formatDate(ts) {
 
 // `embedded` renders without the page container/heading so the whole view can
 // live as the "Results" sub-tab inside the Interview page.
-export default function AIInterviews({ embedded = false }) {
+export default function AIInterviews({ embedded = false, focusCandidateId = null }) {
   const navigate = useNavigate();
   const { showToast, openEmailComposer } = useUI();
   const { runAiTask } = useEvalStatus();
@@ -106,6 +106,17 @@ export default function AIInterviews({ embedded = false }) {
       setTimeout(() => document.getElementById(`session-${s.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 200);
     }
   }, [sessions]);
+
+  // Prop-based focus: when embedded inside LiveInterview and a candidateId is passed,
+  // auto-expand and scroll to that candidate's session.
+  useEffect(() => {
+    if (!focusCandidateId || sessions.length === 0) return;
+    const s = sessions.find(x => String(x.candidateId) === String(focusCandidateId));
+    if (s && !isPending(s)) {
+      setExpandedId(s.id);
+      setTimeout(() => document.getElementById(`session-${s.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 200);
+    }
+  }, [focusCandidateId, sessions]);
 
   // Auto-evaluate: whenever a pending session with a transcript appears (the
   // candidate's background eval may have failed or never run), kick off the
@@ -201,7 +212,7 @@ export default function AIInterviews({ embedded = false }) {
 
   async function toggleCV(s) {
     const current = mediaPanel[s.id] || {};
-    if (current.cvUrl) {
+    if (current.cvUrl || current.cvText) {
       setMediaPanel(p => ({ ...p, [s.id]: { ...current, cv: !current.cv } }));
       return;
     }
@@ -210,14 +221,20 @@ export default function AIInterviews({ embedded = false }) {
     try {
       const res = await apiGet(`/cv-file?candidate_id=${s.candidateId}`);
       const d = res?.data?.data || res?.data || {};
-      if (!d.cv_file_data) throw new Error('no file');
-      const b64 = d.cv_file_data.includes(',') ? d.cv_file_data.split(',')[1] : d.cv_file_data;
-      const bytes = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
-      const blob = new Blob([bytes], { type: d.cv_file_mime || 'application/pdf' });
-      const cvUrl = URL.createObjectURL(blob);
-      setMediaPanel(p => ({ ...p, [s.id]: { ...(p[s.id] || {}), cvUrl, cv: true, cvLoading: false } }));
+      if (d.cv_file_data) {
+        const b64 = d.cv_file_data.includes(',') ? d.cv_file_data.split(',')[1] : d.cv_file_data;
+        const bytes = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+        const blob = new Blob([bytes], { type: d.cv_file_mime || 'application/pdf' });
+        const cvUrl = URL.createObjectURL(blob);
+        setMediaPanel(p => ({ ...p, [s.id]: { ...(p[s.id] || {}), cvUrl, cv: true, cvLoading: false } }));
+      } else if (d.cv_text) {
+        setMediaPanel(p => ({ ...p, [s.id]: { ...(p[s.id] || {}), cvText: d.cv_text, cv: true, cvLoading: false } }));
+      } else {
+        showToast('No CV on file for this candidate', 'error');
+        setMediaPanel(p => ({ ...p, [s.id]: { ...(p[s.id] || {}), cv: false, cvLoading: false } }));
+      }
     } catch {
-      showToast('CV file not available for this candidate', 'error');
+      showToast('Failed to load CV', 'error');
       setMediaPanel(p => ({ ...p, [s.id]: { ...(p[s.id] || {}), cv: false, cvLoading: false } }));
     }
   }
@@ -482,13 +499,13 @@ HR Department`;
                             </a>
                           </>
                         )}
-                        {s.hasCv && (
+                        {(s.hasCv || s.cvText) && (
                           <button onClick={() => toggleCV(s)}
                             style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 600, padding: '7px 14px', borderRadius: 7, border: `1.5px solid ${mp.cv ? '#2563eb' : 'var(--gray-300)'}`, background: mp.cv ? 'var(--tint-info)' : 'var(--surface)', color: mp.cv ? 'var(--primary)' : 'var(--gray-700)', cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.15s' }}>
                             📄 {mp.cvLoading ? 'Loading CV…' : mp.cv ? 'Hide CV' : 'View CV'}
                           </button>
                         )}
-                        {!hasRec && !s.hasCv && (
+                        {!hasRec && !s.hasCv && !s.cvText && (
                           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7, fontSize: 12.5, color: 'var(--gray-400)', background: 'var(--surface)', border: '1px dashed var(--gray-200)', borderRadius: 7, padding: '6px 12px' }}>
                             <span style={{ fontSize: 14, opacity: 0.7 }}>🎬</span> No recording or CV attached
                           </span>
@@ -505,8 +522,8 @@ HR Department`;
                       </div>
 
                       {/* Media panels — side by side when both open */}
-                      {(mp.recording || (mp.cv && mp.cvUrl)) && (
-                        <div style={{ display: 'grid', gridTemplateColumns: mp.recording && mp.cv && mp.cvUrl ? '1fr 1fr' : '1fr', gap: 0, borderBottom: '1px solid var(--gray-100)' }}>
+                      {(mp.recording || (mp.cv && (mp.cvUrl || mp.cvText))) && (
+                        <div style={{ display: 'grid', gridTemplateColumns: mp.recording && mp.cv ? '1fr 1fr' : '1fr', gap: 0, borderBottom: '1px solid var(--gray-100)' }}>
                           {mp.recording && (
                             <div style={{ background: '#111827', display: 'flex', flexDirection: 'column' }}>
                               <div style={{ padding: '8px 12px', background: '#1f2937', display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -521,6 +538,14 @@ HR Department`;
                                 <span style={{ fontSize: 11, fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.06em' }}>📄 Candidate CV</span>
                               </div>
                               <iframe src={mp.cvUrl} style={{ width: '100%', height: 480, border: 'none', display: 'block' }} title="Candidate CV" />
+                            </div>
+                          )}
+                          {mp.cv && !mp.cvUrl && mp.cvText && (
+                            <div style={{ display: 'flex', flexDirection: 'column', borderLeft: mp.recording ? '1px solid var(--gray-200)' : 'none' }}>
+                              <div style={{ padding: '8px 12px', background: '#f9fafb', borderBottom: '1px solid var(--gray-100)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                                <span style={{ fontSize: 11, fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.06em' }}>📄 Candidate CV (Text)</span>
+                              </div>
+                              <div style={{ padding: '16px', maxHeight: 480, overflowY: 'auto', fontSize: 13, lineHeight: 1.7, whiteSpace: 'pre-wrap', color: 'var(--gray-700)' }}>{mp.cvText}</div>
                             </div>
                           )}
                         </div>
