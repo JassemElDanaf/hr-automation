@@ -28,7 +28,7 @@ export const SERVICES = [
     check: async () => {
       const r = await fetch('/webhook/gemini-health', { signal: AbortSignal.timeout(12000) });
       const j = await r.json().catch(() => ({}));
-      return { ok: !!j.ok, detail: j.ok ? j.model || 'gemini-2.0-flash' : (j.error || 'unreachable') };
+      return { ok: !!j.ok, detail: j.ok ? j.model || 'gemini-2.5-flash' : (j.error || 'unreachable') };
     },
   },
   {
@@ -123,7 +123,7 @@ export function useServiceStatuses() {
 
   useEffect(() => {
     check();                                   // silent first load (init shows 'checking')
-    const id = setInterval(() => check(), 30000); // silent polls — no blink
+    const id = setInterval(() => check(), 300000); // poll every 5 min — Gemini quota guard
     return () => clearInterval(id);
   }, [check]);
 

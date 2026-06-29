@@ -59,6 +59,8 @@ services:
       N8N_OWNER_PASSWORD: "ChangeMe123!"
       N8N_OWNER_FIRST_NAME: "Admin"
       N8N_OWNER_LAST_NAME: "User"
+      # Allow workflows to read $env.GEMINI_API_KEY (blocked by default in n8n 1.x+)
+      N8N_BLOCK_ENV_ACCESS_IN_NODE: "false"
       # Gemini API key — exposed to n8n workflows via $env.GEMINI_API_KEY
       GEMINI_API_KEY: ${GEMINI_API_KEY}
     volumes:

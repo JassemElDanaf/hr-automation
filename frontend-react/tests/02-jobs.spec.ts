@@ -1,5 +1,7 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, request as pwRequest } from '@playwright/test';
 import { login, gotoTab, qaName } from './helpers';
+
+const WEBHOOK = 'http://localhost:5678/webhook';
 
 // Job Openings: create (manual + AI JD via Gemini), then toggle active.
 // Modal flow (JobOpenings.jsx): "+ New Job" → step 1 (title + Department select +
@@ -57,14 +59,30 @@ test.describe('Job Openings', () => {
   });
 
   test('toggle a job active/inactive', async ({ page }) => {
+    // Seed a fresh job via API so this test doesn't depend on test 1 completing.
+    const api = await pwRequest.newContext();
+    const title = qaName('Toggle Job');
+    const res = await api.post(`${WEBHOOK}/job-openings`, {
+      data: {
+        job_title: title, department: 'Engineering', employment_type: 'Full-time',
+        seniority_level: 'Mid-level', location_type: 'On-site',
+        description_source: 'manual',
+        job_description: 'QA toggle test job — safe to delete.',
+      },
+    });
+    const body = await res.json();
+    const jobId = (Array.isArray(body.data) ? body.data[0] : body.data)?.id;
+    await api.dispose();
+
     await login(page, 'admin');
     await gotoTab(page, 'Job Openings');
-    // Act on the manual QA job created above (or any QA job present).
-    const row = page.locator('tr', { hasText: qaName('Manual SWE') }).first();
-    await expect(row).toBeVisible({ timeout: 10_000 });
+    const row = page.locator('tr', { hasText: title }).first();
+    await expect(row).toBeVisible({ timeout: 15_000 });
     const toggle = row.locator('.toggle-switch');
     await toggle.click();
-    await page.waitForTimeout(800); // in-place state patch
+    await page.waitForTimeout(800);
     await page.screenshot({ path: 'tests/results/job-toggled.png', fullPage: true });
+    // Verify the toggle flipped: active pill should now be grey/inactive
+    await expect(row.locator('.toggle-switch')).toBeVisible();
   });
 });

@@ -42,13 +42,25 @@ find /workflows -name '*.json' -type f | while IFS= read -r f; do
     "$f" > "$out"
 done
 
-# ── Import workflows ──────────────────────────────────────────────────────────
+# ── Import workflows (sorted; retry any that fail on first pass) ───────────────
 echo "[n8n-setup] Importing workflows..."
-for f in "$PATCH_DIR"/*.json; do
+FAILED=""
+for f in $(ls "$PATCH_DIR"/*.json | sort); do
   [ -f "$f" ] || continue
   echo "  $(basename "$f")"
-  n8n import:workflow --input="$f" 2>&1 || echo "  WARN: import failed for $f"
+  if ! n8n import:workflow --input="$f" 2>&1; then
+    echo "  WARN: import failed for $f (will retry)"
+    FAILED="$FAILED $f"
+  fi
 done
+# Retry pass — some workflows fail on cold start due to n8n validation quirks
+if [ -n "$FAILED" ]; then
+  echo "[n8n-setup] Retrying failed imports..."
+  for f in $FAILED; do
+    echo "  $(basename "$f")"
+    n8n import:workflow --input="$f" 2>&1 || echo "  WARN: retry failed for $f"
+  done
+fi
 
 # ── Publish (activate) all workflows ─────────────────────────────────────────
 echo "[n8n-setup] Publishing workflows..."

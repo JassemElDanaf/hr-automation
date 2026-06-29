@@ -32,6 +32,10 @@ Thumbs.db
 # --- Interview recordings (candidate video - never commit) ---
 recordings/
 
+# --- Local dev artifacts ---
+ollama-data/
+claudeubuntu.md
+
 # Playwright test artifacts (generated — regenerate with: npx playwright test)
 frontend-react/tests/report/
 frontend-react/tests/results/

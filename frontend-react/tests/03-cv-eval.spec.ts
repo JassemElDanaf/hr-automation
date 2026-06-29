@@ -36,7 +36,7 @@ test.beforeAll(async () => {
 });
 
 test('upload PDFs, parse, and evaluate', async ({ page }) => {
-  test.setTimeout(220_000); // Gemini scores 3 candidates on API
+  test.setTimeout(360_000); // Gemini scores 3 candidates on API (up to ~120s per candidate)
 
   await login(page, 'admin');
   await gotoTab(page, 'CV Evaluation');
