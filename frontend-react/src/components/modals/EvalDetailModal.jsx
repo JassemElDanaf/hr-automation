@@ -208,21 +208,24 @@ export default function EvalDetailModal({ candidate, allCandidates, job, isOpen,
             <ScoreBar label="Education" score={c.education_score} />
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '20px' }}>
-            <div style={{ background: '#f0fdf4', borderRadius: 'var(--radius)', padding: '16px', borderLeft: '4px solid #16a34a' }}>
-              <span style={{ display: 'inline-block', background: '#16a34a', color: '#fff', fontSize: '10px', fontWeight: 800, letterSpacing: '1px', padding: '3px 10px', borderRadius: '20px', marginBottom: '12px', textTransform: 'uppercase' }}>Strengths</span>
-              <BulletList text={c.strengths} color="#166534" />
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '20px', alignItems: 'start' }}>
+            {/* Left — Strengths + Weaknesses */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <div style={{ background: '#f0fdf4', borderRadius: 'var(--radius)', padding: '16px', borderLeft: '4px solid #16a34a' }}>
+                <span style={{ display: 'inline-block', background: '#16a34a', color: '#fff', fontSize: '10px', fontWeight: 800, letterSpacing: '1px', padding: '3px 10px', borderRadius: '20px', marginBottom: '12px', textTransform: 'uppercase' }}>Strengths</span>
+                <BulletList text={c.strengths} color="#166534" />
+              </div>
+              <div style={{ background: '#fef2f2', borderRadius: 'var(--radius)', padding: '16px', borderLeft: '4px solid #dc2626' }}>
+                <span style={{ display: 'inline-block', background: '#dc2626', color: '#fff', fontSize: '10px', fontWeight: 800, letterSpacing: '1px', padding: '3px 10px', borderRadius: '20px', marginBottom: '12px', textTransform: 'uppercase' }}>Weaknesses</span>
+                <BulletList text={c.weaknesses} color="#991b1b" />
+              </div>
             </div>
-            <div style={{ background: '#fef2f2', borderRadius: 'var(--radius)', padding: '16px', borderLeft: '4px solid #dc2626' }}>
-              <span style={{ display: 'inline-block', background: '#dc2626', color: '#fff', fontSize: '10px', fontWeight: 800, letterSpacing: '1px', padding: '3px 10px', borderRadius: '20px', marginBottom: '12px', textTransform: 'uppercase' }}>Weaknesses</span>
-              <BulletList text={c.weaknesses} color="#991b1b" />
+            {/* Right — Reasoning */}
+            <div style={{ background: 'var(--gray-50)', borderRadius: 'var(--radius)', padding: '16px', borderLeft: '4px solid var(--gray-300)' }}>
+              <span style={{ display: 'inline-block', background: 'var(--gray-500)', color: '#fff', fontSize: '10px', fontWeight: 800, letterSpacing: '1px', padding: '3px 10px', borderRadius: '20px', marginBottom: '12px', textTransform: 'uppercase' }}>Reasoning</span>
+              <p style={{ fontSize: '13px', color: 'var(--gray-600)', margin: 0, lineHeight: 1.65, whiteSpace: 'pre-wrap' }}>{reqItems.cleanedReasoning || c.reasoning || 'Keyword-based analysis'}</p>
+              {c.evaluated_at && <p style={{ fontSize: '11px', color: 'var(--gray-400)', marginTop: '10px', marginBottom: 0 }}>Evaluated: {new Date(c.evaluated_at).toLocaleString()}</p>}
             </div>
-          </div>
-
-          <div className="eval-detail-section">
-            <h4 style={{ fontSize: '13px', fontWeight: 700, color: 'var(--gray-700)' }}>Evaluation Method</h4>
-            <p style={{ fontSize: '14px', color: 'var(--gray-600)', marginTop: '4px', whiteSpace: 'pre-wrap' }}>{reqItems.cleanedReasoning || c.reasoning || 'Keyword-based analysis'}</p>
-            {c.evaluated_at && <p style={{ fontSize: '12px', color: 'var(--gray-400)', marginTop: '4px' }}>Evaluated: {new Date(c.evaluated_at).toLocaleString()}</p>}
           </div>
         </>
       ) : (
