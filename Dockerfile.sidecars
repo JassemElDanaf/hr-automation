@@ -6,7 +6,7 @@ WORKDIR /app
 RUN echo 'Acquire::Retries "5";' > /etc/apt/apt.conf.d/80-retries
 
 # System deps
-RUN --network=host apt-get update && apt-get install -y --no-install-recommends \
+RUN apt-get update && apt-get install -y --no-install-recommends \
     supervisor \
     libpq-dev \
     gcc \
@@ -14,7 +14,7 @@ RUN --network=host apt-get update && apt-get install -y --no-install-recommends 
     && rm -rf /var/lib/apt/lists/*
 
 # Python deps — psycopg2 for auth, faster-whisper for browser STT fallback
-RUN --network=host pip install --no-cache-dir --retries 10 --timeout 120 \
+RUN pip install --no-cache-dir --retries 10 --timeout 120 \
     psycopg2-binary \
     faster-whisper
 
