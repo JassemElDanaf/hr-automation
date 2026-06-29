@@ -399,6 +399,14 @@ export default function CandidateInterview() {
     if (speakerState === 'playing') return;
     setSpeakerState('playing');
     try { window.speechSynthesis?.resume(); } catch {}
+    // Chrome loads voices async — if not ready yet, wait up to 1s (don't block longer
+    // or the browser may revoke the user-gesture context needed for audio autoplay).
+    if (window.speechSynthesis && !window.speechSynthesis.getVoices().length) {
+      await new Promise(r => {
+        const tid = setTimeout(r, 1000);
+        window.speechSynthesis.addEventListener('voiceschanged', () => { clearTimeout(tid); r(); }, { once: true });
+      });
+    }
     await speak('Hi! If you can hear this clearly, your speaker is working and you are ready for the interview.');
     setSpeakerState('idle');
   }
@@ -563,25 +571,28 @@ export default function CandidateInterview() {
         speakingRef.current = false; setIsSpeaking(false);
         resolve();
       };
-      try {
+      const doSpeak = () => {
+        try {
+          const u = new SpeechSynthesisUtterance(text);
+          u.rate = 0.96; u.pitch = 1.05; u.lang = 'en-US';
+          const v = pickVoice(); if (v) u.voice = v;
+          u.onend = finish;
+          u.onerror = finish;
+          speakingRef.current = true; setIsSpeaking(true);
+          synth.speak(u);
+          try { synth.resume(); } catch {}
+          keepAlive = setInterval(() => { try { if (synth.paused) synth.resume(); } catch {} }, 3000);
+          timer = setTimeout(finish, Math.min(20000, Math.max(4500, text.length * 90)));
+        } catch { finish(); }
+      };
+      // Chrome race condition: cancel() then immediate speak() silently drops the
+      // utterance. Give Chrome a tick to process the cancel before queuing the new one.
+      if (synth.speaking || synth.pending) {
         synth.cancel();
-        const u = new SpeechSynthesisUtterance(text);
-        u.rate = 0.96; u.pitch = 1.05; u.lang = 'en-US';
-        const v = pickVoice(); if (v) u.voice = v;
-        u.onend = finish;
-        u.onerror = finish;
-        speakingRef.current = true; setIsSpeaking(true);
-        synth.speak(u);
-        // Chrome quirks: speech can get stuck "paused" after cancel(); resume() nudges it.
-        try { synth.resume(); } catch {}
-        keepAlive = setInterval(() => { try { if (synth.paused) synth.resume(); } catch {} }, 3000);
-        // CRITICAL safety net: if the browser silently drops the utterance (no
-        // voices, OS without TTS, autoplay block) onend never fires — without
-        // this the awaiting flow (incl. finishInterview → review screen) would
-        // hang forever. Resolve after a generous, length-based timeout so the
-        // interview always advances.
-        timer = setTimeout(finish, Math.min(20000, Math.max(4500, text.length * 90)));
-      } catch { finish(); }
+        setTimeout(doSpeak, 80);
+      } else {
+        doSpeak();
+      }
     });
   }
 
