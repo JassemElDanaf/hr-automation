@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { login, gotoTab, qaName } from './helpers';
 
-// Job Openings: create (manual + AI JD via Ollama), then toggle active.
+// Job Openings: create (manual + AI JD via Gemini), then toggle active.
 // Modal flow (JobOpenings.jsx): "+ New Job" → step 1 (title + Department select +
 // defaulted selects) → "Continue →" → step 2 (source tab + description) →
 // "Create Job Opening". No data-testids — scope to `.modal`, use placeholders/roles.
@@ -30,8 +30,8 @@ test.describe('Job Openings', () => {
     await page.screenshot({ path: 'tests/results/job-manual-created.png', fullPage: true });
   });
 
-  test('create a job with AI-generated description (Ollama)', async ({ page }) => {
-    test.setTimeout(220_000); // Ollama JD gen on CPU ≈ 70–120s
+  test('create a job with AI-generated description (Gemini)', async ({ page }) => {
+    test.setTimeout(220_000); // Gemini JD gen on API ≈ 70–120s
     await login(page, 'admin');
     await gotoTab(page, 'Job Openings');
     await page.getByRole('button', { name: '+ New Job' }).click();
@@ -46,7 +46,7 @@ test.describe('Job Openings', () => {
     await modal.getByPlaceholder(/Bachelor/).fill('Python, FastAPI, REST APIs, 2-4 years');
     await modal.getByRole('button', { name: /Create Job Opening|Generating/ }).click();
 
-    // Success toast appears once Ollama returns + the job is inserted.
+    // Success toast appears once Gemini returns + the job is inserted.
     await expect(page.getByText(/Job opening created/i)).toBeVisible({ timeout: 200_000 });
 
     // Verify the JD is REAL content (not a placeholder / not empty): open the job detail.

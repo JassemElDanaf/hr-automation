@@ -36,7 +36,7 @@ test.beforeAll(async () => {
 });
 
 test('upload PDFs, parse, and evaluate', async ({ page }) => {
-  test.setTimeout(220_000); // Ollama scores 3 candidates on CPU
+  test.setTimeout(220_000); // Gemini scores 3 candidates on API
 
   await login(page, 'admin');
   await gotoTab(page, 'CV Evaluation');
@@ -66,7 +66,7 @@ test('upload PDFs, parse, and evaluate', async ({ page }) => {
   await expect(page.getByText('Qa Weak Candidate').first()).toBeVisible();
 
   // Trigger the AI evaluation via the webhook (the same call the "Run Evaluation"
-  // button makes) — reliable to drive, real Ollama scoring. We then verify the
+  // button makes) — reliable to drive, real Gemini scoring. We then verify the
   // scores RENDER in the UI below.
   const api = await pwRequest.newContext();
   // Ensure all 3 candidate INSERTs are committed before evaluating (avoid the
@@ -76,7 +76,7 @@ test('upload PDFs, parse, and evaluate', async ({ page }) => {
     return ((await r.json()).data || []).length;
   }, { timeout: 30_000, intervals: [1000] }).toBeGreaterThanOrEqual(3);
 
-  // /cv-evaluate blocks until Ollama has scored every candidate (~90s for 3 on CPU).
+  // /cv-evaluate blocks until Gemini has scored every candidate (~90s for 3 on API).
   await api.post(`${WEBHOOK}/cv-evaluate`, { data: { job_opening_id: jobId }, timeout: 200_000 });
 
   let evals: any[] = [];
