@@ -30,7 +30,7 @@ export const SERVICES = [
     check: async () => {
       const r = await fetch('/webhook/gemini-health', { signal: AbortSignal.timeout(12000) });
       const j = await r.json().catch(() => ({}));
-      if (j.ok) return { ok: true, detail: j.model || 'gemini-2.5-flash' };
+      if (j.ok) return { ok: true, detail: j.model || 'gemini-2.5-flash-lite' };
       if (j.error === 'quota_exhausted') return { ok: false, detail: 'quota exhausted' };
       return { ok: false, detail: j.error || 'unreachable' };
     },

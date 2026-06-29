@@ -1,6 +1,6 @@
 {
   "id": "7",
-  "name": "Phase 7 — Health Checks",
+  "name": "Phase 7 \u2014 Health Checks",
   "nodes": [
     {
       "parameters": {
@@ -22,13 +22,12 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=' + $env.GEMINI_API_KEY }}",
+        "url": "={{ 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key=' + $env.GEMINI_API_KEY }}",
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={ \"contents\": [{\"parts\": [{\"text\": \"ping\"}]}], \"generationConfig\": {\"maxOutputTokens\": 5} }",
         "options": {
-          "timeout": 10000,
-          "ignoreHttpStatusErrors": true
+          "timeout": 10000
         }
       },
       "id": "health-gemini-call",
@@ -39,12 +38,12 @@
         500,
         300
       ],
-      "onError": "continueRegularOutput"
+      "continueOnFail": true
     },
     {
       "parameters": {
         "respondWith": "json",
-        "responseBody": "={{ JSON.stringify({ ok: !$json.error, model: 'gemini-2.5-flash', error: !$json.error ? undefined : (/429|quota|RESOURCE_EXHAUSTED/i.test(JSON.stringify($json.error)) ? 'quota_exhausted' : 'unreachable') }) }}",
+        "responseBody": "={{ JSON.stringify({ ok: !$json.error, model: 'gemini-2.5-flash-lite', error: !$json.error ? undefined : (/429|quota|RESOURCE_EXHAUSTED/i.test(JSON.stringify($json.error)) ? 'quota_exhausted' : 'unreachable') }) }}",
         "options": {}
       },
       "id": "health-gemini-ok",
@@ -59,7 +58,7 @@
     {
       "parameters": {
         "respondWith": "json",
-        "responseBody": "={{ JSON.stringify({ ok: false, model: 'gemini-2.5-flash', error: $json.message || 'Gemini API unreachable — check GEMINI_API_KEY' }) }}",
+        "responseBody": "={{ JSON.stringify({ ok: false, model: 'gemini-2.5-flash-lite', error: $json.message || 'Gemini API unreachable \u2014 check GEMINI_API_KEY' }) }}",
         "options": {
           "responseCode": 200
         }
