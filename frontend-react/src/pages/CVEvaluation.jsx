@@ -1190,8 +1190,8 @@ export default function CVEvaluation() {
                                       {req.missing.map((t, i) => <span key={'x' + i} style={{ fontSize: 11.5, fontWeight: 600, padding: '3px 9px', borderRadius: 10, background: '#fee2e2', color: '#991b1b' }}>✗ {t}</span>)}
                                     </div>
                                   )}
-                                  {e.strengths && <div style={{ marginTop: 12, fontSize: 12.5, lineHeight: 1.55, color: 'var(--gray-700)' }}><strong style={{ color: '#166534' }}>Strengths:</strong> {e.strengths}</div>}
-                                  {e.weaknesses && <div style={{ marginTop: 8, fontSize: 12.5, lineHeight: 1.55, color: 'var(--gray-700)' }}><strong style={{ color: '#991b1b' }}>Weaknesses:</strong> {e.weaknesses}</div>}
+                                  {e.strengths && <div style={{ marginTop: 12, background: '#f0fdf4', borderLeft: '4px solid #16a34a', borderRadius: '0 6px 6px 0', padding: '10px 12px' }}><span style={{ display: 'inline-block', background: '#16a34a', color: '#fff', fontSize: '9px', fontWeight: 800, letterSpacing: '1px', padding: '2px 8px', borderRadius: '20px', marginBottom: '6px', textTransform: 'uppercase' }}>Strengths</span><div style={{ fontSize: 12.5, lineHeight: 1.55, color: 'var(--gray-700)' }}>{e.strengths}</div></div>}
+                                  {e.weaknesses && <div style={{ marginTop: 8, background: '#fef2f2', borderLeft: '4px solid #dc2626', borderRadius: '0 6px 6px 0', padding: '10px 12px' }}><span style={{ display: 'inline-block', background: '#dc2626', color: '#fff', fontSize: '9px', fontWeight: 800, letterSpacing: '1px', padding: '2px 8px', borderRadius: '20px', marginBottom: '6px', textTransform: 'uppercase' }}>Weaknesses</span><div style={{ fontSize: 12.5, lineHeight: 1.55, color: 'var(--gray-700)' }}>{e.weaknesses}</div></div>}
                                   {req.clean && <div style={{ marginTop: 8, fontSize: 12.5, lineHeight: 1.55, color: 'var(--gray-700)' }}><strong style={{ color: 'var(--gray-600)' }}>Reasoning:</strong> {req.clean}</div>}
                                 </>
                               );
