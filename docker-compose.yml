@@ -144,7 +144,7 @@ services:
   cloudflared:
     image: cloudflare/cloudflared:latest
     restart: unless-stopped
-    command: tunnel --url http://frontend:80 --no-autoupdate
+    command: tunnel --url http://frontend:80 --no-autoupdate --protocol http2
     depends_on:
       - frontend
 
