@@ -345,10 +345,10 @@ export default function CandidateInterview() {
   const sttFailedRef       = useRef(false);
   const whisperRecRef      = useRef(null);
   const whisperChunksRef   = useRef([]);
-  const whisperCtxRef      = useRef(null);
-  const whisperRafRef      = useRef(null);
-  const whisperSpeechRef   = useRef(false);
-  const whisperSilenceRef  = useRef(null);
+  const whisperCtxRef      = useRef(null);  // reserved, unused (no VAD)
+  const whisperRafRef      = useRef(null);  // reserved, unused (no VAD)
+  const whisperSpeechRef   = useRef(false); // reserved, unused (no VAD)
+  const whisperSilenceRef  = useRef(null);  // interval handle for periodic flush
 
   // Inject styles
   useEffect(() => {
@@ -677,7 +677,10 @@ export default function CandidateInterview() {
     setIsListening(false); setLiveText('');
   }
 
-  // ── Whisper fallback (MediaRecorder + VAD → /transcribe/) ──────────────────
+  // ── Whisper fallback (MediaRecorder → /transcribe/ on timer + on Next) ───────
+  // No VAD — VAD thresholds are unreliable across OS/browser/mic combinations.
+  // Instead: periodic live transcription every 5s, and a guaranteed full flush
+  // when the candidate clicks "Next Question".
 
   function startWhisper() {
     if (!streamRef.current) return;
@@ -685,57 +688,40 @@ export default function CandidateInterview() {
     if (!audioTracks.length) return;
     const audioStream = new MediaStream(audioTracks);
 
-    // Voice activity detection via AudioContext analyser
-    const Ctx = window.AudioContext || window.webkitAudioContext;
-    if (Ctx) {
-      const ctx = new Ctx();
-      const analyser = ctx.createAnalyser(); analyser.fftSize = 512;
-      ctx.createMediaStreamSource(audioStream).connect(analyser);
-      whisperCtxRef.current = ctx;
-      const data = new Uint8Array(analyser.frequencyBinCount);
-      const tick = () => {
-        if (!whisperCtxRef.current) return;
-        analyser.getByteFrequencyData(data);
-        const vol = data.reduce((a, b) => a + b, 0) / data.length;
-        if (vol > 10) {
-          whisperSpeechRef.current = true;
-          if (whisperSilenceRef.current) { clearTimeout(whisperSilenceRef.current); whisperSilenceRef.current = null; }
-        } else if (whisperSpeechRef.current && !whisperSilenceRef.current) {
-          // 1.8s silence after speech → flush for transcription
-          whisperSilenceRef.current = setTimeout(async () => {
-            whisperSilenceRef.current = null; whisperSpeechRef.current = false;
-            await flushWhisper();
-          }, 1800);
-        }
-        whisperRafRef.current = requestAnimationFrame(tick);
-      };
-      whisperRafRef.current = requestAnimationFrame(tick);
-    }
-
-    // MediaRecorder — prefer opus-in-webm, then ogg, then whatever browser supports
     const mime = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus', 'audio/ogg', 'audio/mp4']
       .find(t => { try { return MediaRecorder.isTypeSupported(t); } catch { return false; } }) || '';
     try {
       whisperChunksRef.current = [];
       const rec = new MediaRecorder(audioStream, mime ? { mimeType: mime } : {});
       rec.ondataavailable = e => { if (e.data?.size > 0) whisperChunksRef.current.push(e.data); };
-      rec.start(200);
+      rec.start(500); // 500ms chunks
       whisperRecRef.current = rec;
       setIsListening(true);
-    } catch { /* MediaRecorder not supported — candidate falls back to typing */ }
+      // Live feedback: transcribe every 5s so the candidate sees words appear while speaking
+      whisperSilenceRef.current = setInterval(async () => {
+        if (whisperChunksRef.current.length) await flushWhisper(false);
+      }, 5000);
+    } catch { /* MediaRecorder not supported */ }
   }
 
-  async function flushWhisper() {
+  // flush: send accumulated audio to Whisper. pass drain=true to also stop the recorder
+  // (used on Next Question); drain=false just drains chunks without stopping.
+  async function flushWhisper(drain = false) {
+    // Request a final chunk from the recorder before draining
+    if (drain && whisperRecRef.current?.state === 'recording') {
+      whisperRecRef.current.requestData();
+      await new Promise(r => setTimeout(r, 150)); // let ondataavailable fire
+    }
     const chunks = whisperChunksRef.current.splice(0);
     if (!chunks.length) return;
-    const mime = whisperRecRef.current?.mimeType || 'audio/webm';
+    const mime = (whisperRecRef.current?.mimeType || 'audio/webm').split(';')[0];
     const blob = new Blob(chunks, { type: mime });
-    if (blob.size < 2000) return; // skip noise-only blobs
+    if (blob.size < 3000) return; // skip near-silence blobs
     setIsTranscribing(true);
     try {
       const res = await fetch('/transcribe/', {
         method: 'POST',
-        headers: { 'Content-Type': mime.split(';')[0] },
+        headers: { 'Content-Type': mime },
         body: blob,
         signal: AbortSignal.timeout(30000),
       });
@@ -750,8 +736,8 @@ export default function CandidateInterview() {
   }
 
   function stopWhisper() {
+    if (whisperSilenceRef.current) { clearInterval(whisperSilenceRef.current); whisperSilenceRef.current = null; }
     if (whisperRafRef.current) { cancelAnimationFrame(whisperRafRef.current); whisperRafRef.current = null; }
-    if (whisperSilenceRef.current) { clearTimeout(whisperSilenceRef.current); whisperSilenceRef.current = null; }
     if (whisperRecRef.current) { try { whisperRecRef.current.stop(); } catch {} whisperRecRef.current = null; }
     if (whisperCtxRef.current) { try { whisperCtxRef.current.close(); } catch {} whisperCtxRef.current = null; }
     whisperChunksRef.current = []; whisperSpeechRef.current = false;
@@ -819,7 +805,12 @@ export default function CandidateInterview() {
 
   async function advanceQuestion(manual) {
     if (loadingQRef.current) return;
-    // Capture BEFORE stopRecognition() clears liveTextRef
+    // For Whisper path: flush any buffered audio BEFORE stopping so we capture
+    // everything the candidate said up to clicking "Next Question".
+    if (sttFailedRef.current && whisperRecRef.current) {
+      await flushWhisper(true);
+    }
+    // Capture BEFORE stopListening() clears liveTextRef
     const spoken = (currentAnswerRef.current + ' ' + liveTextRef.current).trim();
     const typed  = manualAnswer.trim();
     clearSilence(); stopSpeaking(); stopListening();
@@ -1217,8 +1208,8 @@ export default function CandidateInterview() {
 
                 {/* Next button — under answer */}
                 <div className="ci-next-row">
-                  <button className="ci-next-btn" onClick={() => advanceQuestion(true)} disabled={loadingQ}>
-                    {loadingQ ? 'Loading…' : currentQIndex >= totalQuestions ? 'Finish Interview' : 'Next Question →'}
+                  <button className="ci-next-btn" onClick={() => advanceQuestion(true)} disabled={loadingQ || isTranscribing}>
+                    {isTranscribing ? 'Transcribing…' : loadingQ ? 'Loading…' : currentQIndex >= totalQuestions ? 'Finish Interview' : 'Next Question →'}
                   </button>
                 </div>
               </div>
