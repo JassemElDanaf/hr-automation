@@ -112,13 +112,16 @@ services:
       N8N_INBOUND_URL: http://n8n:5678/webhook/inbound-email
       SEED_ADMIN_EMAIL: ${SEED_ADMIN_EMAIL:-admin@diyarme.com}
       SEED_ADMIN_PASSWORD: ${SEED_ADMIN_PASSWORD:-Admin1234!}
+      WHISPER_MODEL: "tiny"
     volumes:
       - recordings:/app/recordings
+      - whisper_cache:/root/.cache/huggingface
     ports:
       - "8901:8901"
       - "8902:8902"
       - "8903:8903"
       - "8904:8904"
+      - "8905:8905"
     depends_on:
       postgres:
         condition: service_healthy
@@ -168,3 +171,4 @@ volumes:
   postgres_data:
   n8n_data:
   recordings:
+  whisper_cache:

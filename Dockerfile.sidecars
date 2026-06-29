@@ -10,10 +10,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     supervisor \
     libpq-dev \
     gcc \
+    ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 
-# Python deps
-RUN pip install --no-cache-dir --retries 10 --timeout 120 psycopg2-binary
+# Python deps — psycopg2 for auth, faster-whisper for browser STT fallback
+RUN pip install --no-cache-dir --retries 10 --timeout 120 \
+    psycopg2-binary \
+    faster-whisper
 
 # Copy project files needed by sidecars
 COPY scripts/ ./scripts/
@@ -22,6 +25,6 @@ RUN mkdir -p /app/recordings /app/logs
 
 COPY scripts/supervisord.conf /etc/supervisor/conf.d/sidecars.conf
 
-EXPOSE 8901 8902 8903 8904
+EXPOSE 8901 8902 8903 8904 8905
 
 CMD ["supervisord", "-n", "-c", "/etc/supervisor/supervisord.conf"]

@@ -304,7 +304,8 @@ export default function CandidateInterview() {
   const [micOn, setMicOn]           = useState(true);
   const [camOn, setCamOn]           = useState(false);
   const [hasSpeechAPI, setHasSpeechAPI] = useState(false);
-  const [sttFailed, setSttFailed] = useState(false); // speech recognition unavailable → show typing fallback
+  const [sttFailed, setSttFailed] = useState(false);
+  const [isTranscribing, setIsTranscribing] = useState(false);
   const [manualAnswer, setManualAnswer] = useState('');
   const [chipStatus, setChipStatus] = useState('idle');
   const [submitting, setSubmitting] = useState(false);
@@ -338,8 +339,16 @@ export default function CandidateInterview() {
   const mediaRecorderRef   = useRef(null);
   const recordingChunksRef = useRef([]);
   const recordingFilename  = useRef('');
-  const recordingStartRef  = useRef(null); // Date.now() when recording began
-  const currentQStartRef   = useRef(null); // recording-seconds when current Q was asked
+  const recordingStartRef  = useRef(null);
+  const currentQStartRef   = useRef(null);
+  // Whisper fallback (Firefox / Chrome-Linux)
+  const sttFailedRef       = useRef(false);
+  const whisperRecRef      = useRef(null);
+  const whisperChunksRef   = useRef([]);
+  const whisperCtxRef      = useRef(null);
+  const whisperRafRef      = useRef(null);
+  const whisperSpeechRef   = useRef(false);
+  const whisperSilenceRef  = useRef(null);
 
   // Inject styles
   useEffect(() => {
@@ -392,7 +401,7 @@ export default function CandidateInterview() {
     if (feedRef.current) feedRef.current.scrollTop = feedRef.current.scrollHeight;
   }, [completedPairs, currentQ, loadingQ]);
 
-  function cleanup() { stopTimer(); stopSpeaking(); stopRecognition(); stopCamera(); stopDeviceTest(); }
+  function cleanup() { stopTimer(); stopSpeaking(); stopRecognition(); stopWhisper(); stopCamera(); stopDeviceTest(); }
 
   // ── Pre-interview device check (intro screen) ────────────────────────────────
   async function testSpeaker() {
@@ -445,7 +454,7 @@ export default function CandidateInterview() {
           probe.onerror = (ev) => {
             clearTimeout(tid);
             if (['service-not-available', 'network', 'not-allowed', 'audio-capture'].includes(ev.error)) {
-              setSttFailed(true);
+              sttFailedRef.current = true; setSttFailed(true);
             }
             r();
           };
@@ -651,7 +660,9 @@ export default function CandidateInterview() {
       // recognition can't capture answers, so fall back to letting the candidate
       // TYPE — otherwise every answer ends up "(no response)".
       if (['not-allowed', 'service-not-available', 'network', 'audio-capture'].includes(e.error)) {
-        micOnRef.current = false; setMicOn(false); setIsListening(false); setSttFailed(true);
+        micOnRef.current = false; setMicOn(false); setIsListening(false);
+        sttFailedRef.current = true; setSttFailed(true);
+        startWhisper();
       } else if (e.error !== 'no-speech' && e.error !== 'aborted') {
         setIsListening(false);
       }
@@ -665,6 +676,90 @@ export default function CandidateInterview() {
     liveTextRef.current = '';
     setIsListening(false); setLiveText('');
   }
+
+  // ── Whisper fallback (MediaRecorder + VAD → /transcribe/) ──────────────────
+
+  function startWhisper() {
+    if (!streamRef.current) return;
+    const audioTracks = streamRef.current.getAudioTracks();
+    if (!audioTracks.length) return;
+    const audioStream = new MediaStream(audioTracks);
+
+    // Voice activity detection via AudioContext analyser
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    if (Ctx) {
+      const ctx = new Ctx();
+      const analyser = ctx.createAnalyser(); analyser.fftSize = 512;
+      ctx.createMediaStreamSource(audioStream).connect(analyser);
+      whisperCtxRef.current = ctx;
+      const data = new Uint8Array(analyser.frequencyBinCount);
+      const tick = () => {
+        if (!whisperCtxRef.current) return;
+        analyser.getByteFrequencyData(data);
+        const vol = data.reduce((a, b) => a + b, 0) / data.length;
+        if (vol > 10) {
+          whisperSpeechRef.current = true;
+          if (whisperSilenceRef.current) { clearTimeout(whisperSilenceRef.current); whisperSilenceRef.current = null; }
+        } else if (whisperSpeechRef.current && !whisperSilenceRef.current) {
+          // 1.8s silence after speech → flush for transcription
+          whisperSilenceRef.current = setTimeout(async () => {
+            whisperSilenceRef.current = null; whisperSpeechRef.current = false;
+            await flushWhisper();
+          }, 1800);
+        }
+        whisperRafRef.current = requestAnimationFrame(tick);
+      };
+      whisperRafRef.current = requestAnimationFrame(tick);
+    }
+
+    // MediaRecorder — prefer opus-in-webm, then ogg, then whatever browser supports
+    const mime = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus', 'audio/ogg', 'audio/mp4']
+      .find(t => { try { return MediaRecorder.isTypeSupported(t); } catch { return false; } }) || '';
+    try {
+      whisperChunksRef.current = [];
+      const rec = new MediaRecorder(audioStream, mime ? { mimeType: mime } : {});
+      rec.ondataavailable = e => { if (e.data?.size > 0) whisperChunksRef.current.push(e.data); };
+      rec.start(200);
+      whisperRecRef.current = rec;
+      setIsListening(true);
+    } catch { /* MediaRecorder not supported — candidate falls back to typing */ }
+  }
+
+  async function flushWhisper() {
+    const chunks = whisperChunksRef.current.splice(0);
+    if (!chunks.length) return;
+    const mime = whisperRecRef.current?.mimeType || 'audio/webm';
+    const blob = new Blob(chunks, { type: mime });
+    if (blob.size < 2000) return; // skip noise-only blobs
+    setIsTranscribing(true);
+    try {
+      const res = await fetch('/transcribe/', {
+        method: 'POST',
+        headers: { 'Content-Type': mime.split(';')[0] },
+        body: blob,
+        signal: AbortSignal.timeout(30000),
+      });
+      const j = await res.json().catch(() => ({}));
+      if (j.text) {
+        const appended = (currentAnswerRef.current + ' ' + j.text).trim();
+        currentAnswerRef.current = appended;
+        setCurrentAnswer(appended);
+      }
+    } catch {}
+    setIsTranscribing(false);
+  }
+
+  function stopWhisper() {
+    if (whisperRafRef.current) { cancelAnimationFrame(whisperRafRef.current); whisperRafRef.current = null; }
+    if (whisperSilenceRef.current) { clearTimeout(whisperSilenceRef.current); whisperSilenceRef.current = null; }
+    if (whisperRecRef.current) { try { whisperRecRef.current.stop(); } catch {} whisperRecRef.current = null; }
+    if (whisperCtxRef.current) { try { whisperCtxRef.current.close(); } catch {} whisperCtxRef.current = null; }
+    whisperChunksRef.current = []; whisperSpeechRef.current = false;
+    setIsListening(false);
+  }
+
+  function startListening() { if (sttFailedRef.current) startWhisper(); else startRecognition(); }
+  function stopListening()  { if (sttFailedRef.current) stopWhisper();  else stopRecognition();  }
   function armSilence() {
     clearSilence();
     silenceRef.current = setTimeout(() => {
@@ -718,7 +813,7 @@ export default function CandidateInterview() {
       await speak(`Welcome to your interview for ${tokenData.jobTitle}. I'll ask you ${total} questions.`);
       currentQStartRef.current = recSeconds();
       await speak(firstQ.question);
-      startRecognition();
+      startListening();
     } catch { /* allow retry */ } finally { setStarting(false); }
   }
 
@@ -727,10 +822,10 @@ export default function CandidateInterview() {
     // Capture BEFORE stopRecognition() clears liveTextRef
     const spoken = (currentAnswerRef.current + ' ' + liveTextRef.current).trim();
     const typed  = manualAnswer.trim();
-    clearSilence(); stopSpeaking(); stopRecognition();
+    clearSilence(); stopSpeaking(); stopListening();
     const answer = manual ? (typed || spoken || '(no response)') : (spoken || '');
 
-    if (!manual && !answer) { if (phaseRef.current === 'interview') startRecognition(); return; }
+    if (!manual && !answer) { if (phaseRef.current === 'interview') startListening(); return; }
 
     // Push completed pair into display state. `t` = seconds into the recording
     // when this question was asked — rides inside the transcript jsonb so no
@@ -768,16 +863,16 @@ export default function CandidateInterview() {
       loadingQRef.current = false; setLoadingQ(false);
       currentQStartRef.current = recSeconds();
       await speak(nextQ.question);
-      startRecognition();
+      startListening();
     } catch {
       loadingQRef.current = false; setLoadingQ(false);
-      startRecognition();
+      startListening();
     }
   }
 
   async function finishInterview(finalTx) {
     phaseRef.current = 'ended'; loadingQRef.current = false;
-    stopRecognition(); stopTimer(); setChipStatus('ended');
+    stopListening(); stopTimer(); setChipStatus('ended');
     stopCamera();
     await speak('Great job! Please take a moment to review your answers, then submit when you\'re ready.');
     stopSpeaking();
@@ -863,8 +958,8 @@ export default function CandidateInterview() {
           </div>
         )}
         {devicesReady && sttFailed && (
-          <div style={{ marginTop: 10, padding: '8px 12px', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, fontSize: 12, color: '#92400e' }}>
-            Voice capture is not available in this browser — you'll type your answers during the interview. Everything else works normally.
+          <div style={{ marginTop: 10, padding: '8px 12px', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 8, fontSize: 12, color: '#166534' }}>
+            Voice capture will use local transcription — speak normally and your words will appear on screen. You can also type to edit them.
           </div>
         )}
       </div>
@@ -1078,28 +1173,45 @@ export default function CandidateInterview() {
                     Your answer
                   </div>
                   {hasSpeechAPI && !sttFailed ? (
+                    // Web Speech API path (Chrome/Windows, Edge, Safari)
                     <div className="ci-ans-text">
                       {currentAnswer || liveText
                         ? <>{currentAnswer}{liveText && <span className="ci-ans-placeholder"> {liveText}</span>}</>
                         : <span className="ci-ans-placeholder">Start speaking…</span>
                       }
                     </div>
-                  ) : (
+                  ) : sttFailed ? (
+                    // Whisper fallback path (Firefox, Chrome/Linux) — voice still works via server transcription
                     <>
-                      {sttFailed && (
-                        <div style={{ fontSize: 11, color: '#b45309', marginBottom: 6 }}>
-                          Voice capture isn't available on this device/network — please type your answer instead.
-                        </div>
-                      )}
+                      <div className="ci-ans-text" style={{ minHeight: 40 }}>
+                        {currentAnswer
+                          ? currentAnswer
+                          : isTranscribing
+                            ? <span className="ci-ans-placeholder">Transcribing…</span>
+                            : <span className="ci-ans-placeholder">Start speaking — your words will appear here…</span>
+                        }
+                        {isTranscribing && <span className="ci-ans-placeholder"> ✦</span>}
+                      </div>
                       <input
                         className="ci-manual-in"
                         type="text"
-                        placeholder="Type your answer and press Enter…"
+                        placeholder="Edit transcription or type manually…"
                         value={manualAnswer}
                         onChange={e => setManualAnswer(e.target.value)}
                         onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); advanceQuestion(true); } }}
+                        style={{ marginTop: 6 }}
                       />
                     </>
+                  ) : (
+                    // No speech API at all
+                    <input
+                      className="ci-manual-in"
+                      type="text"
+                      placeholder="Type your answer and press Enter…"
+                      value={manualAnswer}
+                      onChange={e => setManualAnswer(e.target.value)}
+                      onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); advanceQuestion(true); } }}
+                    />
                   )}
                 </div>
 
