@@ -324,8 +324,8 @@
         920
       ],
       "retryOnFail": true,
-      "maxTries": 3,
-      "waitBetweenTries": 3000
+      "maxTries": 2,
+      "waitBetweenTries": 5000
     },
     {
       "parameters": {
@@ -969,8 +969,8 @@
         3020
       ],
       "retryOnFail": true,
-      "maxTries": 3,
-      "waitBetweenTries": 3000
+      "maxTries": 2,
+      "waitBetweenTries": 5000
     },
     {
       "parameters": {
@@ -1337,8 +1337,8 @@
         4000
       ],
       "retryOnFail": true,
-      "maxTries": 3,
-      "waitBetweenTries": 3000
+      "maxTries": 2,
+      "waitBetweenTries": 5000
     },
     {
       "parameters": {
