@@ -10,7 +10,7 @@ Persistent source of truth for the project. Read this before making changes.
 
 ## 1. Project Overview
 
-**Diyar HR** is a local-first, demo-grade HR pipeline that an HR user drives from a single-page web UI. The backend is a collection of n8n workflows that expose webhooks, persist to PostgreSQL, and call a local Ollama model for AI work. Nothing in this project is a cloud service — everything runs on the HR user's laptop.
+**Diyar HR** is a local-first, demo-grade HR pipeline that an HR user drives from a single-page web UI. The backend is a collection of n8n workflows that expose webhooks, persist to PostgreSQL, and call **Gemini 2.5 Flash** (primary AI) or **Ollama qwen3:4b** (fallback on quota exhaustion) for AI work. Everything runs on the HR user's laptop; the only external dependencies are the Gemini API and SMTP/IMAP for email.
 
 **What each module does**
 
@@ -563,7 +563,7 @@ export OLLAMA_HOME=/d/ollama
 
 **n8n editor credentials (Docker, n8n 2.16):**
 - URL: http://localhost:5678
-- **Login: `admin@diyarme.com` / `ChangeMe123!`** (owner account set up 2026-06-23)
+- **Login: `admin@diyarme.com` / `Admin1234!`** (owner account — password reset 2026-06-29)
 - **`N8N_USER_MANAGEMENT_DISABLED` is IGNORED in n8n 2.x** — the no-login mode was removed; the editor always requires an account (`authenticationMethod: email`). Setting the env var does nothing (`/rest/settings` still shows `showSetupOnFirstLoad`). The HR app does NOT need the editor — all webhooks work headlessly; the login only gates the visual editor.
 - The owner was created by populating the `user` table (bcryptjs hash via the bundled `bcryptjs@2.4.3`) + setting `settings.userManagement.isInstanceOwnerSetUp='true'`, then restart. This persists in the `n8n_data` volume but resets on a **fresh** volume (new machine) — the setup wizard returns; either complete it once or re-run the owner-seed. Editor edits are overwritten on restart (entrypoint re-imports `workflows/*.json`) — editor is view-only here.
 - (Legacy native dev used email `j.danaf@diyarme.com`; the Docker instance uses `admin@diyarme.com`.)
@@ -616,7 +616,7 @@ Added 2026-06-17. **UI-gated** RBAC: real hashed credentials in Postgres + role-
 - Passwords hashed by **Postgres pgcrypto** — `crypt(pw, gen_salt('bf', 12))` on write, `password_hash = crypt(pw, password_hash)` on verify. Never hashed/compared in app code, never plain text.
 - Sessions = **opaque random UUID** tokens in `auth_sessions` (12h expiry), validated server-side on every `/auth/me`. No client-side JWT to forge. A non-UUID token must be rejected up front (querying the UUID column with garbage 500s otherwise — see `is_uuid()`).
 - Endpoints: `POST /auth/login` → `{token,user}`; `GET /auth/me` (Bearer); `POST /auth/logout`; `POST /auth/change-password` (Bearer — self-service: verifies current pw via `crypt()`, sets new bcrypt hash, then revokes the user's *other* sessions but keeps the calling one); admin-only `GET/POST/PATCH /auth/users`.
-- Seeds an initial admin **on first run if `users` is empty** (creds printed to `logs/auth_server.log`), so no password lives in the repo. Default seed: `admin@diyarme.com / ChangeMe123!` — change after first login. Login emails are **just usernames** (nothing is emailed to them; independent of the SMTP sender).
+- Seeds an initial admin **on first run if `users` is empty** (creds printed to `logs/auth_server.log`), so no password lives in the repo. Default seed: `admin@diyarme.com / Admin1234!` — change after first login. Login emails are **just usernames** (nothing is emailed to them; independent of the SMTP sender).
 
 **Frontend:**
 - `state/auth.jsx` — `AuthProvider`/`useAuth` (token in `localStorage` `hr_auth_token`, current `user`/`role`, `isAdmin`/`canWrite`). `services/auth.js` is the API client.
