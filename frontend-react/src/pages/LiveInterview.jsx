@@ -4,6 +4,7 @@ import { apiGet, apiPost } from '../services/api';
 import { useEvalStatus } from '../state/evalStatus';
 import { useUI } from '../state/uiState';
 import { useSelectedJob } from '../state/selectedJob';
+import { useNotifications } from '../state/notifications';
 import { scoreColor } from '../utils/helpers';
 import EmptyState from '../components/common/EmptyState';
 import StickyContinue from '../components/common/StickyContinue';
@@ -41,6 +42,7 @@ export default function LiveInterview() {
   const { showToast } = useUI();
   const { selectedJob } = useSelectedJob();
   const { runAiTask } = useEvalStatus();
+  const { addNotification } = useNotifications();
 
   // ── Main steps ── ('candidate' | 'questions' | 'results'; 'bank' is an
   // off-stepper management view reached from the Interview Questions step)
@@ -299,6 +301,9 @@ export default function LiveInterview() {
           qMode: 'ai-generate', generatedQs: mapped, customQs, bankSelectedQs, savedAt: Date.now(),
         }));
       } catch {}
+      const src = data._source || 'gemini';
+      const srcLabel = src === 'ollama' ? 'Ollama (local fallback — Gemini quota exhausted)' : `Gemini (${data._model || 'gemini-2.5-flash'})`;
+      addNotification({ type: 'ai', title: `Questions generated via ${srcLabel}`, body: `${qs.length} questions ready`, ts: Date.now() });
       showToast(`${qs.length} questions generated`, 'success');
     } catch { showToast('Failed to generate questions', 'error'); }
     finally { setGenerating(false); }
