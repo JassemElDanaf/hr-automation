@@ -76,9 +76,14 @@ function SlChip({ value, label }) {
 }
 
 function SlCallout({ label, text, color }) {
+  const isStrength = label.toLowerCase().includes('strength');
+  const bg = isStrength ? '#f0fdf4' : '#fef2f2';
+  const border = isStrength ? '#16a34a' : '#dc2626';
+  const pill = isStrength ? '#16a34a' : '#dc2626';
   return (
-    <div style={{ marginTop: 10, fontSize: 12.5, color: 'var(--gray-700)', lineHeight: 1.5 }}>
-      <strong style={{ color }}>{label}:</strong> {text}
+    <div style={{ background: bg, borderLeft: `4px solid ${border}`, borderRadius: '0 6px 6px 0', padding: '10px 12px', marginTop: 10 }}>
+      <span style={{ display: 'inline-block', background: pill, color: '#fff', fontSize: '9px', fontWeight: 800, letterSpacing: '1px', padding: '2px 8px', borderRadius: '20px', marginBottom: '6px', textTransform: 'uppercase' }}>{label}</span>
+      <div style={{ fontSize: 12.5, color: 'var(--gray-700)', lineHeight: 1.55 }}>{text}</div>
     </div>
   );
 }

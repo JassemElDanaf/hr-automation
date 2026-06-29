@@ -209,12 +209,12 @@ export default function EvalDetailModal({ candidate, allCandidates, job, isOpen,
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '20px' }}>
-            <div style={{ background: '#f0fdf4', borderRadius: 'var(--radius)', padding: '16px' }}>
-              <h4 style={{ fontSize: '13px', fontWeight: 700, color: '#166534', marginBottom: '8px' }}>Strengths</h4>
+            <div style={{ background: '#f0fdf4', borderRadius: 'var(--radius)', padding: '16px', borderLeft: '4px solid #16a34a' }}>
+              <span style={{ display: 'inline-block', background: '#16a34a', color: '#fff', fontSize: '10px', fontWeight: 800, letterSpacing: '1px', padding: '3px 10px', borderRadius: '20px', marginBottom: '12px', textTransform: 'uppercase' }}>Strengths</span>
               <BulletList text={c.strengths} color="#166534" />
             </div>
-            <div style={{ background: '#fef2f2', borderRadius: 'var(--radius)', padding: '16px' }}>
-              <h4 style={{ fontSize: '13px', fontWeight: 700, color: '#991b1b', marginBottom: '8px' }}>Weaknesses</h4>
+            <div style={{ background: '#fef2f2', borderRadius: 'var(--radius)', padding: '16px', borderLeft: '4px solid #dc2626' }}>
+              <span style={{ display: 'inline-block', background: '#dc2626', color: '#fff', fontSize: '10px', fontWeight: 800, letterSpacing: '1px', padding: '3px 10px', borderRadius: '20px', marginBottom: '12px', textTransform: 'uppercase' }}>Weaknesses</span>
               <BulletList text={c.weaknesses} color="#991b1b" />
             </div>
           </div>

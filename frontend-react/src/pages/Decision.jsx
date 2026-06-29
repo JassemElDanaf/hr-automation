@@ -34,14 +34,14 @@ function StatChip({ value, label }) {
 // Tinted callout for strengths / weaknesses / summary text.
 function Callout({ label, text, tone = 'neutral' }) {
   const tones = {
-    pos:     { border: 'var(--tint-success-border, #86efac)', bg: 'var(--tint-success)', label: 'var(--color-success, #166534)' },
-    neg:     { border: 'var(--tint-danger-border, #fca5a5)',  bg: 'var(--tint-danger)',   label: 'var(--color-danger,  #991b1b)' },
-    neutral: { border: 'var(--gray-300)',                     bg: 'var(--surface-2)',      label: 'var(--gray-500)' },
+    pos:     { border: '#16a34a', bg: '#f0fdf4', pill: '#16a34a' },
+    neg:     { border: '#dc2626', bg: '#fef2f2', pill: '#dc2626' },
+    neutral: { border: 'var(--gray-300)', bg: 'var(--surface-2)', pill: 'var(--gray-500)' },
   };
   const t = tones[tone] || tones.neutral;
   return (
-    <div style={{ borderLeft: `3px solid ${t.border}`, background: t.bg, borderRadius: '0 6px 6px 0', padding: '8px 12px', margin: '10px 0 0' }}>
-      <div style={{ fontSize: 10, fontWeight: 700, color: t.label, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 3 }}>{label}</div>
+    <div style={{ borderLeft: `4px solid ${t.border}`, background: t.bg, borderRadius: '0 6px 6px 0', padding: '10px 12px', margin: '10px 0 0' }}>
+      <span style={{ display: 'inline-block', background: t.pill, color: '#fff', fontSize: '9px', fontWeight: 800, letterSpacing: '1px', padding: '2px 8px', borderRadius: '20px', marginBottom: '6px', textTransform: 'uppercase' }}>{label}</span>
       <div style={{ fontSize: 13, color: 'var(--gray-700)', lineHeight: 1.55 }}>{text}</div>
     </div>
   );
