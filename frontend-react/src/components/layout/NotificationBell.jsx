@@ -217,7 +217,7 @@ export default function NotificationBell() {
       </button>
 
       {open && (
-        <div className="notif-panel" style={{ position: 'absolute', right: 0, top: 'calc(100% + 6px)', zIndex: 320, width: 320,
+        <div className="notif-panel" style={{ position: 'absolute', right: 0, top: 'calc(100% + 6px)', zIndex: 320, width: 360,
           background: 'var(--surface)', border: '1px solid var(--gray-200)', borderRadius: 12,
           boxShadow: '0 10px 34px rgba(0,0,0,0.16)', overflow: 'hidden' }}>
           <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--gray-100)', display: 'flex', alignItems: 'center' }}>
@@ -252,7 +252,7 @@ export default function NotificationBell() {
                   display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
                   animation: rechecking ? 'spin 0.8s linear infinite' : 'none' }}>↺</button>
             </div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+            <div style={{ display: 'flex', flexWrap: 'nowrap', gap: 5, overflowX: 'auto' }}>
               {SERVICES.map(svc => {
                 const st = statuses[svc.key] || {};
                 const online = st.state === 'online', offline = st.state === 'offline';

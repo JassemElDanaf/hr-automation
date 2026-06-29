@@ -23,6 +23,7 @@ export const SERVICES = [
   {
     key: 'gemini',
     label: 'Gemini',
+    manualOnly: true,  // never auto-polled — only checked on page load and manual ↺
     desc: 'Gemini API — CV evaluation and question generation',
     offlineHint: (detail) => detail === 'quota exhausted'
       ? 'Daily limit reached — resets at midnight PT (08:00 UTC).'
@@ -99,12 +100,13 @@ export function useServiceStatuses() {
   // shuts down then comes back"). Instead we keep the last known state and only
   // change a pill when its real status changes. `showChecking` (manual recheck)
   // is the only time we surface the transient spinner.
-  const check = useCallback(async ({ showChecking = false } = {}) => {
+  const check = useCallback(async ({ showChecking = false, includeManualOnly = true } = {}) => {
+    const svcs = SERVICES.filter(s => includeManualOnly || !s.manualOnly);
     if (showChecking) {
-      setStatuses(prev => Object.fromEntries(SERVICES.map(s => [s.key, { ...prev[s.key], state: 'checking' }])));
+      setStatuses(prev => Object.fromEntries(svcs.map(s => [s.key, { ...prev[s.key], state: 'checking' }])));
     }
     await Promise.all(
-      SERVICES.map(async svc => {
+      svcs.map(async svc => {
         let ok = false, detail = '';
         try {
           const result = await svc.check();
@@ -117,8 +119,6 @@ export function useServiceStatuses() {
             ? prev
             : { ...prev, [svc.key]: { state: 'online', detail } }));
         } else if (_serviceChecksPaused) {
-          // AI task running → expected slowness. Don't count it against the service;
-          // just settle the very-first-load spinner so it doesn't spin forever.
           failCounts.current[svc.key] = 0;
           setStatuses(prev => (prev[svc.key]?.state === 'checking'
             ? { ...prev, [svc.key]: { state: 'online', detail } }
@@ -126,8 +126,6 @@ export function useServiceStatuses() {
         } else {
           failCounts.current[svc.key] += 1;
           setStatuses(prev => {
-            // Tolerate transient blips: only a 3rd consecutive miss (~90s of solid
-            // failure) flips a pill to offline. One success clears it.
             if (failCounts.current[svc.key] < 3) {
               return prev[svc.key]?.state === 'checking'
                 ? { ...prev, [svc.key]: { state: 'online', detail } }
@@ -141,11 +139,12 @@ export function useServiceStatuses() {
   }, []);
 
   useEffect(() => {
-    check();                                   // silent first load (init shows 'checking')
-    const id = setInterval(() => check(), 1800000); // poll every 30 min — preserve Gemini daily quota
+    check({ includeManualOnly: true });  // check all on first load including Gemini
+    // Auto-poll skips Gemini (manualOnly) to avoid burning daily quota
+    const id = setInterval(() => check({ includeManualOnly: false }), 300000);
     return () => clearInterval(id);
   }, [check]);
 
-  // Manual recheck (the ↺ button) is the one place we show the transient spinner.
-  return { statuses, recheck: () => check({ showChecking: true }) };
+  // ↺ button checks everything including Gemini
+  return { statuses, recheck: () => check({ showChecking: true, includeManualOnly: true }) };
 }
