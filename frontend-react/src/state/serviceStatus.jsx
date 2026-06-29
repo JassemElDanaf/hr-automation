@@ -142,7 +142,7 @@ export function useServiceStatuses() {
 
   useEffect(() => {
     check();                                   // silent first load (init shows 'checking')
-    const id = setInterval(() => check(), 300000); // poll every 5 min — Gemini quota guard
+    const id = setInterval(() => check(), 1800000); // poll every 30 min — preserve Gemini daily quota
     return () => clearInterval(id);
   }, [check]);
 
