@@ -60,7 +60,7 @@ export default function LiveInterview() {
   const [interviewedIds, setInterviewedIds] = useState(new Set()); // CandidateIds with a completed session
   const [evaluationId, setEvaluationId]   = useState('');
   const [candidateId, setCandidateId]     = useState('');
-  const [cvPanel, setCvPanel]             = useState({ open: false, url: '', loading: false }); // inline CV viewer
+  const [cvPanel, setCvPanel]             = useState({ open: false, url: '', text: '', loading: false }); // inline CV viewer
   const [candidateName, setCandidateName] = useState('');
   const [loadingJobs, setLoadingJobs]     = useState(true);
   const [loadingCands, setLoadingCands]   = useState(false);
@@ -75,7 +75,7 @@ export default function LiveInterview() {
   const [customDraft, setCustomDraft]     = useState('');   // "Write My Own" type-and-add box
   const [customCat, setCustomCat]         = useState('hr');
   const [numQ, setNumQ]                   = useState(5);
-  const [types, setTypes]                 = useState({ hr: true, technical: true, salary: false });
+  const [types, setTypes]                 = useState({ hr: true, technical: true, salary: false, iqama: false, notice: false, location: false });
   const [generating, setGenerating]       = useState(false);
   const [savedQsLoaded, setSavedQsLoaded] = useState(false);
   const [savingToBank, setSavingToBank]   = useState(false);
@@ -210,17 +210,23 @@ export default function LiveInterview() {
   // Toggle the inline CV viewer (expands the PDF on this page, no new tab).
   async function toggleCv() {
     if (cvPanel.open) { setCvPanel(p => ({ ...p, open: false })); return; }
-    if (cvPanel.url) { setCvPanel(p => ({ ...p, open: true })); return; }
-    setCvPanel({ open: false, url: '', loading: true });
+    if (cvPanel.url || cvPanel.text) { setCvPanel(p => ({ ...p, open: true })); return; }
+    setCvPanel({ open: false, url: '', text: '', loading: true });
     try {
       const res = await apiGet(`/cv-file?candidate_id=${candidateId}`);
       const d = res?.data?.data || res?.data || {};
-      if (!d.cv_file_data) { showToast('No CV file available', 'error'); setCvPanel({ open: false, url: '', loading: false }); return; }
-      const b64 = d.cv_file_data.includes(',') ? d.cv_file_data.split(',')[1] : d.cv_file_data;
-      const bytes = Uint8Array.from(atob(b64), ch => ch.charCodeAt(0));
-      const url = URL.createObjectURL(new Blob([bytes], { type: d.cv_file_mime || 'application/pdf' }));
-      setCvPanel({ open: true, url, loading: false });
-    } catch { showToast('Failed to load CV', 'error'); setCvPanel({ open: false, url: '', loading: false }); }
+      if (d.cv_file_data) {
+        const b64 = d.cv_file_data.includes(',') ? d.cv_file_data.split(',')[1] : d.cv_file_data;
+        const bytes = Uint8Array.from(atob(b64), ch => ch.charCodeAt(0));
+        const url = URL.createObjectURL(new Blob([bytes], { type: d.cv_file_mime || 'application/pdf' }));
+        setCvPanel({ open: true, url, text: '', loading: false });
+      } else if (d.cv_text) {
+        setCvPanel({ open: true, url: '', text: d.cv_text, loading: false });
+      } else {
+        showToast('No CV on file for this candidate', 'error');
+        setCvPanel({ open: false, url: '', text: '', loading: false });
+      }
+    } catch { showToast('Failed to load CV', 'error'); setCvPanel({ open: false, url: '', text: '', loading: false }); }
   }
 
   async function handleCandidateChange(val, { silent = false } = {}) {
@@ -289,6 +295,9 @@ export default function LiveInterview() {
         include_hr: types.hr,
         include_technical: types.technical,
         include_salary: types.salary,
+        include_iqama: types.iqama,
+        include_notice: types.notice,
+        include_location: types.location,
       }), { to: `/live-interview?setupCandidate=${candidateId}&setupJob=${jobId}`, hint: candidateName ? `Back to ${candidateName}` : 'Back to Interview Setup' },
       r => r?.data?._source || r?._source);
       const data = res.data || res;
@@ -450,6 +459,12 @@ export default function LiveInterview() {
             : <iframe title="Candidate CV" src={cvPanel.url} style={{ width: '100%', height: 600, border: 'none', display: 'block' }} />}
         </div>
       )}
+      {cvPanel.open && cvPanel.text && !cvPanel.url && (
+        <div style={{ marginTop: 10, border: '1px solid var(--gray-200)', borderRadius: 8, overflow: 'hidden' }}>
+          <div style={{ padding: '6px 10px', background: 'var(--gray-50)', borderBottom: '1px solid var(--gray-200)', fontSize: 11, fontWeight: 600, color: 'var(--gray-500)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>📄 CV Text</div>
+          <div style={{ padding: 16, maxHeight: 500, overflowY: 'auto', fontSize: 13, lineHeight: 1.7, whiteSpace: 'pre-wrap', color: 'var(--gray-700)' }}>{cvPanel.text}</div>
+        </div>
+      )}
     </>
   ) : null;
 
@@ -609,8 +624,8 @@ export default function LiveInterview() {
                 </div>
                 <div className="form-group" style={{ marginBottom: 0 }}>
                   <label>Include types</label>
-                  <div style={{ display: 'flex', gap: 20, paddingTop: 9 }}>
-                    {['hr','technical','salary'].map(k => (
+                  <div style={{ display: 'flex', gap: 16, paddingTop: 9, flexWrap: 'wrap' }}>
+                    {['hr','technical','salary','iqama','notice','location'].map(k => (
                       <label key={k} style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 13, color: 'var(--gray-700)', userSelect: 'none' }}>
                         <input type="checkbox" checked={!!types[k]} onChange={e => setTypes(p => ({ ...p, [k]: e.target.checked }))} />
                         {CAT_LABELS[k]}
