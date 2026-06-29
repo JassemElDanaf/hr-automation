@@ -360,7 +360,8 @@ export default function CVEvaluation() {
         seniority_level: evalSelectedJob.seniority_level, employment_type: evalSelectedJob.employment_type,
         job_description: [evalSelectedJob.job_description || '', aiContext ? '\n\nAdditional context:\n' + aiContext : ''].join('').trim(),
         extra_context: aiContext, skills_weight: weights.skills, experience_weight: weights.experience, education_weight: weights.education,
-      }), { to: '/cv-eval', hint: evalSelectedJob.job_title ? `Back to criteria · ${evalSelectedJob.job_title}` : 'Back to CV Evaluation' });
+      }), { to: '/cv-eval', hint: evalSelectedJob.job_title ? `Back to criteria · ${evalSelectedJob.job_title}` : 'Back to CV Evaluation' },
+      r => r?.data?._source || r?._source);
       if (res.data.success && res.data.criteria_text) {
         setCriteriaText(res.data.criteria_text);
         setSelectedSetId('');

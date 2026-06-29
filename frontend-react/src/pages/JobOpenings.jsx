@@ -130,7 +130,7 @@ export default function JobOpenings() {
       // the bell (same as CV evaluation / criteria gen) so progress is visible
       // even if the user navigates away from this modal.
       const res = descSource === 'ai_generate'
-        ? await runAiTask('Generating job description…', () => apiPost('/job-openings', payload))
+        ? await runAiTask('Generating job description…', () => apiPost('/job-openings', payload), null, r => r?._source || r?.data?._source)
         : await apiPost('/job-openings', payload);
       if (res.status === 201 || res.data.success) {
         showToast('Job opening created!', 'success');

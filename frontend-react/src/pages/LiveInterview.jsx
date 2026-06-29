@@ -288,7 +288,8 @@ export default function LiveInterview() {
         include_hr: types.hr,
         include_technical: types.technical,
         include_salary: types.salary,
-      }), { to: `/live-interview?setupCandidate=${candidateId}&setupJob=${jobId}`, hint: candidateName ? `Back to ${candidateName}` : 'Back to Interview Setup' });
+      }), { to: `/live-interview?setupCandidate=${candidateId}&setupJob=${jobId}`, hint: candidateName ? `Back to ${candidateName}` : 'Back to Interview Setup' },
+      r => r?.data?._source || r?._source);
       const data = res.data || res;
       const qs = Array.isArray(data) ? data : (data.questions || []);
       if (!qs.length) { showToast('No questions returned — check Gemini API key', 'error'); return; }
@@ -301,9 +302,6 @@ export default function LiveInterview() {
           qMode: 'ai-generate', generatedQs: mapped, customQs, bankSelectedQs, savedAt: Date.now(),
         }));
       } catch {}
-      const src = data._source || 'gemini';
-      const srcLabel = src === 'ollama' ? 'Ollama (local fallback — Gemini quota exhausted)' : `Gemini (${data._model || 'gemini-2.5-flash'})`;
-      addNotification({ type: 'ai', title: `Questions generated via ${srcLabel}`, body: `${qs.length} questions ready`, ts: Date.now() });
       showToast(`${qs.length} questions generated`, 'success');
     } catch { showToast('Failed to generate questions', 'error'); }
     finally { setGenerating(false); }

@@ -91,11 +91,13 @@ export default function NotificationBell() {
       const key = `${aiTask.label}-${aiTask.phase}-${aiTask.nav?.to || ''}`;
       if (lastAiKey.current !== key) {
         lastAiKey.current = key;
+        const src = aiTask.source;
+        const srcLabel = src === 'ollama' ? 'Ollama (local fallback)' : src === 'gemini' ? 'Gemini' : null;
         addNotification({
           type: 'ai',
           icon: aiTask.phase === 'error' ? '⚠️' : '✨',
           title: aiTask.phase === 'error' ? 'AI task failed' : aiTask.label.replace(/…$/, '') + ' — done',
-          body: aiTask.nav?.hint || 'Local AI · Ollama',
+          body: srcLabel ? `via ${srcLabel}${aiTask.nav?.hint ? ' · ' + aiTask.nav.hint : ''}` : (aiTask.nav?.hint || null),
           nav: aiTask.nav?.to || null,
         });
       }

@@ -24,19 +24,19 @@ export function EvalStatusProvider({ children }) {
   // question gen, interview re-scoring…). Shows the global indicator while it runs.
   // `nav` (optional) = { to, hint } — makes the indicator card clickable so the
   // user can jump back to the tab/candidate the task is running for.
-  const runAiTask = useCallback(async (label, fn, nav = null) => {
+  // sourceExtractor: optional fn(result) → 'gemini'|'ollama'|null
+  const runAiTask = useCallback(async (label, fn, nav = null, sourceExtractor = null) => {
     if (aiClearRef.current) { clearTimeout(aiClearRef.current); aiClearRef.current = null; }
     setAiTask({ label, phase: 'running', nav });
-    // Linger after finishing so the user has time to click back to the
-    // tab/candidate the task ran for. Longer when there's somewhere to go.
     const linger = nav ? 12000 : 4000;
     try {
       const r = await fn();
-      setAiTask({ label, phase: 'done', nav });
+      const source = sourceExtractor ? (sourceExtractor(r) || null) : null;
+      setAiTask({ label, phase: 'done', nav, source });
       aiClearRef.current = setTimeout(() => setAiTask(null), linger);
       return r;
     } catch (e) {
-      setAiTask({ label, phase: 'error', nav });
+      setAiTask({ label, phase: 'error', nav, source: null });
       aiClearRef.current = setTimeout(() => setAiTask(null), linger);
       throw e;
     }

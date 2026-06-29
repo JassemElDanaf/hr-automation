@@ -184,7 +184,8 @@ export default function AIInterviews({ embedded = false }) {
       const qaPairs = parseJSON(s.qaPairs);
       const base = { jobId: s.jobOpeningId, evaluationId: s.evaluationId, candidateId: s.candidateId, candidateName: s.candidateName, transcript: qaPairs, durationSeconds: s.durationSeconds };
       const evalRes = await runAiTask('Re-scoring interview…', () => apiPost('/interview/evaluate', base),
-        { to: '/live-interview?tab=results', hint: s.candidateName ? `Back to ${s.candidateName}'s results` : 'Back to Interview Results' });
+        { to: '/live-interview?tab=results', hint: s.candidateName ? `Back to ${s.candidateName}'s results` : 'Back to Interview Results' },
+        r => r?.data?._source || r?._source);
       const scores = evalRes.data || evalRes;
       await apiPost('/interview/save-transcript', { ...base, scores, recordingPath: s.recordingPath || '', requirementsMatch: parseJSON(s.requirementsMatch) });
       showToast('Evaluation complete', 'success');
