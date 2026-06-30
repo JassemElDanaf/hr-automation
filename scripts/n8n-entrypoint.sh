@@ -136,6 +136,60 @@ db.serialize(() => {
 });
 JSEOF
 
+# ── Seed n8n owner account (skip if email already set) ───────────────────────
+echo "[n8n-setup] Seeding owner account..."
+"$NODE" - <<'JSEOF'
+const sqlite3 = require(process.env.SQLITE3_MOD);
+const bcrypt  = require('/usr/local/lib/node_modules/n8n/node_modules/.pnpm/bcryptjs@2.4.3/node_modules/bcryptjs');
+
+const DB_FILE = process.env.DB_FILE;
+const email   = process.env.N8N_OWNER_EMAIL       || 'admin@diyarme.com';
+const pw      = process.env.N8N_OWNER_PASSWORD    || 'Admin1234!';
+const first   = process.env.N8N_OWNER_FIRST_NAME  || 'Admin';
+const last    = process.env.N8N_OWNER_LAST_NAME   || 'User';
+
+const db = new sqlite3.Database(DB_FILE);
+db.get(`SELECT email FROM user WHERE roleSlug='global:owner' LIMIT 1`, [], (e, row) => {
+  if (e) { console.log('[n8n-setup] Owner check skipped:', e.message); db.close(); return; }
+  if (row && row.email) { console.log('[n8n-setup] Owner already set up:', row.email); db.close(); return; }
+
+  const hash = bcrypt.hashSync(pw, 10);
+  const now  = new Date().toISOString();
+
+  db.serialize(() => {
+    // Update the placeholder row n8n 2.x pre-creates with email=null
+    db.run(
+      `UPDATE user SET email=?, firstName=?, lastName=?, password=?, updatedAt=? WHERE roleSlug='global:owner'`,
+      [email, first, last, hash, now],
+      function(e2) {
+        if (e2) { console.error('[n8n-setup] Owner update error:', e2.message); db.close(); return; }
+        if (this.changes === 0) {
+          // No placeholder row — insert fresh (older n8n versions)
+          const { randomUUID } = require('crypto');
+          db.run(
+            `INSERT INTO user (id, email, firstName, lastName, password, roleSlug, createdAt, updatedAt)
+             VALUES (?, ?, ?, ?, ?, 'global:owner', ?, ?)`,
+            [randomUUID(), email, first, last, hash, now, now],
+            (e3) => { if (e3) console.error('[n8n-setup] Owner insert error:', e3.message); }
+          );
+        }
+        console.log('[n8n-setup] Owner account set:', email);
+        db.run(
+          `INSERT INTO settings (key, value, loadOnStartup) VALUES ('userManagement.isInstanceOwnerSetUp', 'true', 1)
+           ON CONFLICT(key) DO UPDATE SET value='true'`,
+          [],
+          (e4) => {
+            if (e4) console.error('[n8n-setup] Settings error:', e4.message);
+            else console.log('[n8n-setup] isInstanceOwnerSetUp = true');
+            db.close();
+          }
+        );
+      }
+    );
+  });
+});
+JSEOF
+
 # ── Start n8n ─────────────────────────────────────────────────────────────────
 echo "[n8n-setup] Starting n8n..."
 exec n8n start

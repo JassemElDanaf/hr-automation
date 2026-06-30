@@ -57,7 +57,7 @@ services:
       N8N_ENCRYPTION_KEY: "diyar-hr-n8n-key-2026"
       # Owner account
       N8N_OWNER_EMAIL: "admin@diyarme.com"
-      N8N_OWNER_PASSWORD: "ChangeMe123!"
+      N8N_OWNER_PASSWORD: "Admin1234!"
       N8N_OWNER_FIRST_NAME: "Admin"
       N8N_OWNER_LAST_NAME: "User"
       # Allow workflows to read $env.GEMINI_API_KEY (blocked by default in n8n 1.x+)
@@ -170,8 +170,6 @@ services:
       - ./scripts/ollama-entrypoint.sh:/entrypoint.sh:ro
     environment:
       OLLAMA_MODEL: "qwen3:4b"
-    ports:
-      - "11434:11434"
     healthcheck:
       test: ["CMD-SHELL", "bash -c 'echo > /dev/tcp/127.0.0.1/11434' 2>/dev/null"]
       interval: 15s

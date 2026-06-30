@@ -1,8 +1,8 @@
-﻿--
+--
 -- PostgreSQL database dump
 --
 
-\restrict qr5OPp1dbdkrJQfTkvOgJpybVP98G7yjZvpcdycHCTiTZWZMGro1zlWzWhsO9eZ
+\restrict DfZmtt1FycYPH9aVYiJrjqAp4aslaNRphEPgP0bAzUauro4XBIFlVYBILOzMq9P
 
 -- Dumped from database version 16.13 (Debian 16.13-1.pgdg13+1)
 -- Dumped by pg_dump version 16.13 (Debian 16.13-1.pgdg13+1)
@@ -345,9 +345,9 @@ COPY public.shortlist (id, candidate_id, job_opening_id, status, notes, shortlis
 --
 
 COPY public.users (id, email, password_hash, full_name, role, is_active, created_at, last_login_at) FROM stdin;
-1	admin@diyarme.com	$2a$12$qPl9Locs9qCSxK9RSP2nF.MH0G8i5ns4PKTT//czONw63CPPKay.m	Administrator	admin	t	2026-06-17 19:21:21.700618+00	2026-06-27 18:45:47.727344+00
-2	recruiter@diyarme.com	$2a$12$ngOB2/8KHXDoAt90PTsy5uVAIkOscFMqYf/LPnJt52TSPzF2iAcwm	Test Recruiter	recruiter	t	2026-06-17 19:21:39.197262+00	2026-06-24 23:15:25.657411+00
-3	viewer@diyarme.com	$2a$12$1opkKPbFMgduhrV2456c/uTvl88fH7pGp4WGN74YUZUUkGmgXAGEG	Read Only	viewer	t	2026-06-17 19:31:20.823577+00	2026-06-24 23:15:26.93928+00
+1	admin@diyarme.com	$2a$12$4.O6vT8dHkySCGmEzlukk.Z79g5Qx2Th49QuL2lnEpomdFkt0ly8y	Administrator	admin	t	2026-06-17 19:21:21.700618+00	2026-06-27 18:45:47.727344+00
+2	recruiter@diyarme.com	$2a$12$F4v3kPcycqJI1AK0Pg4D2OwVxj0HPtKaQHugXcDiswCZpva6Vl/v.	Test Recruiter	recruiter	t	2026-06-17 19:21:39.197262+00	2026-06-24 23:15:25.657411+00
+3	viewer@diyarme.com	$2a$12$6ZkgskyhZrWfUEEfAHPYc.0tCUAPn8eDyFDZgk/rkWV36TUayjGRe	Read Only	viewer	t	2026-06-17 19:31:20.823577+00	2026-06-24 23:15:26.93928+00
 \.
 
 
@@ -439,5 +439,5 @@ SELECT pg_catalog.setval('public.users_id_seq', 4, true);
 -- PostgreSQL database dump complete
 --
 
-\unrestrict qr5OPp1dbdkrJQfTkvOgJpybVP98G7yjZvpcdycHCTiTZWZMGro1zlWzWhsO9eZ
+\unrestrict DfZmtt1FycYPH9aVYiJrjqAp4aslaNRphEPgP0bAzUauro4XBIFlVYBILOzMq9P
 
